@@ -1,7 +1,7 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { LoginForm } from './components/LoginForm';
+import SplitLoginPage from './components/SplitLoginPage';
 import { Dashboard } from './components/Dashboard';
 
 const AppContent: React.FC = () => {
@@ -18,7 +18,7 @@ const AppContent: React.FC = () => {
     );
   }
 
-  return currentUser ? <Dashboard /> : <LoginForm />;
+  return currentUser ? <Dashboard /> : <SplitLoginPage />;
 };
 
 function App() {
