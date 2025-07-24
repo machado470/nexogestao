@@ -69,7 +69,8 @@ npm run dev
 src/
 ├── components/          # Componentes React
 │   ├── ui/             # Componentes de interface
-│   ├── LoginForm.tsx   # Tela de login
+│   ├── LoginForm.tsx       # Tela de login por usuário
+│   ├── EmailLoginForm.tsx  # Login utilizando email e senha
 │   ├── Dashboard.tsx   # Layout principal
 │   ├── PDVScreen.tsx   # Tela do PDV
 │   └── ...
