@@ -1,52 +1,23 @@
-const Produto = require('../models/produto.model');
+import { supabase } from '../config/supabase.js';
 
-let produtos = [];
-let idCounter = 1;
-
-function listarProdutos(req, res) {
-  res.json(produtos);
+// GET /produtos
+export async function listarProdutos(req, res) {
+  const { data, error } = await supabase.from('produtos').select('*');
+  if (error) return res.status(500).json({ error });
+  res.json(data);
 }
 
-function obterProduto(req, res) {
-  const produto = produtos.find(p => p.id === parseInt(req.params.id, 10));
-  if (!produto) {
-    return res.status(404).json({ mensagem: 'Produto não encontrado' });
-  }
-  res.json(produto);
-}
-
-function criarProduto(req, res) {
+// POST /produtos
+export async function criarProduto(req, res) {
   const { nome, descricao, preco } = req.body;
-  const novoProduto = new Produto({ id: idCounter++, nome, descricao, preco });
-  produtos.push(novoProduto);
-  res.status(201).json(novoProduto);
+
+  const { data, error } = await supabase
+    .from('produtos')
+    .insert([{ nome, descricao, preco }])
+    .select();
+
+  if (error) return res.status(500).json({ error });
+  res.status(201).json(data[0]);
 }
 
-function atualizarProduto(req, res) {
-  const { nome, descricao, preco } = req.body;
-  const produto = produtos.find(p => p.id === parseInt(req.params.id, 10));
-  if (!produto) {
-    return res.status(404).json({ mensagem: 'Produto não encontrado' });
-  }
-  produto.nome = nome ?? produto.nome;
-  produto.descricao = descricao ?? produto.descricao;
-  produto.preco = preco ?? produto.preco;
-  res.json(produto);
-}
-
-function removerProduto(req, res) {
-  const index = produtos.findIndex(p => p.id === parseInt(req.params.id, 10));
-  if (index === -1) {
-    return res.status(404).json({ mensagem: 'Produto não encontrado' });
-  }
-  const removido = produtos.splice(index, 1);
-  res.json(removido[0]);
-}
-
-module.exports = {
-  listarProdutos,
-  obterProduto,
-  criarProduto,
-  atualizarProduto,
-  removerProduto,
-};
+// rota PUT aqui
