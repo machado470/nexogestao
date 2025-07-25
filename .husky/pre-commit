@@ -1,20 +1,4 @@
 #!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-commit_msg_file=".git/COMMIT_EDITMSG"
-commit_msg=$(cat "$commit_msg_file")
-
-if [ -z "$commit_msg" ]; then
-  echo "❌ Commit vazio não é permitido!"
-  exit 1
-fi
-
-echo "🔍 Rodando ESLint..."
-npx eslint . || exit 1
-
-echo "✅ ESLint finalizado com sucesso!"
-
-echo "🧪 Rodando testes..."
-npm test || exit 1
-
-echo "✅ Commit validado com sucesso com ESLint e testes!"
+npx lint-staged
