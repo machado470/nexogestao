@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "prepare": "husky install",
-    "lint": "eslint . --ext .js,.cjs,.mjs"
+    "lint": "eslint .",
+    "test": "echo \"Nenhum teste configurado ainda\" && exit 0"
   },
   "keywords": [],
   "author": "",
