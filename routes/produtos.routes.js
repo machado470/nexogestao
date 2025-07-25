@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../supabaseClient');
 
-router.get('/', async (req, res) => {
+router.get('/', async function (req, res) {
   const { data, error } = await supabase.from('produtos').select('*');
 
   if (error) {
@@ -13,3 +13,4 @@ router.get('/', async (req, res) => {
 });
 
 module.exports = router;
+
