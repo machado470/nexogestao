@@ -3,13 +3,18 @@ const router = express.Router();
 const supabase = require('../supabaseClient');
 
 router.get('/', async function (req, res) {
-  const { data, error } = await supabase.from('produtos').select('*');
+  try {
+    const { data, error } = await supabase.from('produtos').select('*');
 
-  if (error) {
-    return res.status(500).json({ erro: error.message });
+    if (error) {
+      return res.status(500).json({ erro: error.message });
+    }
+
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error('Erro ao consultar produtos:', error);
+    return res.status(500).json({ erro: 'Erro interno no servidor' });
   }
-
-  res.json(data);
 });
 
 module.exports = router;
