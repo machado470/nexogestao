@@ -1,2 +1,17 @@
 #!/bin/sh
-echo "✅ Commit validado pelo pre-commit!"
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🔍 Rodando ESLint..."
+npm run lint || exit 1
+
+echo "🧪 Rodando testes..."
+npm test || exit 1
+
+echo "✅ Validando mensagem de commit..."
+commit_msg=$(git log -1 --pretty=%B)
+if [ -z "$commit_msg" ]; then
+  echo "❌ Commit vazio não é permitido!"
+  exit 1
+fi
+
+echo "✅ Commit validado com sucesso por ESLint, testes e mensagem!"
