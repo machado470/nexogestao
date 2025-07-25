@@ -6,7 +6,7 @@
  * production environment this would interface with a database.
  */
 
-const Product = require('./Product');
+const Product = require('./Product.cjs');
 
 class Catalog {
   constructor() {

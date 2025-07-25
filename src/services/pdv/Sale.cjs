@@ -7,7 +7,7 @@
  * finalize payments.
  */
 
-const SaleItem = require('./SaleItem');
+const SaleItem = require('./SaleItem.cjs');
 
 class Sale {
   constructor(catalog) {
