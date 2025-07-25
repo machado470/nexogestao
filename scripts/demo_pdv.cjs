@@ -6,10 +6,10 @@
  * simulate a small sale and cash register operations.
  */
 
-const Product = require('./Product');
-const Catalog = require('./Catalog');
-const Sale = require('./Sale');
-const CashRegister = require('./CashRegister');
+const Product = require('../src/services/pdv/Product');
+const Catalog = require('../src/services/pdv/Catalog');
+const Sale = require('../src/services/pdv/Sale');
+const CashRegister = require('../src/services/pdv/CashRegister');
 
 function runDemo() {
   const catalog = new Catalog();
