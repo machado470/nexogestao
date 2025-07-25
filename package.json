@@ -4,10 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "test": "vitest",
     "prepare": "husky install",
-    "lint": "eslint .",
-    "test": "echo \"Nenhum teste configurado ainda\" && exit 0"
+    "lint": "eslint . --ext .js",
+    "format": "prettier --write ."
   },
   "keywords": [],
   "author": "",
@@ -24,6 +25,13 @@
     "globals": "^16.3.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.2",
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "vitest": "^1.5.0"
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   }
 }
