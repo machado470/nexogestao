@@ -5,6 +5,7 @@ import { PDVScreen } from './PDVScreen';
 import { CashManagement } from './CashManagement';
 import { ProductsRoutes } from './ProductsRoutes';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import Clientes from './Clientes.jsx';
 
 const Placeholder: React.FC<{ title: string }> = ({ title }) => (
   <div className="text-center py-12">
@@ -32,7 +33,7 @@ export const Dashboard: React.FC = () => {
             <Route path="pdv" element={<PDVScreen />} />
             <Route path="cash" element={<CashManagement />} />
             <Route path="products/*" element={<ProductsRoutes />} />
-            <Route path="customers" element={<Placeholder title="Clientes" />} />
+            <Route path="customers" element={<Clientes />} />
             <Route path="reports" element={<Placeholder title="Relatórios" />} />
             <Route path="settings" element={<Placeholder title="Configurações" />} />
             <Route path="*" element={<Navigate to="pdv" />} />
