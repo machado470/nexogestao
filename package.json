@@ -4,8 +4,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
-    "prepare": "husky install", "test": "echo \"✅ Nenhum teste configurado ainda\" && exit 0",
-    "lint": "eslint ."
+    "prepare": "husky install",
+    "lint": "eslint .",
+    "test": "echo \"Nenhum teste configurado ainda\" && exit 0"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +22,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",
     "globals": "^16.3.0",
-    "husky": "^8.0.0",
+    "husky": "^9.1.7",
     "lint-staged": "^16.1.2",
     "prettier": "^3.6.2"
   },
