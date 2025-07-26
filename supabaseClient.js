@@ -26,7 +26,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Exporte também uma função helper opcional para checar a conexão.
 export async function checkConnection() {
-  const { data, error } = await supabase.from('pg_tables').select('*').limit(1);
+  const { error } = await supabase.from('pg_tables').select('*').limit(1);
   if (error) {
     console.error('Erro ao verificar conexão com Supabase:', error);
     return false;
