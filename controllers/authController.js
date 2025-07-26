@@ -27,10 +27,15 @@ async function login(req, res) {
       role: usuario.role,
     },
     process.env.JWT_SECRET,
-    { expiresIn: '8h' }
+    { expiresIn: '12h' }
   );
 
   res.json({ token });
 }
 
-module.exports = { login };
+function logout(_req, res) {
+  // O front-end pode simplesmente descartar o token JWT
+  res.json({ message: 'Logout realizado com sucesso' });
+}
+
+module.exports = { login, logout };
