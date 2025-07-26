@@ -9,8 +9,8 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use('/produtos', produtosRoutes);
-app.use('/api', authRoutes);
-app.use('/api', sangriaRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/sangria', sangriaRoutes);
 
 app.get('/', (req, res) => {
   res.send('API NexoGestao funcionando');
