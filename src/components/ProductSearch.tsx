@@ -9,7 +9,9 @@ interface ProductSearchProps {
   onProductSelect: (product: Product) => void;
 }
 
-export const ProductSearch: React.FC<ProductSearchProps> = ({ onProductSelect }) => {
+export const ProductSearch: React.FC<ProductSearchProps> = ({
+  onProductSelect,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -24,7 +26,9 @@ export const ProductSearch: React.FC<ProductSearchProps> = ({ onProductSelect })
             .from('products')
             .select('*')
             .eq('is_active', true)
-            .or(`name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`)
+            .or(
+              `name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`,
+            )
             .limit(10);
 
           if (!error && products) {
@@ -79,7 +83,9 @@ export const ProductSearch: React.FC<ProductSearchProps> = ({ onProductSelect })
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
                       <Package className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                      <span className="font-medium text-gray-900 dark:text-gray-100">{product.name}</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {product.name}
+                      </span>
                     </div>
                     <div className="text-sm text-gray-500 dark:text-gray-400">
                       Código: {product.code} | Estoque: {product.stock}
@@ -89,7 +95,9 @@ export const ProductSearch: React.FC<ProductSearchProps> = ({ onProductSelect })
                     <div className="text-lg font-bold text-green-600 dark:text-green-400">
                       R$ {product.price.toFixed(2)}
                     </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{product.category}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {product.category}
+                    </div>
                   </div>
                 </div>
               ))}

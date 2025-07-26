@@ -22,7 +22,7 @@ export const Input: React.FC<InputProps> = ({
   icon: Icon,
   disabled = false,
   className = '',
-  required = false
+  required = false,
 }) => {
   return (
     <div className={`space-y-2 ${className}`}>

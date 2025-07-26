@@ -15,9 +15,15 @@ const CashRegister = require('../src/services/pdv/CashRegister.cjs');
 function runDemo() {
   const catalog = new Catalog();
   // Adiciona produtos de exemplo
-  catalog.addProduct(new Product({ id: '001', name: 'Café', price: 7.5, stock: 100 }));
-  catalog.addProduct(new Product({ id: '002', name: 'Pão de Queijo', price: 5.0, stock: 50 }));
-  catalog.addProduct(new Product({ id: '003', name: 'Suco de Laranja', price: 4.25, stock: 30 }));
+  catalog.addProduct(
+    new Product({ id: '001', name: 'Café', price: 7.5, stock: 100 }),
+  );
+  catalog.addProduct(
+    new Product({ id: '002', name: 'Pão de Queijo', price: 5.0, stock: 50 }),
+  );
+  catalog.addProduct(
+    new Product({ id: '003', name: 'Suco de Laranja', price: 4.25, stock: 30 }),
+  );
 
   // Processo de venda
   const sale = new Sale(catalog);
@@ -26,7 +32,9 @@ function runDemo() {
   sale.addItemById('003', 1);
   console.log('Itens da venda:');
   sale.items.forEach((item, idx) => {
-    console.log(`${idx + 1}. ${item.product.name} x ${item.quantity} = R$ ${item.subtotal.toFixed(2)}`);
+    console.log(
+      `${idx + 1}. ${item.product.name} x ${item.quantity} = R$ ${item.subtotal.toFixed(2)}`,
+    );
   });
   console.log(`Total: R$ ${sale.total.toFixed(2)}`);
   const receipt = sale.finalize(50, 'dinheiro');

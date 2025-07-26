@@ -27,7 +27,9 @@ export const SplitLoginPage: React.FC = () => {
     <div className="min-h-screen flex flex-col md:flex-row">
       <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
         <Card className="w-full max-w-md">
-          <h2 className="text-2xl font-bold text-center mb-6 text-gray-900 dark:text-gray-100">Entrar</h2>
+          <h2 className="text-2xl font-bold text-center mb-6 text-gray-900 dark:text-gray-100">
+            Entrar
+          </h2>
           <form onSubmit={handleLogin} className="space-y-4">
             <Input
               label="E-mail"
@@ -45,7 +47,12 @@ export const SplitLoginPage: React.FC = () => {
               onChange={setPassword}
               required
             />
-            <Button type="submit" variant="primary" size="lg" className="w-full">
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="w-full"
+            >
               Entrar
             </Button>
           </form>
@@ -65,11 +72,35 @@ export const SplitLoginPage: React.FC = () => {
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Criar Conta">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Criar Conta"
+      >
         <form onSubmit={handleRegister} className="space-y-4">
-          <Input label="Nome" placeholder="Digite seu nome" value={name} onChange={setName} required />
-          <Input label="E-mail" type="email" placeholder="Digite seu e-mail" value={regEmail} onChange={setRegEmail} required />
-          <Input label="Senha" type="password" placeholder="Crie uma senha" value={regPassword} onChange={setRegPassword} required />
+          <Input
+            label="Nome"
+            placeholder="Digite seu nome"
+            value={name}
+            onChange={setName}
+            required
+          />
+          <Input
+            label="E-mail"
+            type="email"
+            placeholder="Digite seu e-mail"
+            value={regEmail}
+            onChange={setRegEmail}
+            required
+          />
+          <Input
+            label="Senha"
+            type="password"
+            placeholder="Crie uma senha"
+            value={regPassword}
+            onChange={setRegPassword}
+            required
+          />
           <Button type="submit" variant="primary" size="lg" className="w-full">
             Registrar
           </Button>

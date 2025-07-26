@@ -9,7 +9,9 @@ interface EmailAuthContextType {
   signOut: () => Promise<void>;
 }
 
-const EmailAuthContext = createContext<EmailAuthContextType | undefined>(undefined);
+const EmailAuthContext = createContext<EmailAuthContextType | undefined>(
+  undefined,
+);
 
 export const useEmailAuth = () => {
   const context = useContext(EmailAuthContext);
@@ -19,7 +21,9 @@ export const useEmailAuth = () => {
   return context;
 };
 
-export const EmailAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const EmailAuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
 
@@ -41,7 +45,10 @@ export const EmailAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
     return { error: error ?? undefined };
   };
 

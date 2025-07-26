@@ -12,11 +12,11 @@ export const TopBar: React.FC = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            {new Date().toLocaleDateString('pt-BR', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            {new Date().toLocaleDateString('pt-BR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
             })}
           </div>
         </div>
@@ -33,7 +33,10 @@ export const TopBar: React.FC = () => {
               </div>
               <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                 <Clock className="w-4 h-4" />
-                <span>Aberto às {new Date(currentSession.opened_at).toLocaleTimeString()}</span>
+                <span>
+                  Aberto às{' '}
+                  {new Date(currentSession.opened_at).toLocaleTimeString()}
+                </span>
               </div>
             </div>
           ) : (
@@ -48,7 +51,9 @@ export const TopBar: React.FC = () => {
           {/* User Info */}
           <div className="flex items-center space-x-2">
             <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-            <span className="text-sm text-gray-700 dark:text-gray-300">{currentUser?.name}</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              {currentUser?.name}
+            </span>
           </div>
         </div>
       </div>

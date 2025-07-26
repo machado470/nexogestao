@@ -15,7 +15,7 @@ export const Cart: React.FC<CartProps> = ({
   items,
   onUpdateQuantity,
   onRemoveItem,
-  onClearCart
+  onClearCart,
 }) => {
   const total = items.reduce((sum, item) => sum + item.subtotal, 0);
 
@@ -42,13 +42,18 @@ export const Cart: React.FC<CartProps> = ({
           </div>
         ) : (
           items.map((item) => (
-            <div key={item.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+            <div
+              key={item.id}
+              className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4"
+            >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
                   <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm leading-tight">
                     {item.name}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Código: {item.code}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Código: {item.code}
+                  </p>
                 </div>
                 <button
                   onClick={() => onRemoveItem(item.id)}
@@ -67,7 +72,9 @@ export const Cart: React.FC<CartProps> = ({
                   >
                     <Minus className="w-4 h-4" />
                   </button>
-                  <span className="w-8 text-center font-medium text-gray-900 dark:text-gray-100">{item.quantity}</span>
+                  <span className="w-8 text-center font-medium text-gray-900 dark:text-gray-100">
+                    {item.quantity}
+                  </span>
                   <button
                     onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                     className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 flex items-center justify-center transition-colors"
@@ -93,7 +100,9 @@ export const Cart: React.FC<CartProps> = ({
         <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
           <div className="flex items-center justify-between text-xl font-bold">
             <span className="text-gray-900 dark:text-gray-100">Total:</span>
-            <span className="text-green-600 dark:text-green-400">R$ {total.toFixed(2)}</span>
+            <span className="text-green-600 dark:text-green-400">
+              R$ {total.toFixed(2)}
+            </span>
           </div>
         </div>
       )}

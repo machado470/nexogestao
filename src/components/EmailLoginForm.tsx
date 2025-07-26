@@ -31,7 +31,9 @@ export const EmailLoginForm: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <h1 className="text-xl font-bold text-center mb-4 text-gray-900 dark:text-gray-100">Login</h1>
+        <h1 className="text-xl font-bold text-center mb-4 text-gray-900 dark:text-gray-100">
+          Login
+        </h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Email"
@@ -56,7 +58,13 @@ export const EmailLoginForm: React.FC = () => {
               <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
             </div>
           )}
-          <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading || !email || !password}>
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            className="w-full"
+            disabled={loading || !email || !password}
+          >
             {loading ? 'Entrando...' : 'Entrar'}
           </Button>
         </form>

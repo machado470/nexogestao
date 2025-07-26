@@ -57,7 +57,9 @@ class Sale {
     }
     const total = this.total;
     if (paymentAmount < total) {
-      throw new Error(`Valor pago insuficiente. Total é R$ ${total.toFixed(2)}.`);
+      throw new Error(
+        `Valor pago insuficiente. Total é R$ ${total.toFixed(2)}.`,
+      );
     }
     const change = paymentAmount - total;
     this.closed = true;

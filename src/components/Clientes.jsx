@@ -67,41 +67,85 @@ export const Clientes = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Clientes</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Clientes
+      </h1>
 
       <Card>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <Input label="Nome" value={form.nome} onChange={handleChange('nome')} required />
-          <Input label="CPF" value={form.cpf} onChange={handleChange('cpf')} required />
-          <Input label="Telefone" value={form.telefone} onChange={handleChange('telefone')} type="tel" required />
-          <Input label="E-mail" value={form.email} onChange={handleChange('email')} type="email" required />
+          <Input
+            label="Nome"
+            value={form.nome}
+            onChange={handleChange('nome')}
+            required
+          />
+          <Input
+            label="CPF"
+            value={form.cpf}
+            onChange={handleChange('cpf')}
+            required
+          />
+          <Input
+            label="Telefone"
+            value={form.telefone}
+            onChange={handleChange('telefone')}
+            type="tel"
+            required
+          />
+          <Input
+            label="E-mail"
+            value={form.email}
+            onChange={handleChange('email')}
+            type="email"
+            required
+          />
           {error && <div className="text-red-600 text-sm">{error}</div>}
           <div className="flex justify-end">
-            <Button type="submit" variant="success">Adicionar</Button>
+            <Button type="submit" variant="success">
+              Adicionar
+            </Button>
           </div>
         </form>
       </Card>
 
       <Card>
         {clientes.length === 0 ? (
-          <div className="text-center py-4 text-gray-500 dark:text-gray-400">Nenhum cliente cadastrado</div>
+          <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+            Nenhum cliente cadastrado
+          </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Nome</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">CPF</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Telefone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">E-mail</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                  Nome
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                  CPF
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                  Telefone
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                  E-mail
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {clientes.map((c) => (
                 <tr key={c.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{c.nome}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{c.cpf}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{c.telefone}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{c.email}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {c.nome}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {c.cpf}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {c.telefone}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {c.email}
+                  </td>
                 </tr>
               ))}
             </tbody>

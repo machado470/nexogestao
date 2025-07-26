@@ -6,10 +6,9 @@ export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path='/' element={<Login />} />
-        <Route path='/produtos' element={<Produtos />} />
+        <Route path="/" element={<Login />} />
+        <Route path="/produtos" element={<Produtos />} />
       </Routes>
     </BrowserRouter>
   );
 }
-

@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 export const useCashSession = () => {
-  const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
+  const [currentSession, setCurrentSession] = useState<CashSession | null>(
+    null,
+  );
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [loading, setLoading] = useState(true);
   const { currentUser } = useAuth();
@@ -63,7 +65,7 @@ export const useCashSession = () => {
           operator_id: currentUser.id,
           initial_amount: initialAmount,
           current_amount: initialAmount,
-          is_open: true
+          is_open: true,
         })
         .select()
         .single();
@@ -88,7 +90,7 @@ export const useCashSession = () => {
         .from('cash_sessions')
         .update({
           is_open: false,
-          closed_at: new Date().toISOString()
+          closed_at: new Date().toISOString(),
         })
         .eq('id', currentSession.id);
 
@@ -107,7 +109,7 @@ export const useCashSession = () => {
   const addMovement = async (
     type: 'withdrawal' | 'supply' | 'sale',
     amount: number,
-    description: string
+    description: string,
   ): Promise<boolean> => {
     if (!currentSession) return false;
 
@@ -119,15 +121,16 @@ export const useCashSession = () => {
           cash_session_id: currentSession.id,
           type,
           amount,
-          description
+          description,
         });
 
       if (movementError) return false;
 
       // Update session current amount
-      const newAmount = type === 'withdrawal' 
-        ? currentSession.current_amount - amount
-        : currentSession.current_amount + amount;
+      const newAmount =
+        type === 'withdrawal'
+          ? currentSession.current_amount - amount
+          : currentSession.current_amount + amount;
 
       const { error: sessionError } = await supabase
         .from('cash_sessions')
@@ -139,7 +142,7 @@ export const useCashSession = () => {
       // Update local state
       setCurrentSession({ ...currentSession, current_amount: newAmount });
       await loadMovements(currentSession.id);
-      
+
       return true;
     } catch (error) {
       console.error('Error adding movement:', error);
@@ -154,6 +157,6 @@ export const useCashSession = () => {
     openCashSession,
     closeCashSession,
     addMovement,
-    refreshSession: loadCurrentSession
+    refreshSession: loadCurrentSession,
   };
 };

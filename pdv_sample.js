@@ -14,10 +14,10 @@
 // Classe que representa um produto no catálogo
 class Product {
   constructor({ id, name, price, stock = 0 }) {
-    this.id = id;         // código ou SKU do produto
-    this.name = name;     // nome do produto
-    this.price = price;   // preço unitário
-    this.stock = stock;   // quantidade em estoque
+    this.id = id; // código ou SKU do produto
+    this.name = name; // nome do produto
+    this.price = price; // preço unitário
+    this.stock = stock; // quantidade em estoque
   }
 }
 
@@ -90,7 +90,9 @@ class Sale {
     }
     const total = this.total;
     if (paymentAmount < total) {
-      throw new Error(`Valor pago insuficiente. Total é R$ ${total.toFixed(2)}.`);
+      throw new Error(
+        `Valor pago insuficiente. Total é R$ ${total.toFixed(2)}.`,
+      );
     }
     const change = paymentAmount - total;
     this.closed = true;
@@ -179,8 +181,12 @@ class CashRegister {
       inicial: this.initialAmount,
       final: finalAmount,
       totalOperacional: this.currentAmount,
-      suprimentos: this.operations.filter(op => op.type === 'suprimento').reduce((s, op) => s + op.amount, 0),
-      sangrias: this.operations.filter(op => op.type === 'sangria').reduce((s, op) => s + op.amount, 0),
+      suprimentos: this.operations
+        .filter((op) => op.type === 'suprimento')
+        .reduce((s, op) => s + op.amount, 0),
+      sangrias: this.operations
+        .filter((op) => op.type === 'sangria')
+        .reduce((s, op) => s + op.amount, 0),
       operacoes: this.operations,
     };
     // Reinicia o caixa
@@ -196,9 +202,15 @@ class CashRegister {
 function demo() {
   // Cria catálogo e adiciona produtos
   const catalog = new Catalog();
-  catalog.addProduct(new Product({ id: '001', name: 'Café', price: 7.5, stock: 100 }));
-  catalog.addProduct(new Product({ id: '002', name: 'Pão de Queijo', price: 5.0, stock: 50 }));
-  catalog.addProduct(new Product({ id: '003', name: 'Suco de Laranja', price: 4.25, stock: 30 }));
+  catalog.addProduct(
+    new Product({ id: '001', name: 'Café', price: 7.5, stock: 100 }),
+  );
+  catalog.addProduct(
+    new Product({ id: '002', name: 'Pão de Queijo', price: 5.0, stock: 50 }),
+  );
+  catalog.addProduct(
+    new Product({ id: '003', name: 'Suco de Laranja', price: 4.25, stock: 30 }),
+  );
 
   // Inicia uma nova venda
   const sale = new Sale(catalog);
@@ -208,7 +220,9 @@ function demo() {
 
   console.log('Itens da venda:');
   sale.items.forEach((item, idx) => {
-    console.log(`${idx + 1}. ${item.product.name} x ${item.quantity} = R$ ${item.subtotal.toFixed(2)}`);
+    console.log(
+      `${idx + 1}. ${item.product.name} x ${item.quantity} = R$ ${item.subtotal.toFixed(2)}`,
+    );
   });
   console.log(`Total: R$ ${sale.total.toFixed(2)}`);
 

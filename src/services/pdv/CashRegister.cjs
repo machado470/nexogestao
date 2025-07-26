@@ -78,10 +78,10 @@ class CashRegister {
       final: finalAmount,
       totalOperacional: this.currentAmount,
       suprimentos: this.operations
-        .filter(op => op.type === 'suprimento')
+        .filter((op) => op.type === 'suprimento')
         .reduce((s, op) => s + op.amount, 0),
       sangrias: this.operations
-        .filter(op => op.type === 'sangria')
+        .filter((op) => op.type === 'sangria')
         .reduce((s, op) => s + op.amount, 0),
       operacoes: this.operations,
     };

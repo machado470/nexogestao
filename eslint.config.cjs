@@ -10,9 +10,9 @@ module.exports = [
         module: 'readonly',
         require: 'readonly',
         process: 'readonly',
-        console: 'readonly'
-      }
+        console: 'readonly',
+      },
     },
-    rules: {}
-  }
+    rules: {},
+  },
 ];

@@ -4,4 +4,3 @@ export type Produto = {
   preco: number;
   estoque: number;
 };
-

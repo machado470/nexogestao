@@ -6,13 +6,13 @@
 
 ## �� Funcionalidades
 
-- Cadastro de produtos, clientes e fornecedores  
-- Controle de vendas (PDV)  
-- Relatórios financeiros e fiscais  
-- Gestão de múltiplas empresas (multi-tenancy)  
-- Integração com Supabase  
-- Layout moderno com Tailwind e Vite  
-- Estrutura organizada por features e módulos  
+- Cadastro de produtos, clientes e fornecedores
+- Controle de vendas (PDV)
+- Relatórios financeiros e fiscais
+- Gestão de múltiplas empresas (multi-tenancy)
+- Integração com Supabase
+- Layout moderno com Tailwind e Vite
+- Estrutura organizada por features e módulos
 
 ---
 
@@ -21,16 +21,16 @@
 \`\`\`
 src/
 ├── features/
-│   ├── auth/
-│   ├── pdv/
-│   ├── produtos/
-│   ├── clientes/
-│   ├── fornecedores/
-│   ├── financeiro/
-│   ├── fiscal/
-│   ├── relatorios/
-│   ├── dashboard/
-│   └── layout/
+│ ├── auth/
+│ ├── pdv/
+│ ├── produtos/
+│ ├── clientes/
+│ ├── fornecedores/
+│ ├── financeiro/
+│ ├── fiscal/
+│ ├── relatorios/
+│ ├── dashboard/
+│ └── layout/
 ├── saas/
 ├── tenants/
 ├── ui/
@@ -51,12 +51,12 @@ src/
 
 ## 🧪 Tecnologias e Ferramentas
 
-- \`React\` + \`Vite\`  
-- \`Supabase\`  
-- \`Tailwind CSS\`  
-- \`ESLint + Prettier\`  
-- \`Husky + lint-staged\`  
-- \`TypeScript\`  
+- \`React\` + \`Vite\`
+- \`Supabase\`
+- \`Tailwind CSS\`
+- \`ESLint + Prettier\`
+- \`Husky + lint-staged\`
+- \`TypeScript\`
 - \`Git + GitHub\`
 
 ---
@@ -64,16 +64,21 @@ src/
 ## ⚙️ Como rodar localmente
 
 \`\`\`bash
+
 # Clonar o repositório
+
 git clone https://github.com/SEU_USUARIO/nexogestao.git
 
 # Acessar a pasta
+
 cd nexogestao
 
 # Instalar dependências
+
 npm install
 
 # Rodar o projeto
+
 npm run dev
 \`\`\`
 
@@ -96,4 +101,3 @@ Este projeto está sob a licença [MIT](LICENSE).
 Desenvolvido por William Machado  
 LinkedIn: [linkedin.com/in/williammachado](https://linkedin.com/in/williammachado)  
 GitHub: [github.com/machado4702](https://github.com/machado4702)
-

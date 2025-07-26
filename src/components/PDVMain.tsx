@@ -15,19 +15,25 @@ export const PDVMain: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
 
   const handleProductSelect = (product: Product) => {
-    const existingItem = cartItems.find(item => item.id === product.id);
-    
+    const existingItem = cartItems.find((item) => item.id === product.id);
+
     if (existingItem) {
-      setCartItems(cartItems.map(item =>
-        item.id === product.id
-          ? { ...item, quantity: item.quantity + 1, subtotal: (item.quantity + 1) * item.price }
-          : item
-      ));
+      setCartItems(
+        cartItems.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+                subtotal: (item.quantity + 1) * item.price,
+              }
+            : item,
+        ),
+      );
     } else {
       const newItem: CartItem = {
         ...product,
         quantity: 1,
-        subtotal: product.price
+        subtotal: product.price,
       };
       setCartItems([...cartItems, newItem]);
     }
@@ -39,15 +45,17 @@ export const PDVMain: React.FC = () => {
       return;
     }
 
-    setCartItems(cartItems.map(item =>
-      item.id === id
-        ? { ...item, quantity, subtotal: quantity * item.price }
-        : item
-    ));
+    setCartItems(
+      cartItems.map((item) =>
+        item.id === id
+          ? { ...item, quantity, subtotal: quantity * item.price }
+          : item,
+      ),
+    );
   };
 
   const handleRemoveItem = (id: string) => {
-    setCartItems(cartItems.filter(item => item.id !== id));
+    setCartItems(cartItems.filter((item) => item.id !== id));
   };
 
   const handleClearCart = () => {
@@ -61,7 +69,7 @@ export const PDVMain: React.FC = () => {
       initialAmount,
       currentAmount: initialAmount,
       openedAt: new Date(),
-      operator: 'Operador 01'
+      operator: 'Operador 01',
     });
   };
 
@@ -81,14 +89,14 @@ export const PDVMain: React.FC = () => {
 
   const handleConfirmPayment = (payments: Payment[]) => {
     const total = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
-    
+
     const newSale: Sale = {
       id: Date.now().toString(),
       items: [...cartItems],
       total,
       payments,
       operator: cashDrawer?.operator || 'Operador',
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     setSales([...sales, newSale]);
@@ -98,12 +106,12 @@ export const PDVMain: React.FC = () => {
     // Update cash drawer
     if (cashDrawer) {
       const cashPayment = payments
-        .filter(p => p.method.type === 'money')
+        .filter((p) => p.method.type === 'money')
         .reduce((sum, p) => sum + p.amount, 0);
-      
+
       setCashDrawer({
         ...cashDrawer,
-        currentAmount: cashDrawer.currentAmount + cashPayment
+        currentAmount: cashDrawer.currentAmount + cashPayment,
       });
     }
   };
@@ -121,11 +129,11 @@ export const PDVMain: React.FC = () => {
             Sistema PDV
           </h1>
           <div className="text-sm text-gray-600">
-            {new Date().toLocaleDateString('pt-BR', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            {new Date().toLocaleDateString('pt-BR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
             })}
           </div>
         </div>
@@ -136,7 +144,9 @@ export const PDVMain: React.FC = () => {
           {/* Left Column - Product Search and Info */}
           <div className="lg:col-span-2 space-y-6">
             <Card>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Buscar Produtos</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                Buscar Produtos
+              </h2>
               <ProductSearch onProductSelect={handleProductSelect} />
             </Card>
 
@@ -151,17 +161,22 @@ export const PDVMain: React.FC = () => {
             {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-4">
               <Card className="text-center" padding="sm">
-                <div className="text-2xl font-bold text-blue-600">{sales.length}</div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {sales.length}
+                </div>
                 <div className="text-sm text-gray-600">Vendas Hoje</div>
               </Card>
               <Card className="text-center" padding="sm">
                 <div className="text-2xl font-bold text-green-600">
-                  R$ {sales.reduce((sum, sale) => sum + sale.total, 0).toFixed(2)}
+                  R${' '}
+                  {sales.reduce((sum, sale) => sum + sale.total, 0).toFixed(2)}
                 </div>
                 <div className="text-sm text-gray-600">Total Vendido</div>
               </Card>
               <Card className="text-center" padding="sm">
-                <div className="text-2xl font-bold text-orange-600">{cartItems.length}</div>
+                <div className="text-2xl font-bold text-orange-600">
+                  {cartItems.length}
+                </div>
                 <div className="text-sm text-gray-600">Itens no Carrinho</div>
               </Card>
             </div>
@@ -183,7 +198,9 @@ export const PDVMain: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center text-xl font-bold">
                     <span>Total:</span>
-                    <span className="text-green-600">R$ {cartTotal.toFixed(2)}</span>
+                    <span className="text-green-600">
+                      R$ {cartTotal.toFixed(2)}
+                    </span>
                   </div>
                   <Button
                     onClick={() => setShowPaymentModal(true)}
@@ -192,7 +209,9 @@ export const PDVMain: React.FC = () => {
                     className="w-full"
                     disabled={!canProcessSale}
                   >
-                    {!cashDrawer?.isOpen ? 'Abra o caixa primeiro' : 'Finalizar Venda'}
+                    {!cashDrawer?.isOpen
+                      ? 'Abra o caixa primeiro'
+                      : 'Finalizar Venda'}
                   </Button>
                 </div>
               </Card>

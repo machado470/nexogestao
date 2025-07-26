@@ -15,7 +15,9 @@ export const useTheme = () => {
   return context;
 };
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('nexogestao_theme');
     return saved ? JSON.parse(saved) : false;

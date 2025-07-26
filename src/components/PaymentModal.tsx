@@ -16,10 +16,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
   total,
-  onConfirmPayment
+  onConfirmPayment,
 }) => {
   const [payments, setPayments] = useState<PaymentMethod[]>([]);
-  const [selectedMethod, setSelectedMethod] = useState<'cash' | 'card' | 'pix' | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<
+    'cash' | 'card' | 'pix' | null
+  >(null);
   const [paymentAmount, setPaymentAmount] = useState('');
 
   const paymentMethods = [
@@ -33,18 +35,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const changeAmount = paidAmount > total ? paidAmount - total : 0;
 
   const handleAddPayment = () => {
-    if (!selectedMethod || !paymentAmount || parseFloat(paymentAmount) <= 0) return;
+    if (!selectedMethod || !paymentAmount || parseFloat(paymentAmount) <= 0)
+      return;
 
     const amount = parseFloat(paymentAmount);
-    const method = paymentMethods.find(m => m.type === selectedMethod);
-    
+    const method = paymentMethods.find((m) => m.type === selectedMethod);
+
     if (method) {
-      setPayments([...payments, { 
-        id: Date.now().toString(),
-        name: method.name, 
-        type: selectedMethod, 
-        amount 
-      }]);
+      setPayments([
+        ...payments,
+        {
+          id: Date.now().toString(),
+          name: method.name,
+          type: selectedMethod,
+          amount,
+        },
+      ]);
       setSelectedMethod(null);
       setPaymentAmount('');
     }
@@ -74,7 +80,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Payment Methods */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Formas de Pagamento</h3>
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Formas de Pagamento
+          </h3>
           <div className="grid grid-cols-1 gap-3 mb-4">
             {paymentMethods.map((method) => {
               const Icon = method.icon;
@@ -89,7 +97,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   }`}
                 >
                   <Icon className="w-6 h-6" />
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{method.name}</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {method.name}
+                  </span>
                 </button>
               );
             })}
@@ -117,25 +127,41 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
         {/* Payment Summary */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Resumo</h3>
-          
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Resumo
+          </h3>
+
           <div className="space-y-3 mb-4">
             <div className="flex justify-between">
-              <span className="text-gray-700 dark:text-gray-300">Total da Venda:</span>
-              <span className="font-bold text-gray-900 dark:text-gray-100">R$ {total.toFixed(2)}</span>
+              <span className="text-gray-700 dark:text-gray-300">
+                Total da Venda:
+              </span>
+              <span className="font-bold text-gray-900 dark:text-gray-100">
+                R$ {total.toFixed(2)}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-700 dark:text-gray-300">Valor Pago:</span>
-              <span className="font-bold text-green-600 dark:text-green-400">R$ {paidAmount.toFixed(2)}</span>
+              <span className="text-gray-700 dark:text-gray-300">
+                Valor Pago:
+              </span>
+              <span className="font-bold text-green-600 dark:text-green-400">
+                R$ {paidAmount.toFixed(2)}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-700 dark:text-gray-300">Restante:</span>
-              <span className="font-bold text-orange-600 dark:text-orange-400">R$ {remainingAmount.toFixed(2)}</span>
+              <span className="text-gray-700 dark:text-gray-300">
+                Restante:
+              </span>
+              <span className="font-bold text-orange-600 dark:text-orange-400">
+                R$ {remainingAmount.toFixed(2)}
+              </span>
             </div>
             {changeAmount > 0 && (
               <div className="flex justify-between text-lg border-t border-gray-200 dark:border-gray-600 pt-3">
                 <span className="text-gray-700 dark:text-gray-300">Troco:</span>
-                <span className="font-bold text-blue-600 dark:text-blue-400">R$ {changeAmount.toFixed(2)}</span>
+                <span className="font-bold text-blue-600 dark:text-blue-400">
+                  R$ {changeAmount.toFixed(2)}
+                </span>
               </div>
             )}
           </div>
@@ -143,14 +169,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Payment List */}
           {payments.length > 0 && (
             <div className="space-y-2 mb-4">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100">Pagamentos Adicionados:</h4>
+              <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                Pagamentos Adicionados:
+              </h4>
               {payments.map((payment, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-3 rounded-lg"
                 >
                   <div>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{payment.name}</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                      {payment.name}
+                    </span>
                     <div className="text-sm text-gray-500 dark:text-gray-400">
                       R$ {payment.amount.toFixed(2)}
                     </div>
@@ -172,7 +202,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             className="w-full"
             disabled={remainingAmount > 0}
           >
-            {remainingAmount > 0 ? 'Adicione mais pagamentos' : 'Confirmar Venda'}
+            {remainingAmount > 0
+              ? 'Adicione mais pagamentos'
+              : 'Confirmar Venda'}
           </Button>
         </div>
       </div>

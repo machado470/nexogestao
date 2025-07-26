@@ -36,8 +36,12 @@ export const LoginForm: React.FC = () => {
           <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <LogIn className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">NexoGestão</h1>
-          <p className="text-gray-600 dark:text-gray-400">Sistema PDV - Módulo Caixa</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            NexoGestão
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Sistema PDV - Módulo Caixa
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -79,8 +83,12 @@ export const LoginForm: React.FC = () => {
 
         <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
           <div className="text-center text-sm text-gray-500 dark:text-gray-400">
-            <p>Usuário demo: <strong>admin</strong></p>
-            <p>Senha demo: <strong>123456</strong></p>
+            <p>
+              Usuário demo: <strong>admin</strong>
+            </p>
+            <p>
+              Senha demo: <strong>123456</strong>
+            </p>
           </div>
         </div>
       </Card>

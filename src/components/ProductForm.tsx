@@ -39,7 +39,8 @@ export const ProductForm: React.FC = () => {
     const errs: string[] = [];
     if (!name.trim()) errs.push('Nome é obrigatório');
     if (!barcode.trim()) errs.push('Código de barras é obrigatório');
-    if (!price || parseFloat(price) <= 0) errs.push('Valor deve ser maior que 0');
+    if (!price || parseFloat(price) <= 0)
+      errs.push('Valor deve ser maior que 0');
     if (stock === '' || parseInt(stock) < 0) errs.push('Estoque inválido');
     setErrors(errs);
     return errs.length === 0;
@@ -55,7 +56,7 @@ export const ProductForm: React.FC = () => {
       code: barcode,
       price: parseFloat(price),
       stock: parseInt(stock),
-      category: 'Geral'
+      category: 'Geral',
     } as Omit<Product, 'id' | 'created_at' | 'is_active'>;
 
     if (isEdit) {
@@ -76,9 +77,26 @@ export const ProductForm: React.FC = () => {
       <Card>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <Input label="Nome" value={name} onChange={setName} required />
-          <Input label="Código de Barras" value={barcode} onChange={setBarcode} required />
-          <Input label="Valor (R$)" value={price} onChange={setPrice} type="number" required />
-          <Input label="Estoque" value={stock} onChange={setStock} type="number" required />
+          <Input
+            label="Código de Barras"
+            value={barcode}
+            onChange={setBarcode}
+            required
+          />
+          <Input
+            label="Valor (R$)"
+            value={price}
+            onChange={setPrice}
+            type="number"
+            required
+          />
+          <Input
+            label="Estoque"
+            value={stock}
+            onChange={setStock}
+            type="number"
+            required
+          />
 
           {errors.length > 0 && (
             <div className="text-red-600 text-sm space-y-1">
@@ -89,8 +107,16 @@ export const ProductForm: React.FC = () => {
           )}
 
           <div className="flex justify-end space-x-2">
-            <Button type="button" variant="secondary" onClick={() => navigate('/products')}>Cancelar</Button>
-            <Button type="submit" variant="success">Salvar</Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate('/products')}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" variant="success">
+              Salvar
+            </Button>
           </div>
         </form>
       </Card>

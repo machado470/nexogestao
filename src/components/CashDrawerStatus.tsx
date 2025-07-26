@@ -17,7 +17,7 @@ export const CashDrawerStatus: React.FC<CashDrawerStatusProps> = ({
   onOpenDrawer,
   onCloseDrawer,
   onAddWithdrawal,
-  onAddSupply
+  onAddSupply,
 }) => {
   return (
     <Card>
@@ -39,13 +39,17 @@ export const CashDrawerStatus: React.FC<CashDrawerStatusProps> = ({
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-green-50 p-4 rounded-lg">
-              <div className="text-sm text-green-600 font-medium">Valor Inicial</div>
+              <div className="text-sm text-green-600 font-medium">
+                Valor Inicial
+              </div>
               <div className="text-2xl font-bold text-green-700">
                 R$ {cashDrawer.initialAmount.toFixed(2)}
               </div>
             </div>
             <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="text-sm text-blue-600 font-medium">Valor Atual</div>
+              <div className="text-sm text-blue-600 font-medium">
+                Valor Atual
+              </div>
               <div className="text-2xl font-bold text-blue-700">
                 R$ {cashDrawer.currentAmount.toFixed(2)}
               </div>

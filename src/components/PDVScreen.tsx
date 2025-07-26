@@ -23,24 +23,30 @@ export const PDVScreen: React.FC = () => {
       return;
     }
 
-    const existingItem = cartItems.find(item => item.id === product.id);
-    
+    const existingItem = cartItems.find((item) => item.id === product.id);
+
     if (existingItem) {
       if (existingItem.quantity >= product.stock) {
         alert('Quantidade excede o estoque disponível!');
         return;
       }
-      
-      setCartItems(cartItems.map(item =>
-        item.id === product.id
-          ? { ...item, quantity: item.quantity + 1, subtotal: (item.quantity + 1) * item.price }
-          : item
-      ));
+
+      setCartItems(
+        cartItems.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+                subtotal: (item.quantity + 1) * item.price,
+              }
+            : item,
+        ),
+      );
     } else {
       const newItem: CartItem = {
         ...product,
         quantity: 1,
-        subtotal: product.price
+        subtotal: product.price,
       };
       setCartItems([...cartItems, newItem]);
     }
@@ -52,21 +58,23 @@ export const PDVScreen: React.FC = () => {
       return;
     }
 
-    const product = cartItems.find(item => item.id === id);
+    const product = cartItems.find((item) => item.id === id);
     if (product && quantity > product.stock) {
       alert('Quantidade excede o estoque disponível!');
       return;
     }
 
-    setCartItems(cartItems.map(item =>
-      item.id === id
-        ? { ...item, quantity, subtotal: quantity * item.price }
-        : item
-    ));
+    setCartItems(
+      cartItems.map((item) =>
+        item.id === id
+          ? { ...item, quantity, subtotal: quantity * item.price }
+          : item,
+      ),
+    );
   };
 
   const handleRemoveItem = (id: string) => {
-    setCartItems(cartItems.filter(item => item.id !== id));
+    setCartItems(cartItems.filter((item) => item.id !== id));
   };
 
   const handleClearCart = () => {
@@ -79,7 +87,7 @@ export const PDVScreen: React.FC = () => {
     if (!currentSession || !currentUser) return;
 
     const total = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
-    
+
     try {
       // Create sale record
       const { data: sale, error: saleError } = await supabase
@@ -89,7 +97,7 @@ export const PDVScreen: React.FC = () => {
           operator_id: currentUser.id,
           total_amount: total,
           payment_methods: payments,
-          items: cartItems
+          items: cartItems,
         })
         .select()
         .single();
@@ -106,9 +114,9 @@ export const PDVScreen: React.FC = () => {
 
       // Add cash movement for cash payments
       const cashPayment = payments
-        .filter(p => p.type === 'cash')
+        .filter((p) => p.type === 'cash')
         .reduce((sum, p) => sum + p.amount, 0);
-      
+
       if (cashPayment > 0) {
         await addMovement('sale', cashPayment, `Venda #${sale.id}`);
       }
@@ -142,7 +150,9 @@ export const PDVScreen: React.FC = () => {
           <div className="flex items-center space-x-3">
             <AlertCircle className="w-6 h-6 text-orange-600 dark:text-orange-400" />
             <div>
-              <h3 className="font-medium text-orange-800 dark:text-orange-200">Caixa Fechado</h3>
+              <h3 className="font-medium text-orange-800 dark:text-orange-200">
+                Caixa Fechado
+              </h3>
               <p className="text-sm text-orange-700 dark:text-orange-300">
                 Abra o caixa na seção "Caixa" para começar as vendas.
               </p>
@@ -155,25 +165,40 @@ export const PDVScreen: React.FC = () => {
         {/* Left Column - Product Search and Stats */}
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Buscar Produtos</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+              Buscar Produtos
+            </h2>
             <ProductSearch onProductSelect={handleProductSelect} />
           </Card>
 
           {/* Quick Stats */}
           <div className="grid grid-cols-3 gap-4">
             <Card className="text-center" padding="sm">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{sales.length}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Vendas Hoje</div>
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {sales.length}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Vendas Hoje
+              </div>
             </Card>
             <Card className="text-center" padding="sm">
               <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                R$ {sales.reduce((sum, sale) => sum + sale.total_amount, 0).toFixed(2)}
+                R${' '}
+                {sales
+                  .reduce((sum, sale) => sum + sale.total_amount, 0)
+                  .toFixed(2)}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total Vendido</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Total Vendido
+              </div>
             </Card>
             <Card className="text-center" padding="sm">
-              <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{cartItems.length}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Itens no Carrinho</div>
+              <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                {cartItems.length}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Itens no Carrinho
+              </div>
             </Card>
           </div>
         </div>
@@ -193,8 +218,12 @@ export const PDVScreen: React.FC = () => {
             <Card padding="sm">
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-xl font-bold">
-                  <span className="text-gray-900 dark:text-gray-100">Total:</span>
-                  <span className="text-green-600 dark:text-green-400">R$ {cartTotal.toFixed(2)}</span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    Total:
+                  </span>
+                  <span className="text-green-600 dark:text-green-400">
+                    R$ {cartTotal.toFixed(2)}
+                  </span>
                 </div>
                 <Button
                   onClick={() => setShowPaymentModal(true)}
@@ -203,7 +232,9 @@ export const PDVScreen: React.FC = () => {
                   className="w-full"
                   disabled={!canProcessSale}
                 >
-                  {!currentSession?.is_open ? 'Abra o caixa primeiro' : 'Finalizar Venda'}
+                  {!currentSession?.is_open
+                    ? 'Abra o caixa primeiro'
+                    : 'Finalizar Venda'}
                 </Button>
               </div>
             </Card>
