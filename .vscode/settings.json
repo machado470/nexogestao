@@ -3,7 +3,7 @@
   "deno.lint": true,
   "deno.unstable": [
     "bare-node-builtins",
-    "byonm",
+    "byomm",
     "sloppy-imports",
     "unsafe-proto",
     "webgpu",
@@ -16,6 +16,23 @@
     "http",
     "net"
   ],
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "eslint.validate": ["javascript"],
+  "prettier.requireConfig": true,
+  "files.associations": {
+    "*.env": "dotenv"
+  },
+  "files.exclude": {
+    "**/.vscode": false,
+    "**/.git": true,
+    "**/node_modules": true
+  },
+  "gitlens.currentLine.enabled": true,
+  "gitlens.hovers.enabled": true,
+  "gitlens.codeLens.enabled": true,
   "[typescript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
   }
