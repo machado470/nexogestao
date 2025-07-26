@@ -1,21 +1,25 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 
-const LoginForm: React.FC = () => {
+const RegisterForm: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [confirm, setConfirm] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setMessage(null);
+    if (password !== confirm) {
+      setMessage('As senhas não conferem');
+      return;
+    }
+
+    const { error } = await supabase.auth.signUp({ email, password });
     if (error) {
-      setError(error.message);
+      setMessage(error.message);
     } else {
-      navigate('/dashboard');
+      setMessage('Conta criada com sucesso! Verifique seu e-mail.');
     }
   };
 
@@ -37,12 +41,20 @@ const LoginForm: React.FC = () => {
         onChange={(e) => setPassword(e.target.value)}
         required
       />
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      <input
+        type="password"
+        className="w-full border p-2 rounded"
+        placeholder="Confirme a Senha"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        required
+      />
+      {message && <p className="text-sm text-center text-blue-600">{message}</p>}
       <button type="submit" className="w-full bg-blue-500 text-white py-2 rounded">
-        Entrar
+        Criar Conta
       </button>
     </form>
   );
 };
 
-export default LoginForm;
+export default RegisterForm;
