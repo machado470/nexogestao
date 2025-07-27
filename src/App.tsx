@@ -1,19 +1,15 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Header from './ui/components/Header';
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Produtos from "./pages/Produtos";
 
 function App() {
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-100 text-gray-900">
-        <Header />
-        <main className="p-4">
-          <Routes>
-            <Route path="/" element={<div>Página Inicial</div>} />
-            {/* Outras rotas aqui */}
-          </Routes>
-        </main>
-      </div>
-    </Router>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/produtos" />} />
+        <Route path="/produtos" element={<Produtos />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
