@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Auth from "../pages/Auth";
-import Dashboard from "../pages/Dashboard";
+import { Auth } from "../pages/Auth";
+import { Dashboard } from "../pages/Dashboard";
 
-export default function AppRoutes() {
+export function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
