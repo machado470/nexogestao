@@ -1,0 +1,147 @@
+.
+├── README.md
+├── components
+│   ├── LoginForm.tsx
+│   └── RegisterForm.tsx
+├── config
+│   └── db.js
+├── controllers
+│   ├── auth.controller.js
+│   ├── authController.js
+│   ├── clienteController.js
+│   ├── produtoController.js
+│   ├── sangriaController.js
+│   └── vendasController.js
+├── eslint.config.cjs
+├── estrutura.txt
+├── index.html
+├── index.js
+├── middlewares
+│   └── authMiddleware.js
+├── models
+│   ├── cliente.js
+│   ├── produto.js
+│   └── venda.js
+├── package-lock.json
+├── package.json
+├── pages
+│   └── AuthPage.tsx
+├── pdv_sample.js
+├── routes
+│   ├── auth
+│   │   └── auth.routes.js
+│   ├── auth.routes.js
+│   ├── clientes.routes.js
+│   ├── index.js
+│   ├── produtos.routes.js
+│   ├── sangria.routes.js
+│   └── vendas.routes.js
+├── scripts
+│   ├── demo_pdv.cjs
+│   └── verificar.sh
+├── src
+│   ├── App.jsx
+│   ├── App.tsx
+│   ├── components
+│   │   ├── Cart.tsx
+│   │   ├── CashDrawerStatus.tsx
+│   │   ├── CashManagement.tsx
+│   │   ├── Clientes.jsx
+│   │   ├── Dashboard.tsx
+│   │   ├── EmailLoginForm.tsx
+│   │   ├── Footer.jsx
+│   │   ├── Header.jsx
+│   │   ├── LoginForm.tsx
+│   │   ├── PDVMain.tsx
+│   │   ├── PDVScreen.tsx
+│   │   ├── PaymentModal.tsx
+│   │   ├── ProductForm.tsx
+│   │   ├── ProductList.tsx
+│   │   ├── ProductSearch.tsx
+│   │   ├── ProductsRoutes.tsx
+│   │   ├── RegisterForm.tsx
+│   │   ├── Sidebar.jsx
+│   │   ├── Sidebar.tsx
+│   │   ├── SplitLoginPage.tsx
+│   │   ├── TopBar.tsx
+│   │   └── ui
+│   ├── config
+│   │   ├── index.ts
+│   │   ├── supabase.js
+│   │   └── supabase.ts
+│   ├── contexts
+│   │   ├── AuthContext.tsx
+│   │   ├── EmailAuthContext.tsx
+│   │   ├── ThemeContext.tsx
+│   │   └── index.ts
+│   ├── controllers
+│   │   ├── index.ts
+│   │   ├── productController.ts
+│   │   ├── produtos.controller.js
+│   │   └── produtos.controller.js.save
+│   ├── data
+│   │   ├── index.ts
+│   │   └── mockData.ts
+│   ├── features
+│   │   ├── auth
+│   │   ├── clientes
+│   │   ├── dashboard
+│   │   ├── financeiro
+│   │   ├── fiscal
+│   │   ├── fornecedores
+│   │   ├── layout
+│   │   ├── pdv
+│   │   ├── produtos
+│   │   └── relatorios
+│   ├── hooks
+│   │   ├── index.ts
+│   │   ├── useAuth.ts
+│   │   └── useCashSession.ts
+│   ├── index.css
+│   ├── index.js
+│   ├── lib
+│   │   ├── index.ts
+│   │   └── supabase.ts
+│   ├── main.tsx
+│   ├── models
+│   │   ├── index.ts
+│   │   └── produto.model.js
+│   ├── pages
+│   │   ├── Auth.tsx
+│   │   ├── Caixa.jsx
+│   │   ├── Dashboard.tsx
+│   │   ├── Home.tsx
+│   │   └── Login.jsx
+│   ├── routes
+│   │   ├── index.jsx
+│   │   ├── index.ts
+│   │   ├── index.tsx
+│   │   └── produtos.routes.js
+│   ├── saas
+│   │   └── index.ts
+│   ├── services
+│   │   ├── api.ts
+│   │   ├── clientesService.js
+│   │   ├── index.ts
+│   │   ├── pdv
+│   │   └── supabaseClient.js
+│   ├── tenants
+│   │   └── index.ts
+│   ├── tests
+│   │   └── index.ts
+│   ├── types
+│   │   ├── index.ts
+│   │   └── product.ts
+│   └── ui
+│       ├── components
+│       └── index.ts
+├── supabase
+│   └── config.toml
+├── supabaseClient.js
+├── tailwind.config.js
+├── teste.js
+├── tests
+│   └── exemplo.test.js
+└── vite.config.ts
+
+43 directories, 102 files
