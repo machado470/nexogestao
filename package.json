@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "prepare": "husky install",
-    "check": "bash scripts/verificar.sh"
+    "check": "bash scripts/verificar.sh",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.1",
