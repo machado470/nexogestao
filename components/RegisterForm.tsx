@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState } from 'react';
 
 export default function RegisterForm() {
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
 
   const handleRegister = () => {
-    console.log("Cadastro:", nome, email, senha);
+    console.log('Cadastro:', nome, email, senha);
   };
 
   return (

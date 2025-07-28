@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 
 type Produto = {
   id: number;
@@ -8,25 +8,25 @@ type Produto = {
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [nome, setNome] = useState("");
-  const [preco, setPreco] = useState("");
+  const [nome, setNome] = useState('');
+  const [preco, setPreco] = useState('');
   const [editando, setEditando] = useState<null | Produto>(null);
 
   const carregarProdutos = async () => {
-    const res = await fetch("http://localhost:8000/produtos/listar.php");
+    const res = await fetch('http://localhost:8000/produtos/listar.php');
     const data = await res.json();
     setProdutos(data);
   };
 
   const salvarProduto = async () => {
-    const metodo = editando ? "PUT" : "POST";
+    const metodo = editando ? 'PUT' : 'POST';
     const url = editando
-      ? "http://localhost:8000/produtos/atualizar.php"
-      : "http://localhost:8000/produtos/criar.php";
+      ? 'http://localhost:8000/produtos/atualizar.php'
+      : 'http://localhost:8000/produtos/criar.php';
 
     await fetch(url, {
       method: metodo,
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: editando?.id,
         nome,
@@ -34,16 +34,16 @@ export default function Produtos() {
       }),
     });
 
-    setNome("");
-    setPreco("");
+    setNome('');
+    setPreco('');
     setEditando(null);
     carregarProdutos();
   };
 
   const excluirProduto = async (id: number) => {
-    await fetch("http://localhost:8000/produtos/deletar.php", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+    await fetch('http://localhost:8000/produtos/deletar.php', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
     carregarProdutos();
@@ -75,7 +75,7 @@ export default function Produtos() {
         onChange={(e) => setPreco(e.target.value)}
       />
       <button onClick={salvarProduto}>
-        {editando ? "Atualizar" : "Cadastrar"}
+        {editando ? 'Atualizar' : 'Cadastrar'}
       </button>
 
       <hr />

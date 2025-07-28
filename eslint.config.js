@@ -1,5 +1,5 @@
-import js from '@eslint/js'
-import tseslint from 'typescript-eslint'
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
 
 export default [
   js.configs.recommended,
@@ -14,12 +14,12 @@ export default [
         process: true,
         console: true,
         require: true,
-        module: true
-      }
+        module: true,
+      },
     },
     rules: {
       semi: ['error', 'always'],
-      quotes: ['error', 'single']
-    }
-  }
-]
+      quotes: ['error', 'single'],
+    },
+  },
+];

@@ -1,8 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import PDVMain from '../components/PDV/PDVMain';
-import { Auth } from "../pages/Auth";
+import { Auth } from '../pages/Auth';
 import PDVMain from '../components/PDV/PDVMain';
-import { Dashboard } from "../pages/Dashboard";
+import { Dashboard } from '../pages/Dashboard';
 import PDVMain from '../components/PDV/PDVMain';
 
 export function AppRoutes() {

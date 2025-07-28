@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState } from 'react';
 
 export default function LoginForm() {
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
 
   const handleLogin = () => {
-    console.log("Login:", email, senha);
+    console.log('Login:', email, senha);
   };
 
   return (
