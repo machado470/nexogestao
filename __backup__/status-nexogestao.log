@@ -1,0 +1,472 @@
+📋 Verificação do projeto NexoGestão - Sun Jul 27 12:47:26 -03 2025
+
+📂 Estrutura de arquivos (nível 2):
+.
+├── README.md
+├── backend
+│   ├── composer.json
+│   ├── db.php
+│   ├── hello.php
+│   ├── index.php
+│   └── produtos
+├── components
+│   ├── LoginForm.tsx
+│   └── RegisterForm.tsx
+├── config
+│   └── db.js
+├── controllers
+│   ├── auth.controller.js
+│   ├── authController.js
+│   ├── clienteController.js
+│   ├── produtoController.js
+│   ├── sangriaController.js
+│   └── vendasController.js
+├── eslint.config.cjs
+├── estrutura.txt
+├── index.js
+├── middlewares
+│   └── authMiddleware.js
+├── models
+│   ├── cliente.js
+│   ├── produto.js
+│   └── venda.js
+├── node_modules
+│   ├── @alloc
+│   ├── @ampproject
+│   ├── @babel
+│   ├── @esbuild
+│   ├── @eslint
+│   ├── @eslint-community
+│   ├── @humanfs
+│   ├── @humanwhocodes
+│   ├── @isaacs
+│   ├── @jridgewell
+│   ├── @nodelib
+│   ├── @pkgjs
+│   ├── @rolldown
+│   ├── @rollup
+│   ├── @supabase
+│   ├── @types
+│   ├── @typescript-eslint
+│   ├── @vitejs
+│   ├── accepts
+│   ├── acorn
+│   ├── acorn-jsx
+│   ├── ajv
+│   ├── ansi-regex
+│   ├── any-promise
+│   ├── anymatch
+│   ├── arg
+│   ├── argparse
+│   ├── array-buffer-byte-length
+│   ├── array-includes
+│   ├── array.prototype.findlast
+│   ├── array.prototype.flat
+│   ├── array.prototype.flatmap
+│   ├── array.prototype.tosorted
+│   ├── arraybuffer.prototype.slice
+│   ├── async-function
+│   ├── autoprefixer
+│   ├── available-typed-arrays
+│   ├── balanced-match
+│   ├── bcryptjs
+│   ├── binary-extensions
+│   ├── body-parser
+│   ├── brace-expansion
+│   ├── braces
+│   ├── browserslist
+│   ├── buffer-equal-constant-time
+│   ├── bytes
+│   ├── call-bind
+│   ├── call-bind-apply-helpers
+│   ├── call-bound
+│   ├── callsites
+│   ├── camelcase-css
+│   ├── caniuse-lite
+│   ├── chokidar
+│   ├── commander
+│   ├── concat-map
+│   ├── content-disposition
+│   ├── content-type
+│   ├── convert-source-map
+│   ├── cookie
+│   ├── cookie-signature
+│   ├── cross-spawn
+│   ├── cssesc
+│   ├── csstype
+│   ├── data-view-buffer
+│   ├── data-view-byte-length
+│   ├── data-view-byte-offset
+│   ├── debug
+│   ├── deep-is
+│   ├── define-data-property
+│   ├── define-properties
+│   ├── depd
+│   ├── didyoumean
+│   ├── dlv
+│   ├── doctrine
+│   ├── dotenv
+│   ├── dunder-proto
+│   ├── eastasianwidth
+│   ├── ecdsa-sig-formatter
+│   ├── ee-first
+│   ├── electron-to-chromium
+│   ├── emoji-regex
+│   ├── encodeurl
+│   ├── es-abstract
+│   ├── es-define-property
+│   ├── es-errors
+│   ├── es-iterator-helpers
+│   ├── es-object-atoms
+│   ├── es-set-tostringtag
+│   ├── es-shim-unscopables
+│   ├── es-to-primitive
+│   ├── esbuild
+│   ├── escalade
+│   ├── escape-html
+│   ├── eslint
+│   ├── eslint-plugin-react
+│   ├── eslint-plugin-react-hooks
+│   ├── eslint-plugin-react-refresh
+│   ├── eslint-scope
+│   ├── eslint-visitor-keys
+│   ├── espree
+│   ├── esquery
+│   ├── esrecurse
+│   ├── estraverse
+│   ├── esutils
+│   ├── etag
+│   ├── express
+│   ├── fast-deep-equal
+│   ├── fast-glob
+│   ├── fast-json-stable-stringify
+│   ├── fast-levenshtein
+│   ├── fastq
+│   ├── file-entry-cache
+│   ├── fill-range
+│   ├── finalhandler
+│   ├── find-up
+│   ├── flat-cache
+│   ├── flatted
+│   ├── for-each
+│   ├── foreground-child
+│   ├── forwarded
+│   ├── fraction.js
+│   ├── fresh
+│   ├── function-bind
+│   ├── function.prototype.name
+│   ├── functions-have-names
+│   ├── gensync
+│   ├── get-intrinsic
+│   ├── get-proto
+│   ├── get-symbol-description
+│   ├── get-tsconfig
+│   ├── glob
+│   ├── glob-parent
+│   ├── globals
+│   ├── globalthis
+│   ├── gopd
+│   ├── graphemer
+│   ├── has-bigints
+│   ├── has-property-descriptors
+│   ├── has-proto
+│   ├── has-symbols
+│   ├── has-tostringtag
+│   ├── hasown
+│   ├── http-errors
+│   ├── husky
+│   ├── iconv-lite
+│   ├── ignore
+│   ├── import-fresh
+│   ├── imurmurhash
+│   ├── inherits
+│   ├── internal-slot
+│   ├── ipaddr.js
+│   ├── is-array-buffer
+│   ├── is-async-function
+│   ├── is-bigint
+│   ├── is-binary-path
+│   ├── is-boolean-object
+│   ├── is-callable
+│   ├── is-core-module
+│   ├── is-data-view
+│   ├── is-date-object
+│   ├── is-extglob
+│   ├── is-finalizationregistry
+│   ├── is-fullwidth-code-point
+│   ├── is-generator-function
+│   ├── is-glob
+│   ├── is-map
+│   ├── is-negative-zero
+│   ├── is-number
+│   ├── is-number-object
+│   ├── is-promise
+│   ├── is-regex
+│   ├── is-set
+│   ├── is-shared-array-buffer
+│   ├── is-string
+│   ├── is-symbol
+│   ├── is-typed-array
+│   ├── is-weakmap
+│   ├── is-weakref
+│   ├── is-weakset
+│   ├── isarray
+│   ├── isexe
+│   ├── isows
+│   ├── iterator.prototype
+│   ├── jackspeak
+│   ├── jiti
+│   ├── js-tokens
+│   ├── js-yaml
+│   ├── jsesc
+│   ├── json-buffer
+│   ├── json-schema-traverse
+│   ├── json-stable-stringify-without-jsonify
+│   ├── json5
+│   ├── jsonwebtoken
+│   ├── jsx-ast-utils
+│   ├── jwa
+│   ├── jws
+│   ├── keyv
+│   ├── levn
+│   ├── lilconfig
+│   ├── lines-and-columns
+│   ├── locate-path
+│   ├── lodash.includes
+│   ├── lodash.isboolean
+│   ├── lodash.isinteger
+│   ├── lodash.isnumber
+│   ├── lodash.isplainobject
+│   ├── lodash.isstring
+│   ├── lodash.merge
+│   ├── lodash.once
+│   ├── loose-envify
+│   ├── lru-cache
+│   ├── lucide-react
+│   ├── math-intrinsics
+│   ├── media-typer
+│   ├── merge-descriptors
+│   ├── merge2
+│   ├── micromatch
+│   ├── mime-db
+│   ├── mime-types
+│   ├── minimatch
+│   ├── minipass
+│   ├── ms
+│   ├── mz
+│   ├── nanoid
+│   ├── natural-compare
+│   ├── negotiator
+│   ├── node-releases
+│   ├── normalize-path
+│   ├── normalize-range
+│   ├── object-assign
+│   ├── object-hash
+│   ├── object-inspect
+│   ├── object-keys
+│   ├── object.assign
+│   ├── object.entries
+│   ├── object.fromentries
+│   ├── object.values
+│   ├── on-finished
+│   ├── once
+│   ├── optionator
+│   ├── own-keys
+│   ├── p-limit
+│   ├── p-locate
+│   ├── package-json-from-dist
+│   ├── parent-module
+│   ├── parseurl
+│   ├── path-exists
+│   ├── path-key
+│   ├── path-parse
+│   ├── path-scurry
+│   ├── path-to-regexp
+│   ├── picocolors
+│   ├── picomatch
+│   ├── pify
+│   ├── pirates
+│   ├── possible-typed-array-names
+│   ├── postcss
+│   ├── postcss-import
+│   ├── postcss-js
+│   ├── postcss-load-config
+│   ├── postcss-nested
+│   ├── postcss-selector-parser
+│   ├── postcss-value-parser
+│   ├── prelude-ls
+│   ├── prettier
+│   ├── prop-types
+│   ├── proxy-addr
+│   ├── punycode
+│   ├── qs
+│   ├── queue-microtask
+│   ├── range-parser
+│   ├── raw-body
+│   ├── react
+│   ├── react-dom
+│   ├── react-is
+│   ├── react-refresh
+│   ├── react-router
+│   ├── react-router-dom
+│   ├── read-cache
+│   ├── readdirp
+│   ├── reflect.getprototypeof
+│   ├── regexp.prototype.flags
+│   ├── resolve
+│   ├── resolve-from
+│   ├── resolve-pkg-maps
+│   ├── reusify
+│   ├── rollup
+│   ├── router
+│   ├── run-parallel
+│   ├── safe-array-concat
+│   ├── safe-buffer
+│   ├── safe-push-apply
+│   ├── safe-regex-test
+│   ├── safer-buffer
+│   ├── scheduler
+│   ├── semver
+│   ├── send
+│   ├── serve-static
+│   ├── set-cookie-parser
+│   ├── set-function-length
+│   ├── set-function-name
+│   ├── set-proto
+│   ├── setprototypeof
+│   ├── shebang-command
+│   ├── shebang-regex
+│   ├── side-channel
+│   ├── side-channel-list
+│   ├── side-channel-map
+│   ├── side-channel-weakmap
+│   ├── signal-exit
+│   ├── source-map-js
+│   ├── statuses
+│   ├── stop-iteration-iterator
+│   ├── string-width
+│   ├── string-width-cjs
+│   ├── string.prototype.matchall
+│   ├── string.prototype.repeat
+│   ├── string.prototype.trim
+│   ├── string.prototype.trimend
+│   ├── string.prototype.trimstart
+│   ├── strip-ansi
+│   ├── strip-ansi-cjs
+│   ├── strip-json-comments
+│   ├── sucrase
+│   ├── supports-preserve-symlinks-flag
+│   ├── tailwindcss
+│   ├── thenify
+│   ├── thenify-all
+│   ├── tinyglobby
+│   ├── to-regex-range
+│   ├── toidentifier
+│   ├── tr46
+│   ├── ts-api-utils
+│   ├── ts-interface-checker
+│   ├── tsx
+│   ├── type-check
+│   ├── type-is
+│   ├── typed-array-buffer
+│   ├── typed-array-byte-length
+│   ├── typed-array-byte-offset
+│   ├── typed-array-length
+│   ├── typescript
+│   ├── typescript-eslint
+│   ├── unbox-primitive
+│   ├── undici-types
+│   ├── unpipe
+│   ├── update-browserslist-db
+│   ├── uri-js
+│   ├── util-deprecate
+│   ├── vary
+│   ├── vite
+│   ├── webidl-conversions
+│   ├── whatwg-url
+│   ├── which
+│   ├── which-boxed-primitive
+│   ├── which-builtin-type
+│   ├── which-collection
+│   ├── which-typed-array
+│   ├── word-wrap
+│   ├── wrap-ansi
+│   ├── wrap-ansi-cjs
+│   ├── wrappy
+│   ├── ws
+│   ├── yallist
+│   ├── yaml
+│   └── yocto-queue
+├── package-lock.json
+├── package.json
+├── pages
+│   └── AuthPage.tsx
+├── pdv_sample.js
+├── public
+│   └── index.html
+├── routes
+│   ├── auth
+│   ├── auth.routes.js
+│   ├── clientes.routes.js
+│   ├── index.js
+│   ├── produtos.routes.js
+│   ├── sangria.routes.js
+│   └── vendas.routes.js
+├── scripts
+│   ├── demo_pdv.cjs
+│   └── verificar.sh
+├── src
+│   ├── App.jsx
+│   ├── App.tsx
+│   ├── components
+│   ├── config
+│   ├── contexts
+│   ├── controllers
+│   ├── data
+│   ├── features
+│   ├── hooks
+│   ├── index.css
+│   ├── index.js
+│   ├── lib
+│   ├── main.tsx
+│   ├── models
+│   ├── pages
+│   ├── routes
+│   ├── saas
+│   ├── services
+│   ├── tenants
+│   ├── tests
+│   ├── types
+│   └── ui
+├── status-nexogestao.log
+├── supabase
+│   └── config.toml
+├── supabaseClient.js
+├── tailwind.config.js
+├── teste.js
+├── tests
+│   └── exemplo.test.js
+├── tsconfig.json
+├── verificacao-nexogestao.log
+├── verificar.js
+└── vite.config.ts
+
+400 directories, 49 files
+
+🔎 Arquivos esperados:
+✅ package.json encontrado
+✅ tsconfig.json encontrado
+✅ vite.config.ts encontrado
+✅ public/index.html encontrado
+✅ src/pages/Produtos.tsx encontrado
+✅ backend/index.php encontrado
+✅ backend/db.php encontrado
+✅ backend/produtos/listar.php encontrado
+✅ .env encontrado
+
+📁 Pastas esperadas:
+✅ src encontrada
+✅ src/pages encontrada
+✅ backend encontrada
+✅ backend/produtos encontrada
+✅ public encontrada
