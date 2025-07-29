@@ -17,8 +17,7 @@ async function login(req, res) {
   const usuario = usuarios[0];
   const senhaCorreta = await bcrypt.compare(senha, usuario.senha_hash);
 
-  if (!senhaCorreta)
-    return res.status(401).json({ error: 'Senha inválida' });
+  if (!senhaCorreta) return res.status(401).json({ error: 'Senha inválida' });
 
   const token = jwt.sign(
     {
@@ -27,7 +26,7 @@ async function login(req, res) {
       role: usuario.role,
     },
     process.env.JWT_SECRET,
-    { expiresIn: '12h' }
+    { expiresIn: '12h' },
   );
 
   res.json({ token });
