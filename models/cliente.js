@@ -1,1 +1,7 @@
-module.exports = { nome: '', email: '', telefone: '', endereco: '', created_at: new Date() };
+module.exports = {
+  nome: '',
+  email: '',
+  telefone: '',
+  endereco: '',
+  created_at: new Date(),
+};

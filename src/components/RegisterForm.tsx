@@ -49,8 +49,13 @@ const RegisterForm: React.FC = () => {
         onChange={(e) => setConfirm(e.target.value)}
         required
       />
-      {message && <p className="text-sm text-center text-blue-600">{message}</p>}
-      <button type="submit" className="w-full bg-blue-500 text-white py-2 rounded">
+      {message && (
+        <p className="text-sm text-center text-blue-600">{message}</p>
+      )}
+      <button
+        type="submit"
+        className="w-full bg-blue-500 text-white py-2 rounded"
+      >
         Criar Conta
       </button>
     </form>

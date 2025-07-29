@@ -9,7 +9,7 @@ export function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path='/pdv' element={<PDVMain />} />
+        <Route path="/pdv" element={<PDVMain />} />
         <Route path="/" element={<Auth />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="*" element={<Navigate to="/" />} />

@@ -11,10 +11,33 @@ export default function RegisterForm() {
 
   return (
     <div>
-      <input type="text" placeholder="Nome" value={nome} onChange={e => setNome(e.target.value)} className="block mb-4 p-2 border w-full" />
-      <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="block mb-4 p-2 border w-full" />
-      <input type="password" placeholder="Senha" value={senha} onChange={e => setSenha(e.target.value)} className="block mb-4 p-2 border w-full" />
-      <button onClick={handleRegister} className="px-4 py-2 bg-green-600 text-white rounded">Criar Conta</button>
+      <input
+        type="text"
+        placeholder="Nome"
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+        className="block mb-4 p-2 border w-full"
+      />
+      <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="block mb-4 p-2 border w-full"
+      />
+      <input
+        type="password"
+        placeholder="Senha"
+        value={senha}
+        onChange={(e) => setSenha(e.target.value)}
+        className="block mb-4 p-2 border w-full"
+      />
+      <button
+        onClick={handleRegister}
+        className="px-4 py-2 bg-green-600 text-white rounded"
+      >
+        Criar Conta
+      </button>
     </div>
   );
 }

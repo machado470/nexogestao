@@ -11,7 +11,10 @@ const LoginForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
     if (error) {
       setError(error.message);
     } else {
@@ -38,7 +41,10 @@ const LoginForm: React.FC = () => {
         required
       />
       {error && <p className="text-red-500 text-sm">{error}</p>}
-      <button type="submit" className="w-full bg-blue-500 text-white py-2 rounded">
+      <button
+        type="submit"
+        className="w-full bg-blue-500 text-white py-2 rounded"
+      >
         Entrar
       </button>
     </form>
