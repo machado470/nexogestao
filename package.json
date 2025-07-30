@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "prepare": "husky install",
     "check": "bash scripts/verificar.sh",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test-supabase": "tsx src/testSupabase.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.1",
@@ -41,6 +42,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^7.0.6",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "ts-node": "latest",
+    "@types/node": "latest"
   }
 }

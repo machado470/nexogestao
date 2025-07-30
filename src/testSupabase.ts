@@ -1,4 +1,4 @@
-import { supabase } from './config/supabase';
+import { supabase } from './config/supabase.js';
 
 async function testarConexao() {
   const { data, error } = await supabase.from('test_table').select('*');
