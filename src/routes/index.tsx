@@ -1,9 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import PDVMain from '../components/PDV/PDVMain';
-import { Auth } from '../pages/Auth';
-import PDVMain from '../components/PDV/PDVMain';
-import { Dashboard } from '../pages/Dashboard';
-import PDVMain from '../components/PDV/PDVMain';
+import Auth from '../pages/Auth';
+import Dashboard from '../pages/Dashboard';
 
 export function AppRoutes() {
   return (
@@ -17,3 +15,5 @@ export function AppRoutes() {
     </BrowserRouter>
   );
 }
+
+export default AppRoutes;
