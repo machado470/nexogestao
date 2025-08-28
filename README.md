@@ -1,103 +1,15 @@
-# NexoGestão
+# NexoGestão – Projeto base
 
-**NexoGestão** é um sistema completo de gestão empresarial (ERP + PDV), construído para funcionar como SaaS (Software como Serviço), permitindo múltiplas empresas e usuários em um único sistema.
+Este repositório nasce com as melhores práticas descritas na lista de melhorias. A estrutura está modularizada e preparada para escalar, com validações robustas e ferramentas de qualidade de código. Consulte `docs/` para diagramas e mais detalhes.
 
----
+## Scripts disponíveis
 
-## �� Funcionalidades
+- `dev`: inicia o projeto em modo de desenvolvimento.
+- `build`: compila o código TypeScript.
+- `lint`: roda ESLint para verificar estilo e problemas.
+- `test`: executa testes automatizados (placeholder).
+- `typecheck`: verifica tipos TypeScript sem gerar código.
 
-- Cadastro de produtos, clientes e fornecedores
-- Controle de vendas (PDV)
-- Relatórios financeiros e fiscais
-- Gestão de múltiplas empresas (multi-tenancy)
-- Integração com Supabase
-- Layout moderno com Tailwind e Vite
-- Estrutura organizada por features e módulos
+## Convenção de commits
 
----
-
-## 🧱 Estrutura do Projeto
-
-\`\`\`
-src/
-├── features/
-│ ├── auth/
-│ ├── pdv/
-│ ├── produtos/
-│ ├── clientes/
-│ ├── fornecedores/
-│ ├── financeiro/
-│ ├── fiscal/
-│ ├── relatorios/
-│ ├── dashboard/
-│ └── layout/
-├── saas/
-├── tenants/
-├── ui/
-├── services/
-├── controllers/
-├── models/
-├── hooks/
-├── types/
-├── contexts/
-├── config/
-├── routes/
-├── lib/
-├── data/
-└── tests/
-\`\`\`
-
----
-
-## 🧪 Tecnologias e Ferramentas
-
-- \`React\` + \`Vite\`
-- \`Supabase\`
-- \`Tailwind CSS\`
-- \`ESLint + Prettier\`
-- \`Husky + lint-staged\`
-- \`TypeScript\`
-- \`Git + GitHub\`
-
----
-
-## ⚙️ Como rodar localmente
-
-\`\`\`bash
-
-# Clonar o repositório
-
-git clone https://github.com/SEU_USUARIO/nexogestao.git
-
-# Acessar a pasta
-
-cd nexogestao
-
-# Instalar dependências
-
-npm install
-
-# Rodar o projeto
-
-npm run dev
-\`\`\`
-
----
-
-## 🧠 Organização do Código
-
-O projeto segue uma arquitetura baseada em **features e domínios**, separando responsabilidades e facilitando a manutenção, expansão e reaproveitamento de código em módulos SaaS.
-
----
-
-## 🛡️ Licença
-
-Este projeto está sob a licença [MIT](LICENSE).
-
----
-
-## 📞 Contato
-
-Desenvolvido por William Machado  
-LinkedIn: [linkedin.com/in/williammachado](https://linkedin.com/in/williammachado)  
-GitHub: [github.com/machado4702](https://github.com/machado4702)
+Este projeto segue o padrão [Conventional Commits](https://www.conventionalcommits.org/). Cada mensagem deve iniciar com um tipo (`feat`, `fix`, `chore`, etc.) e um escopo opcional, seguido de uma descrição concisa. Isso cria um histórico claro e facilita a automação de changelogs e versionamento semântico【446050508993625†L50-L84】.
