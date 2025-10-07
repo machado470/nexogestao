@@ -1,19 +1,30 @@
-# NexoGestão — Escopo Vazio
-Estrutura pronta, com arquivos vazios (apenas TODOs) para você preencher.
+# NexoGestão (monorepo)
 
-## Rodar localmente (estático)
-1. Instale o http-server (ou use qualquer servidor estático):
-   ```bash
-   npm i -g http-server
-   ```
-2. Na raiz do projeto:
-   ```bash
-   http-server -p 5173 .
-   ```
-3. Abra `http://localhost:5173/public/`
+Monorepo com:
+- **apps/api**: Backend em NestJS + Prisma (PostgreSQL), módulos: auth, usuários, clientes, produtos, faturas, pagamentos, pedidos, arquivos, notificações, saúde, métricas, auditoria, webhooks.
+- **apps/web**: Frontend em React + Vite + TypeScript.
 
-## Estrutura
-- `public/` — index.html + assets
-- `src/` — utils, services, ui, themes
-- `tests/` — placeholder
-- `package.json` — script de serve
+## Requisitos
+- Node 20+ e pnpm
+- Docker (para o banco Postgres)
+- (Opcional) Make
+
+## Primeiros passos
+```bash
+pnpm i
+pnpm -r build
+
+# Subir Postgres e API
+docker compose -f apps/api/docker-compose.yml up -d
+pnpm --filter @nexogestao/api prisma migrate dev
+pnpm --filter @nexogestao/api prisma db seed
+pnpm --filter @nexogestao/api dev
+
+# Frontend
+pnpm --filter @nexogestao/web dev
+```
+
+## Workspaces
+- `pnpm -r` roda em todos os pacotes.
+- `pnpm --filter @nexogestao/api ...` limita ao backend.
+- `pnpm --filter @nexogestao/web ...` limita ao frontend.
