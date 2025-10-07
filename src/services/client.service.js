@@ -1,8 +1,8 @@
 // client.service.js - CRUD de clientes consumindo API
 const API_URL = 'http://localhost:3001/api/clients';
 
-export const clientService = {
-  async list() {
+export const Clients = {
+  async all() {
     const res = await fetch(API_URL);
     return await res.json();
   },
@@ -35,10 +35,10 @@ export const clientService = {
   },
   async search(q) {
     q = (q || '').trim().toLowerCase();
-    const list = await this.list();
+    const list = await this.all();
     if (!q) return list;
     return list.filter(c => {
-      return [c.name, c.doc, c.email, c.phone]
+      return [c.nome || c.name, c.doc || c.cpf || c.cnpj, c.email, c.telefone || c.phone]
         .filter(Boolean)
         .some(v => String(v).toLowerCase().includes(q));
     });
