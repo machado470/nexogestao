@@ -301,79 +301,29 @@ export class AuthService {
   }
 
   async validateGoogleUser(googleUser: any) {
-    let user = await this.prisma.user.findUnique({
-      where: { email: googleUser.email },
+    const email = (googleUser?.email ?? '').trim().toLowerCase()
+
+    if (!email) {
+      throw new UnauthorizedException('Usuário Google inválido')
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
       include: { person: true },
     })
 
     if (!user) {
-      let org = await this.prisma.organization.findFirst({
-        where: { slug: 'default' },
-      })
-
-      if (!org) {
-        org = await this.prisma.organization.create({
-          data: {
-            name: 'Minha Organização',
-            slug: `org-${Date.now()}`,
-            requiresOnboarding: true,
-          },
-        })
-      }
-
-      user = await this.prisma.user.create({
-        data: {
-          email: googleUser.email,
-          role: 'ADMIN',
-          active: true,
-          emailVerifiedAt: new Date(),
-          orgId: org.id,
-          person: {
-            create: {
-              name: `${googleUser.firstName} ${googleUser.lastName}`,
-              email: googleUser.email,
-              role: 'ADMIN',
-              active: true,
-              orgId: org.id,
-            },
-          },
-        },
-        include: { person: true },
-      })
+      throw new UnauthorizedException(
+        'Nenhuma conta encontrada para este e-mail. Solicite acesso ao administrador.',
+      )
     }
 
-    if (!user.person) {
-      const displayName =
-        `${googleUser.firstName ?? ''} ${googleUser.lastName ?? ''}`.trim() ||
-        googleUser.email
-
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          person: {
-            create: {
-              name: displayName,
-              email: googleUser.email,
-              role: 'ADMIN',
-              active: true,
-              orgId: user.orgId,
-            },
-          },
-        },
-        include: { person: true },
-      })
+    if (!user.active) {
+      throw new UnauthorizedException('Conta não ativada')
     }
 
-    if (!user.emailVerifiedAt) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          emailVerifiedAt: new Date(),
-          emailVerifyTokenHash: null,
-          emailVerifyTokenExpiresAt: null,
-        },
-        include: { person: true },
-      })
+    if (!user.person || !user.person.active) {
+      throw new UnauthorizedException('Usuário sem identidade operacional ativa')
     }
 
     return this.createSessionPayload(user)
