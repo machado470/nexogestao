@@ -867,6 +867,15 @@ export class FinanceService {
     paidAt?: string | null
     notes?: string | null
   }) {
+    // Reject tenant-forged identifiers before reserving an idempotency key. The
+    // transaction repeats this lookup because it remains the authority for the
+    // payment mutation and its tenant boundary.
+    const visibleCharge = await this.prisma.charge.findFirst({
+      where: { id: input.chargeId, orgId: input.orgId },
+      select: { id: true },
+    })
+    if (!visibleCharge) throw new NotFoundException('Charge não encontrada')
+
     const paidAt = this.parseManualPaymentDate(input.paidAt)
     const notes = input.notes?.trim() || null
     if (notes && notes.length > 2000) {

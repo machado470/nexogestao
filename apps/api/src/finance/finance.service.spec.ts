@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common'
+import { BadRequestException, NotFoundException } from '@nestjs/common'
 import { FinanceService } from './finance.service'
 
 describe('FinanceService hardening', () => {
@@ -8,7 +8,7 @@ describe('FinanceService hardening', () => {
       serviceOrder: { findFirst: jest.fn() },
       charge: {
         create: jest.fn(),
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: 'ch-1' }),
       },
       payment: { findFirst: jest.fn() },
       $transaction: jest.fn(),
@@ -89,6 +89,28 @@ describe('FinanceService hardening', () => {
         method: 'PIX',
       }),
     ).rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it('não reserva idempotência quando a cobrança não pertence ao tenant', async () => {
+    const { service, prisma, idempotency } = buildService()
+    prisma.charge.findFirst.mockResolvedValue(null)
+
+    await expect(
+      service.payCharge({
+        orgId: 'org-forged',
+        chargeId: 'ch-1',
+        amountCents: 1000,
+        method: 'PIX',
+        idempotencyKey: 'cross-tenant-key',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException)
+
+    expect(prisma.charge.findFirst).toHaveBeenCalledWith({
+      where: { id: 'ch-1', orgId: 'org-forged' },
+      select: { id: true },
+    })
+    expect(idempotency.begin).not.toHaveBeenCalled()
+    expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
   it('bloqueia pagamento quando cobrança já está paga', async () => {
