@@ -96,3 +96,16 @@ ALLOW_KILL="$(determine_allow_kill)"
 kill_nexo_pids_on_port_if_opt_in "$LEGACY_PORT_TO_TEST"
 assert_dead "$LEGACY_PID" "$LEGACY_PORT_TO_TEST"
 echo "[OK] NEXO_KILL_STALE_DEV_PROCESSES=1 permanece compatível"
+
+DIAGNOSTIC_LOG="$(mktemp -t nexogestao-dev-full-diagnostic-test.XXXX.log)"
+LOGS+=("$DIAGNOSTIC_LOG")
+printf '%s\n' 'primeira exceção real' 'stack trace de teste' > "$DIAGNOSTIC_LOG"
+if diagnostic_output="$(fail_with_log "API não abriu porta 3000." "$DIAGNOSTIC_LOG" 2>&1)"; then
+  echo "[ERROR] fail_with_log deveria encerrar com falha" >&2
+  exit 1
+fi
+if [[ "$diagnostic_output" != *"primeira exceção real"* ]] || [[ "$diagnostic_output" != *"stack trace de teste"* ]]; then
+  echo "[ERROR] fail_with_log não exibiu o conteúdo completo do log" >&2
+  exit 1
+fi
+echo "[OK] falhas de bootstrap exibem o log completo"

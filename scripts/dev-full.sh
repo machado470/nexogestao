@@ -32,6 +32,20 @@ WEB_PID=""
 log() { echo "$1"; }
 fail() { echo "[ERROR] $1"; exit 1; }
 
+fail_with_log() {
+  local message="$1"
+  local log_file="$2"
+
+  echo "[ERROR] $message"
+  echo "[ERROR] Conteúdo completo de $log_file:"
+  if [ -f "$log_file" ]; then
+    cat "$log_file"
+  else
+    echo "[ERROR] Arquivo de log não encontrado."
+  fi
+  exit 1
+}
+
 kill_hint() {
   local port="$1"
   echo "Diagnóstico: pnpm dev:ports"
@@ -503,10 +517,10 @@ main() {
   API_PID=$!
 
   # 7) esperar processo vivo + porta + /health
-  kill -0 "$API_PID" >/dev/null 2>&1 || fail "API falhou no boot. Veja logs: $API_LOG_FILE"
-  wait_tcp 127.0.0.1 "$API_PORT" 120 || fail "API não abriu porta $API_PORT. Veja logs: $API_LOG_FILE"
+  kill -0 "$API_PID" >/dev/null 2>&1 || fail_with_log "API falhou no boot." "$API_LOG_FILE"
+  wait_tcp 127.0.0.1 "$API_PORT" 120 || fail_with_log "API não abriu porta $API_PORT." "$API_LOG_FILE"
   log "[READY] API porta OK"
-  wait_http "http://127.0.0.1:${API_PORT}/v1/health" 120 || fail "API falhou no /v1/health. Veja logs: $API_LOG_FILE"
+  wait_http "http://127.0.0.1:${API_PORT}/v1/health" 120 || fail_with_log "API falhou no /v1/health." "$API_LOG_FILE"
   log "[READY] API /v1/health OK"
 
   # 8) subir WEB
@@ -515,8 +529,8 @@ main() {
   WEB_PID=$!
 
   # 9) validar root web
-  kill -0 "$WEB_PID" >/dev/null 2>&1 || fail "WEB falhou no boot. Veja logs: $WEB_LOG_FILE"
-  wait_http "http://127.0.0.1:${WEB_PORT}/" 120 || fail "WEB não respondeu /. Veja logs: $WEB_LOG_FILE"
+  kill -0 "$WEB_PID" >/dev/null 2>&1 || fail_with_log "WEB falhou no boot." "$WEB_LOG_FILE"
+  wait_http "http://127.0.0.1:${WEB_PORT}/" 120 || fail_with_log "WEB não respondeu /." "$WEB_LOG_FILE"
   log "[READY] WEB OK"
 
   # Optional integrations (non-blocking)
