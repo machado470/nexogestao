@@ -70,10 +70,29 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
       ],
     })
 
+    await prisma.user.createMany({
+      data: [
+        {
+          id: primaryUserId,
+          orgId: primaryOrgId,
+          email: `workflow-admin-${primaryUserId}@test.invalid`,
+          role: 'ADMIN',
+          active: true,
+        },
+        {
+          id: secondaryUserId,
+          orgId: secondaryOrgId,
+          email: `workflow-admin-${secondaryUserId}@test.invalid`,
+          role: 'ADMIN',
+          active: true,
+        },
+      ],
+    })
+
     await prisma.person.createMany({
       data: [
-        { id: primaryPersonId, orgId: primaryOrgId, name: 'Operator Main', role: 'TECH' },
-        { id: secondaryPersonId, orgId: secondaryOrgId, name: 'Operator Isolated', role: 'TECH' },
+        { id: primaryPersonId, orgId: primaryOrgId, userId: primaryUserId, name: 'Operator Main', role: 'TECH' },
+        { id: secondaryPersonId, orgId: secondaryOrgId, userId: secondaryUserId, name: 'Operator Isolated', role: 'TECH' },
       ],
     })
   })
@@ -83,6 +102,10 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
       if (prisma) {
         const orgIds = [primaryOrgId, secondaryOrgId]
 
+        await prisma.timelineEvent.deleteMany({ where: { orgId: { in: orgIds } } })
+        await prisma.usageMetric.deleteMany({ where: { orgId: { in: orgIds } } })
+        await prisma.auditEvent.deleteMany({ where: { orgId: { in: orgIds } } })
+        await prisma.idempotencyRecord.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.payment.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.whatsAppMessage.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.whatsAppActionExecution.deleteMany({ where: { orgId: { in: orgIds } } })
@@ -93,14 +116,11 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
         await prisma.serviceOrder.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.appointment.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.customer.deleteMany({ where: { orgId: { in: orgIds } } })
-        await prisma.timelineEvent.deleteMany({ where: { orgId: { in: orgIds } } })
-        await prisma.auditEvent.deleteMany({ where: { orgId: { in: orgIds } } })
-        await prisma.usageMetric.deleteMany({ where: { orgId: { in: orgIds } } })
-        await prisma.idempotencyRecord.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.organizationExecutionConfig.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.tenantFeatureOverride.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.subscription.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.person.deleteMany({ where: { orgId: { in: orgIds } } })
+        await prisma.user.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.organization.deleteMany({ where: { id: { in: orgIds } } })
       }
     } finally {
@@ -314,25 +334,140 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
       expect(chargeItems.some((item: any) => item.id === chargeId)).toBe(false)
     })
 
-    // 8) register payment
+    const paymentEventsFor = (orgId: string, targetChargeId: string) =>
+      prisma.timelineEvent.findMany({
+        where: { orgId, chargeId: targetChargeId, action: 'PAYMENT_RECEIVED' },
+        orderBy: { createdAt: 'asc' },
+      })
+
+    // 8) a forged tenant cannot reserve idempotency or mutate the charge
+    const crossTenantKey = `cross-tenant-pay-${chargeId}`
+    await request(app.getHttpServer())
+      .post(`/finance/charges/${chargeId}/pay`)
+      .set(otherAuth)
+      .set('Idempotency-Key', crossTenantKey)
+      .send({ method: 'PIX', amountCents: 15000 })
+      .expect(404)
+
+    expect(await prisma.payment.count({ where: { chargeId } })).toBe(0)
+    expect(await paymentEventsFor(secondaryOrgId, chargeId)).toHaveLength(0)
+    expect(await prisma.idempotencyRecord.count({
+      where: { orgId: secondaryOrgId, scope: 'finance.pay_charge', key: crossTenantKey },
+    })).toBe(0)
+
+    // 9) partial and excessive values are rejected without financial mutation
+    for (const [label, amountCents] of [['partial', 14999], ['excessive', 15001]] as const) {
+      const rejected = await request(app.getHttpServer())
+        .post(`/finance/charges/${chargeId}/pay`)
+        .set(mainAuth)
+        .set('Idempotency-Key', `${label}-pay-${chargeId}`)
+        .send({ method: 'PIX', amountCents })
+        .expect(400)
+
+      expect(rejected.body.code).toBe('PAYMENT_AMOUNT_MISMATCH')
+      const unchangedCharge = await prisma.charge.findFirst({
+        where: { id: chargeId, orgId: primaryOrgId },
+      })
+      expect(unchangedCharge?.status).toBe('PENDING')
+      expect(unchangedCharge?.paidAt).toBeNull()
+      expect(await prisma.payment.count({ where: { chargeId, orgId: primaryOrgId } })).toBe(0)
+      expect(await paymentEventsFor(primaryOrgId, chargeId)).toHaveLength(0)
+      const rejectedRevenue = await prisma.payment.aggregate({
+        where: { chargeId, orgId: primaryOrgId },
+        _sum: { amountCents: true },
+      })
+      expect(rejectedRevenue._sum.amountCents).toBeNull()
+    }
+
+    // 10) exact payment and same-key retry produce one authoritative settlement
+    const exactPaymentKey = `exact-pay-${chargeId}`
+    const paymentPayload = { method: 'PIX', amountCents: 15000, orgId: secondaryOrgId }
     const payResponse = await request(app.getHttpServer())
       .post(`/finance/charges/${chargeId}/pay`)
       .set(mainAuth)
-      .send({ method: 'PIX', amountCents: 15000, orgId: secondaryOrgId })
+      .set('Idempotency-Key', exactPaymentKey)
+      .send(paymentPayload)
       .expect(201)
 
     expect(payResponse.body.ok).toBe(true)
-    expect(payResponse.body.data.paymentId).toBeTruthy()
+    const paymentId = payResponse.body.data.paymentId as string
+    expect(paymentId).toBeTruthy()
 
-    const paymentDb = await prisma.payment.findFirst({ where: { chargeId, orgId: primaryOrgId } })
-    expect(paymentDb).toBeTruthy()
-    expect(paymentDb?.amountCents).toBe(15000)
+    const retryResponse = await request(app.getHttpServer())
+      .post(`/finance/charges/${chargeId}/pay`)
+      .set(mainAuth)
+      .set('Idempotency-Key', exactPaymentKey)
+      .send(paymentPayload)
+      .expect(201)
+    expect(retryResponse.body.data.paymentId).toBe(paymentId)
+
+    const payments = await prisma.payment.findMany({ where: { chargeId, orgId: primaryOrgId } })
+    expect(payments).toHaveLength(1)
+    expect(payments[0]).toEqual(expect.objectContaining({ id: paymentId, amountCents: 15000 }))
 
     const paidChargeDb = await prisma.charge.findFirst({ where: { id: chargeId, orgId: primaryOrgId } })
     expect(paidChargeDb?.status).toBe('PAID')
     expect(paidChargeDb?.paidAt).toBeTruthy()
 
-    // 9) whatsapp notification for receipt
+    const paymentEvents = await paymentEventsFor(primaryOrgId, chargeId)
+    expect(paymentEvents).toHaveLength(1)
+    expect(paymentEvents[0]).toEqual(expect.objectContaining({
+      orgId: primaryOrgId,
+      chargeId,
+      action: 'PAYMENT_RECEIVED',
+    }))
+    expect(paymentEvents[0].metadata).toEqual(expect.objectContaining({
+      chargeId,
+      paymentId,
+      amountCents: 15000,
+    }))
+    expect(await paymentEventsFor(secondaryOrgId, chargeId)).toHaveLength(0)
+    expect(await prisma.timelineEvent.count({
+      where: { orgId: primaryOrgId, chargeId, action: 'CHARGE_PAID' },
+    })).toBe(0)
+
+    // 11) two distinct keys racing for another charge still settle it once
+    const concurrentChargeResponse = await request(app.getHttpServer())
+      .post('/finance/charges')
+      .set(mainAuth)
+      .set('Idempotency-Key', `concurrent-charge-${chargeId}`)
+      .send({ customerId, amountCents: 23000, dueDate, notes: 'Cobrança concorrente' })
+      .expect(201)
+    const concurrentChargeId = concurrentChargeResponse.body.data.id as string
+
+    const concurrentResults = await Promise.allSettled([
+      request(app.getHttpServer())
+        .post(`/finance/charges/${concurrentChargeId}/pay`)
+        .set(mainAuth)
+        .set('Idempotency-Key', `concurrent-a-${concurrentChargeId}`)
+        .send({ method: 'PIX', amountCents: 23000 }),
+      request(app.getHttpServer())
+        .post(`/finance/charges/${concurrentChargeId}/pay`)
+        .set(mainAuth)
+        .set('Idempotency-Key', `concurrent-b-${concurrentChargeId}`)
+        .send({ method: 'PIX', amountCents: 23000 }),
+    ])
+    expect(concurrentResults.every((result) => result.status === 'fulfilled')).toBe(true)
+    const concurrentStatuses = concurrentResults.map((result) =>
+      result.status === 'fulfilled' ? result.value.status : 500,
+    )
+    expect(concurrentStatuses).toContain(201)
+    expect(concurrentStatuses).not.toContain(500)
+
+    const concurrentChargeDb = await prisma.charge.findFirst({
+      where: { id: concurrentChargeId, orgId: primaryOrgId },
+    })
+    expect(concurrentChargeDb?.status).toBe('PAID')
+    expect(concurrentChargeDb?.paidAt).toBeTruthy()
+    expect(await prisma.payment.count({
+      where: { chargeId: concurrentChargeId, orgId: primaryOrgId },
+    })).toBe(1)
+    expect(await paymentEventsFor(primaryOrgId, concurrentChargeId)).toHaveLength(1)
+    expect(await prisma.payment.count({
+      where: { chargeId: concurrentChargeId, orgId: secondaryOrgId },
+    })).toBe(0)
+
+    // 12) whatsapp notification for receipt
     const crossTenantReceipt = await prisma.whatsAppMessage.findFirst({ where: { orgId: secondaryOrgId, entityType: 'CHARGE', entityId: chargeId } })
     expect(crossTenantReceipt).toBeNull()
 
@@ -346,7 +481,7 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
     })
     expect(receiptMessage).toBeTruthy()
 
-    // 10) timeline events emitted for canonical path
+    // 13) timeline events emitted for canonical path
     const timeline = await prisma.timelineEvent.findMany({
       where: { orgId: primaryOrgId },
       orderBy: { createdAt: 'asc' },
@@ -362,10 +497,10 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
       'EXECUTION_STARTED',
       'EXECUTION_DONE',
       'CHARGE_CREATED',
-      'CHARGE_PAID',
+      'PAYMENT_RECEIVED',
     ]))
 
-    // 11) recalculate risk from operational events (job endpoint + persisted state)
+    // 14) recalculate risk from operational events (job endpoint + persisted state)
     await request(app.getHttpServer())
       .post('/admin/operational-state/run-once')
       .set(mainAuth)
