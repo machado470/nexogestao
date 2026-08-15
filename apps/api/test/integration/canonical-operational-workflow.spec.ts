@@ -35,7 +35,10 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
   let app: INestApplication
   let prisma: WorkflowPrisma
 
-  const jwt = new JwtService({ secret: process.env.JWT_SECRET || 'dev-secret' })
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET must be explicitly configured for integration tests')
+  }
+  const jwt = new JwtService({ secret: process.env.JWT_SECRET })
 
   const primaryOrgId = randomUUID()
   const secondaryOrgId = randomUUID()
