@@ -892,7 +892,7 @@ export class FinanceService {
         chargeId: input.chargeId,
         amountCents: input.amountCents,
         method: input.method,
-        paidAt: paidAt.toISOString(),
+        paidAt: input.paidAt ?? null,
         notes,
       },
     })
@@ -924,8 +924,20 @@ export class FinanceService {
           details: { chargeId: input.chargeId, status: charge.status },
         })
       }
-      if (input.amountCents <= 0) {
-        throw new BadRequestException('amountCents deve ser maior que zero')
+      if (!Number.isSafeInteger(input.amountCents) || input.amountCents <= 0) {
+        throw new BadRequestException({
+          code: 'PAYMENT_AMOUNT_INVALID',
+          message: 'O valor do pagamento deve ser um inteiro positivo em centavos.',
+        })
+      }
+      // amountCents is the canonical integer-cent representation in this schema.
+      // Integer equality preserves every cent and performs no floating-point conversion.
+      if (input.amountCents !== charge.amountCents) {
+        throw new BadRequestException({
+          code: 'PAYMENT_AMOUNT_MISMATCH',
+          message: 'O valor do pagamento deve corresponder exatamente ao valor da cobrança.',
+          details: { chargeId: charge.id },
+        })
       }
 
       const mutation = await tx.charge.updateMany({
@@ -975,6 +987,29 @@ export class FinanceService {
         },
       })
 
+      await this.timeline.logInTransaction(
+        {
+          orgId: input.orgId,
+          action: 'PAYMENT_RECEIVED',
+          description: `Pagamento recebido para cobrança ${charge.id}`,
+          customerId: charge.customerId,
+          serviceOrderId: charge.serviceOrderId,
+          chargeId: charge.id,
+          metadata: {
+            actorUserId: input.actorUserId ?? null,
+            customerId: charge.customerId,
+            serviceOrderId: charge.serviceOrderId,
+            chargeId: charge.id,
+            paymentId: payment.id,
+            amountCents: input.amountCents,
+            method: input.method,
+            paidAt: paidAt.toISOString(),
+            notes,
+          },
+        },
+        tx,
+      )
+
           return { charge, payment, idempotent: false }
       },
       )
@@ -1009,45 +1044,6 @@ export class FinanceService {
         message: 'Falha de integração no envio do recibo. Fluxo principal seguirá',
         extra: { error: err?.message ?? String(err) },
       })
-    })
-
-    await this.safeTimelineLog({
-      orgId: input.orgId,
-      action: 'CHARGE_PAID',
-      description: `Pagamento confirmado para cobrança ${charge.id}`,
-      customerId: charge.customerId,
-      serviceOrderId: charge.serviceOrderId,
-      chargeId: charge.id,
-      metadata: {
-        actorUserId: input.actorUserId ?? null,
-        customerId: charge.customerId,
-        serviceOrderId: charge.serviceOrderId,
-        chargeId: charge.id,
-        paymentId: payment.id,
-        amountCents: input.amountCents,
-        method: input.method,
-        paidAt: paidAt.toISOString(),
-        notes,
-      },
-    })
-    await this.safeTimelineLog({
-      orgId: input.orgId,
-      action: 'PAYMENT_RECEIVED',
-      description: `Pagamento recebido para cobrança ${charge.id}`,
-      customerId: charge.customerId,
-      serviceOrderId: charge.serviceOrderId,
-      chargeId: charge.id,
-      metadata: {
-        actorUserId: input.actorUserId ?? null,
-        customerId: charge.customerId,
-        serviceOrderId: charge.serviceOrderId,
-        chargeId: charge.id,
-        paymentId: payment.id,
-        amountCents: input.amountCents,
-        method: input.method,
-        paidAt: paidAt.toISOString(),
-        notes,
-      },
     })
 
     this.logCritical({
