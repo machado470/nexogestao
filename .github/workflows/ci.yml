@@ -5,8 +5,16 @@ on:
   pull_request:
 
 jobs:
-  test:
+  quality-gates:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexogestao?schema=public
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+      JWT_SECRET: ci-only-not-a-production-secret
+      GOOGLE_CLIENT_ID: ci-google-client-id
+      GOOGLE_CLIENT_SECRET: ci-google-client-secret
+      GOOGLE_REDIRECT_URL: http://localhost:3000/auth/google/callback
 
     services:
       postgres:
@@ -22,32 +30,62 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
 
-      - name: Install
+      - name: Enable declared pnpm version
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.3 --activate
+
+      - name: Install with immutable lockfile
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma Client
+        run: pnpm --filter ./apps/api prisma:generate
 
-      - name: Migrate deploy
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexogestao?schema=public
-        run: pnpm --filter ./apps/api exec prisma migrate deploy
+      - name: Apply migrations to disposable CI database
+        run: pnpm --filter ./apps/api exec prisma migrate deploy --schema ../../prisma/schema.prisma
 
-      - name: CI preflight
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexogestao?schema=public
-        run: pnpm ci:preflight
+      - name: Preflight
+        run: pnpm prisma:check
 
-      - name: Seed
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      # Fast, tenant-focused regression signal before the broader suites.
+      - name: Targeted tenant tests
+        run: pnpm --filter ./apps/api test -- src/common/tenant-ops/tenant-ops.service.spec.ts
+
+      - name: Real multi-tenant isolation E2E
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexogestao?schema=public
-        run: pnpm --filter ./apps/api exec prisma db seed
+          RUN_REAL_INTEGRATION: "true"
+        run: pnpm --filter ./apps/api test:integration:real
+
+      # The API command covers every API test except the real E2E already run above;
+      # the web command covers the complete Vitest suite, avoiding a second E2E run.
+      - name: Complete test suites
+        run: |
+          pnpm --filter ./apps/api test:unit
+          pnpm --filter ./apps/web test
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
