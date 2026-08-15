@@ -31,7 +31,7 @@ jobs:
 
       - name: Build web
         env:
-          VITE_BASE: "/nexogestao/"
+          VITE_BASE: "/NexoGestao/"
         run: pnpm --filter ./apps/web build
 
       - name: Upload artifact
