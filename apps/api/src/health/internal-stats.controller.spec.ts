@@ -1,45 +1,64 @@
+import { CanActivate, ExecutionContext, INestApplication, UnauthorizedException } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import request from 'supertest'
 import { InternalStatsController } from './internal-stats.controller'
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
+import { RolesGuard } from '../auth/guards/roles.guard'
 
-describe('InternalStatsController operational signals', () => {
-  it('respeita orgId do token', async () => {
-    const controller = new InternalStatsController(
-      { getQueueStatus: jest.fn() } as any,
-      { snapshot: jest.fn() } as any,
-      { runForOrg: jest.fn() } as any,
-      { listForOrg: jest.fn().mockResolvedValue({ orgId: 'org-1', signals: [] }), getNextBestAction: jest.fn() } as any,
-      { snapshot: jest.fn().mockReturnValue({ counters: {}, gauges: {}, duration: {} }) } as any,
-      { exportJson: jest.fn() } as any,
-    )
-    await controller.operationalSignals({ user: { orgId: 'org-1' } }, '20')
-    expect((controller as any).operationalSignalsService.listForOrg).toHaveBeenCalledWith('org-1', 20)
+class TestJwtGuard implements CanActivate {
+  canActivate(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest()
+    const role = req.headers['x-test-role']
+    if (!role) throw new UnauthorizedException()
+    req.user = { sub: 'user-a', role, orgId: req.headers['x-test-org'] ?? 'org-a' }
+    return true
+  }
+}
+
+describe('InternalStatsController authorization', () => {
+  let app: INestApplication
+  const queueService = { getQueueStatus: jest.fn() }
+  const waMetrics = { snapshot: jest.fn() }
+  const queueObservability = { snapshot: jest.fn() }
+
+  beforeAll(async () => {
+    const mocks = [queueService, waMetrics, { runForOrg: jest.fn() }, { listForOrg: jest.fn(), getNextBestAction: jest.fn() }, queueObservability, { exportJson: jest.fn() }]
+    let index = 0
+    const module = await Test.createTestingModule({
+      controllers: [InternalStatsController],
+      providers: [RolesGuard, { provide: ActiveUserGuard, useValue: { canActivate: () => true } }],
+    })
+      .useMocker(() => mocks[index++] ?? {})
+      .overrideGuard(JwtAuthGuard).useClass(TestJwtGuard)
+      .overrideGuard(ActiveUserGuard).useValue({ canActivate: () => true })
+      .compile()
+    app = module.createNestApplication()
+    await app.init()
   })
 
-  it('mantém /internal/stats compatível e expõe /internal/metrics interno', async () => {
-    const queueService = { getQueueStatus: jest.fn().mockResolvedValue({ whatsapp: { waiting: 1, active: 2, completed: 3, failed: 4 } }) }
-    const waMetrics = { snapshot: jest.fn().mockReturnValue({ whatsapp_retry_total: 2, whatsapp_outbound_total: 4, whatsapp_processing_duration_ms_avg: 50 }) }
-    const queueObservability = { snapshot: jest.fn().mockReturnValue({ counters: { a: 1 }, gauges: { b: 2 }, duration: {} }) }
-    const queueMetricsExporter = { exportJson: jest.fn().mockReturnValue({ exporter: 'queue-observability-v1' }) }
+  afterEach(() => jest.clearAllMocks())
+  afterAll(() => app.close())
 
-    const controller = new InternalStatsController(
-      queueService as any,
-      waMetrics as any,
-      { runForOrg: jest.fn() } as any,
-      { listForOrg: jest.fn(), getNextBestAction: jest.fn() } as any,
-      queueObservability as any,
-      queueMetricsExporter as any,
-    )
+  it('retorna 401 ao visitante e 403 ao usuário comum sem chamar services', async () => {
+    await request(app.getHttpServer()).get('/internal/stats').expect(401)
+    await request(app.getHttpServer()).get('/internal/stats').set('x-test-role', 'OPERADOR').expect(403)
+    expect(queueService.getQueueStatus).not.toHaveBeenCalled()
+    expect(waMetrics.snapshot).not.toHaveBeenCalled()
+    expect(queueObservability.snapshot).not.toHaveBeenCalled()
+  })
 
-    const stats = await controller.stats()
-    expect(stats).toMatchObject({
-      queueObservability: { counters: { a: 1 }, gauges: { b: 2 }, duration: {} },
-      totalJobs: 10,
-      failedJobs: 4,
-      retryRate: 0.5,
-      avgProcessingTime: 50,
+  it('retorna somente escopo do tenant do ADMIN e não expõe métricas globais', async () => {
+    const { body } = await request(app.getHttpServer()).get('/internal/stats').set('x-test-role', 'ADMIN').set('x-test-org', 'org-a').expect(200)
+    expect(body).toEqual({
+      orgId: 'org-a',
+      scope: 'organization',
+      infrastructureMetrics: {
+        available: false,
+        reason: 'Métricas globais não são disponibilizadas a administradores de organização.',
+      },
     })
-
-    const metrics = controller.metrics()
-    expect(metrics).toEqual({ exporter: 'queue-observability-v1' })
-    expect(queueMetricsExporter.exportJson).toHaveBeenCalled()
+    expect(JSON.stringify(body)).not.toContain('org-b')
+    expect(queueService.getQueueStatus).not.toHaveBeenCalled()
   })
 })

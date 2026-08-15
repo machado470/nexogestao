@@ -1,25 +1,19 @@
-import { Controller, Get, Logger, Optional, Query, ServiceUnavailableException } from '@nestjs/common'
+import { Controller, Get, Optional, Request, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
-import { MetricsService } from '../common/metrics/metrics.service'
 import { QueueService } from '../queue/queue.service'
 import { isGoogleOAuthConfigured } from '../common/config/google-oauth-env'
 import { getWhatsAppProviderReadiness } from '../whatsapp/providers/provider.factory'
-import { TenantOperationsService } from '../common/tenant-ops/tenant-ops.service'
-import { CommercialPolicyService } from '../common/commercial/commercial-policy.service'
-import { QueueObservabilityService } from '../common/metrics/queue-observability.service'
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
+import { RolesGuard } from '../auth/guards/roles.guard'
+import { Roles } from '../auth/decorators/roles.decorator'
 
 @Controller('health')
 export class HealthController {
-  private readonly logger = new Logger(HealthController.name)
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly metrics: MetricsService,
-    private readonly tenantOps: TenantOperationsService,
-    private readonly commercial: CommercialPolicyService,
     private readonly config: ConfigService,
-    private readonly queueObservability: QueueObservabilityService,
     @Optional() private readonly queueService?: QueueService,
   ) {}
 
@@ -28,101 +22,31 @@ export class HealthController {
   }
 
   @Get()
-  async health(@Query('details') details?: string) {
-    const startedAt = Date.now()
-    const includeDetails = details === '1' || details === 'true'
-    const queueTimeoutMs = 1200
-
-    let database = { ok: false as boolean, latencyMs: 0 }
-    let prismaClient = { ok: false as boolean }
-    const queueStartedAt = Date.now()
-    const queueSummary = this.queueService
-      ? await Promise.race([
-          this.queueService.getQueueStatus(),
-          new Promise((resolve) =>
-            setTimeout(
-              () =>
-                resolve({
-                  ok: false,
-                  reason: `queue_status_timeout_${queueTimeoutMs}ms`,
-                }),
-              queueTimeoutMs,
-            ),
-          ),
-        ]).catch((error: unknown) => ({
-          ok: false,
-          reason: error instanceof Error ? error.message : String(error),
-        }))
-      : {
-          ok: false,
-          reason: 'queue_service_not_bound',
-        }
-    const queue = {
-      ok: (queueSummary as any)?.ok === false ? false : true,
-      provider: 'bullmq',
-      latencyMs: Date.now() - queueStartedAt,
-      summary: queueSummary,
+  health(@Request() req: any) {
+    if (Object.keys(req.query ?? {}).some((key) => key.toLowerCase() === 'details')) {
+      throw new UnauthorizedException('Use /v1/health/details com autenticação administrativa.')
     }
-
-    try {
-      await this.prisma.$queryRaw`SELECT 1`
-      database = { ok: true, latencyMs: Date.now() - startedAt }
-      prismaClient = { ok: true }
-    } catch {
-      database = { ok: false, latencyMs: Date.now() - startedAt }
-      prismaClient = { ok: false }
-    }
-
-    const ok = database.ok && prismaClient.ok && queue.ok
-    const degradedReasons = [
-      ...(database.ok ? [] : ['database_unavailable']),
-      ...(prismaClient.ok ? [] : ['prisma_unavailable']),
-      ...(queue.ok ? [] : [(queue.summary as any)?.reason ?? 'queue_unavailable']),
-    ]
-
-    let diagnostics: Record<string, unknown> | undefined
-    if (includeDetails) {
-      const diagnosticsStartedAt = Date.now()
-      diagnostics = {
-        tenantOperations: this.tenantOps.snapshot(),
-      }
-
-      try {
-        const commercial = await Promise.race([
-          this.commercial.getAdminTenantCommercialOverview(),
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ timeout: true, reason: 'commercial_overview_timeout' }), 1500),
-          ),
-        ])
-        diagnostics.commercial = commercial
-      } catch (error) {
-        this.logger.warn(`Falha ao coletar diagnóstico comercial no /health?details=1: ${
-          error instanceof Error ? error.message : String(error)
-        }`)
-        diagnostics.commercial = {
-          ok: false,
-          reason: error instanceof Error ? error.message : String(error),
-        }
-      }
-
-      diagnostics.latencyMs = Date.now() - diagnosticsStartedAt
-    }
-
     return {
-      status: ok ? 'ok' : 'degraded',
-      mode: includeDetails ? 'detailed' : 'startup',
-      uptime: process.uptime(),
+      status: 'ok',
       timestamp: new Date().toISOString(),
-      latencyMs: Date.now() - startedAt,
-      checks: {
-        database,
-        prismaClient,
-        queue,
-      },
-      degradedReasons,
-      metrics: this.metrics.snapshot(),
-      queueObservability: this.queueObservability.snapshot(),
-      diagnostics,
+    }
+  }
+
+  @UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('details')
+  async details(@Request() req: any) {
+    const tenant = await this.prisma.organization.findUnique({
+      where: { id: req.user.orgId },
+      select: { id: true },
+    })
+    return {
+      status: tenant ? 'ok' : 'degraded',
+      mode: 'detailed',
+      timestamp: new Date().toISOString(),
+      orgId: req.user.orgId,
+      checks: { tenant: { ok: Boolean(tenant) } },
+      globalInfrastructure: { available: false, reason: 'not_available_for_tenant_scope' },
     }
   }
 

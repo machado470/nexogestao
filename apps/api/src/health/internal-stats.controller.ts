@@ -8,6 +8,7 @@ import { Roles } from '../auth/decorators/roles.decorator'
 import { OperationalDiagnosticsService } from './operational-diagnostics.service'
 import { OperationalSignalsService } from './operational-signals.service'
 import { QueueObservabilityService } from '../common/metrics/queue-observability.service'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 
 @Controller('internal')
 export class InternalStatsController {
@@ -20,18 +21,17 @@ export class InternalStatsController {
     private readonly queueMetricsExporter: QueueMetricsExporterService,
   ) {}
 
+  @UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
+  @Roles('ADMIN')
   @Get('stats')
-  async stats() {
-    const queues = await this.queueService.getQueueStatus()
-    const wa = this.waMetrics.snapshot()
-    const totalJobs = Object.values(queues as any).reduce((acc: number, q: any) => acc + (q.waiting ?? 0) + (q.active ?? 0) + (q.completed ?? 0) + (q.failed ?? 0), 0)
-    const failedJobs = Object.values(queues as any).reduce((acc: number, q: any) => acc + (q.failed ?? 0), 0)
+  async stats(@Request() req: any) {
     return {
-      queueObservability: this.queueObservability.snapshot(),
-      totalJobs,
-      failedJobs,
-      retryRate: wa.whatsapp_retry_total / Math.max(1, wa.whatsapp_outbound_total),
-      avgProcessingTime: wa.whatsapp_processing_duration_ms_avg,
+      orgId: req.user.orgId,
+      scope: 'organization',
+      infrastructureMetrics: {
+        available: false,
+        reason: 'Métricas globais não são disponibilizadas a administradores de organização.',
+      },
     }
   }
 
@@ -65,5 +65,4 @@ export class InternalStatsController {
     return this.operationalSignalsService.getNextBestAction(req.user.orgId)
   }
 }
-
 
