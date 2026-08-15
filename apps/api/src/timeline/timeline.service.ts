@@ -18,6 +18,11 @@ type TimelineLogInput = {
   metadata?: Record<string, unknown> | null
 }
 
+type TimelineTransactionClient = Pick<
+  Prisma.TransactionClient,
+  'person' | 'customer' | 'timelineEvent'
+>
+
 function pickActorUserId(metadata?: Record<string, unknown> | null): string | null {
   if (!metadata) return null
 
@@ -237,6 +242,90 @@ export class TimelineService {
     }
 
     return event
+  }
+
+  /**
+   * Persists authoritative evidence as part of the caller's transaction.
+   * Webhooks are intentionally not dispatched here: they are an integration
+   * side effect and must never make transactional evidence visible before the
+   * owning business transaction commits.
+   */
+  async logInTransaction(
+    input: TimelineLogInput,
+    tx: TimelineTransactionClient,
+  ) {
+    if (!input.orgId) {
+      throw new Error('TimelineService.logInTransaction(): orgId é obrigatório')
+    }
+    if (!String(input.action || '').trim()) {
+      throw new Error('TimelineService.logInTransaction(): action é obrigatória')
+    }
+
+    let personId = input.personId ?? null
+    if (!personId) {
+      const actorPersonId = pickActorPersonId(input.metadata ?? null)
+      if (actorPersonId) {
+        const person = await tx.person.findFirst({
+          where: { id: actorPersonId, orgId: input.orgId },
+          select: { id: true },
+        })
+        personId = person?.id ?? null
+      }
+    }
+    if (!personId) {
+      const actorUserId = pickActorUserId(input.metadata ?? null)
+      if (actorUserId) {
+        const person = await tx.person.findFirst({
+          where: { orgId: input.orgId, userId: actorUserId },
+          select: { id: true },
+        })
+        personId = person?.id ?? null
+      }
+    }
+
+    const resolvedCustomerId =
+      input.customerId ?? pickString(input.metadata ?? null, 'customerId')
+    let customerId: string | null = null
+    if (resolvedCustomerId) {
+      const customer = await tx.customer.findFirst({
+        where: { id: resolvedCustomerId, orgId: input.orgId },
+        select: { id: true },
+      })
+      if (!customer) {
+        throw new Error(
+          'TimelineService.logInTransaction(): customerId inválido para a organização',
+        )
+      }
+      customerId = customer.id
+    }
+
+    const requestId = this.requestContext.requestId
+    const metadata = JSON.parse(
+      JSON.stringify({
+        ...(input.metadata ?? {}),
+        ...(requestId ? { requestId } : {}),
+      }),
+    ) as Prisma.InputJsonValue
+
+    return tx.timelineEvent.create({
+      data: {
+        orgId: input.orgId,
+        action: input.action,
+        personId,
+        description: input.description ?? null,
+        customerId,
+        serviceOrderId:
+          input.serviceOrderId
+          ?? pickString(input.metadata ?? null, 'serviceOrderId')
+          ?? pickString(input.metadata ?? null, 'executionId'),
+        appointmentId:
+          input.appointmentId
+          ?? pickString(input.metadata ?? null, 'appointmentId'),
+        chargeId:
+          input.chargeId ?? pickString(input.metadata ?? null, 'chargeId'),
+        metadata,
+      },
+    })
   }
 
   async listByOrg(orgId: string, query?: TimelineQueryDto) {

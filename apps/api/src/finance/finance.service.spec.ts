@@ -15,7 +15,10 @@ describe('FinanceService hardening', () => {
     } as any
 
     const whatsapp = {} as any
-    const timeline = { log: jest.fn().mockResolvedValue(undefined) } as any
+    const timeline = {
+      log: jest.fn().mockResolvedValue(undefined),
+      logInTransaction: jest.fn().mockResolvedValue({ id: 'event-1' }),
+    } as any
     const analytics = { track: jest.fn() } as any
     const requestContext = { requestId: 'req-1', correlationId: 'corr-1' } as any
     const idempotency = {
@@ -37,7 +40,7 @@ describe('FinanceService hardening', () => {
       audit,
     )
 
-    return { service, prisma, idempotency, metrics, audit }
+    return { service, prisma, idempotency, metrics, audit, timeline }
   }
 
   it('bloqueia geração de cobrança para O.S. cancelada', async () => {
@@ -70,6 +73,7 @@ describe('FinanceService hardening', () => {
             id: 'ch-1',
             orgId: 'org-1',
             status: 'CANCELED',
+            amountCents: 1000,
           }),
           updateMany: jest.fn(),
         },
@@ -96,8 +100,8 @@ describe('FinanceService hardening', () => {
         charge: {
           findFirst: jest
             .fn()
-            .mockResolvedValueOnce({ id: 'ch-1', orgId: 'org-1', status: 'PAID' })
-            .mockResolvedValueOnce({ id: 'ch-1', orgId: 'org-1', status: 'PAID' }),
+            .mockResolvedValueOnce({ id: 'ch-1', orgId: 'org-1', status: 'PAID', amountCents: 1000 })
+            .mockResolvedValueOnce({ id: 'ch-1', orgId: 'org-1', status: 'PAID', amountCents: 1000 }),
           updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         },
         payment: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -230,6 +234,7 @@ describe('FinanceService hardening', () => {
             customerId: 'c-1',
             serviceOrderId: 'so-1',
             status: 'PENDING',
+            amountCents: 1000,
           }),
           updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
@@ -248,12 +253,13 @@ describe('FinanceService hardening', () => {
       method: 'PIX',
     })
 
-    expect((service as any).timeline.log).toHaveBeenCalledWith(
+    expect((service as any).timeline.logInTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'PAYMENT_RECEIVED',
         chargeId: 'ch-1',
         serviceOrderId: 'so-1',
       }),
+      expect.anything(),
     )
   })
 
@@ -264,7 +270,7 @@ describe('FinanceService hardening', () => {
     const create = jest.fn().mockResolvedValue({ id: 'pay-1' })
     prisma.$transaction.mockImplementation(async (cb: any) => cb({
       charge: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null, status: 'PENDING' }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null, status: 'PENDING', amountCents: 1000 }),
         updateMany,
       },
       payment: { create, findFirst: jest.fn() },
@@ -289,10 +295,10 @@ describe('FinanceService hardening', () => {
       paidAt: new Date('2026-01-15T12:00:00.000Z'),
       notes: 'Pago no caixa',
     }) })
-    expect((service as any).timeline.log).toHaveBeenCalledWith(expect.objectContaining({
+    expect((service as any).timeline.logInTransaction).toHaveBeenCalledWith(expect.objectContaining({
       action: 'PAYMENT_RECEIVED',
       metadata: expect.objectContaining({ paidAt: '2026-01-15T12:00:00.000Z', notes: 'Pago no caixa' }),
-    }))
+    }), expect.anything())
   })
 
   it('usa a data atual como fallback quando paidAt não é informado', async () => {
@@ -302,7 +308,7 @@ describe('FinanceService hardening', () => {
     const create = jest.fn().mockResolvedValue({ id: 'pay-1' })
     prisma.$transaction.mockImplementation(async (cb: any) => cb({
       charge: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null, status: 'PENDING' }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null, status: 'PENDING', amountCents: 1000 }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       payment: { create, findFirst: jest.fn() },
@@ -324,6 +330,95 @@ describe('FinanceService hardening', () => {
     await expect(service.payCharge({ ...base, paidAt: '2026-02-12T09:30:00.001Z' })).rejects.toThrow('paidAt não pode estar no futuro')
     expect(idempotency.begin).not.toHaveBeenCalled()
     jest.useRealTimers()
+  })
+
+  it.each([
+    ['parcial', 999],
+    ['superior', 1001],
+  ])('rejeita valor %s sem reservar, criar pagamento ou Timeline', async (_label, amountCents) => {
+    const { service, prisma, idempotency, timeline } = buildService()
+    idempotency.begin.mockResolvedValue({ mode: 'execute', recordId: 'idem-1' })
+    const updateMany = jest.fn()
+    const create = jest.fn()
+    prisma.$transaction.mockImplementation(async (cb: any) => cb({
+      charge: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null,
+          status: 'PENDING', amountCents: 1000,
+        }),
+        updateMany,
+      },
+      payment: { create, findFirst: jest.fn() },
+    }))
+
+    await expect(service.payCharge({
+      orgId: 'org-1', chargeId: 'ch-1', amountCents, method: 'PIX',
+    })).rejects.toMatchObject({ response: expect.objectContaining({ code: 'PAYMENT_AMOUNT_MISMATCH' }) })
+    expect(updateMany).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+    expect(timeline.logInTransaction).not.toHaveBeenCalled()
+  })
+
+  it('liquida cobrança OVERDUE pelo valor total exato', async () => {
+    const { service, prisma, idempotency, timeline } = buildService()
+    idempotency.begin.mockResolvedValue({ mode: 'execute', recordId: 'idem-1' })
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 })
+    prisma.$transaction.mockImplementation(async (cb: any) => cb({
+      charge: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null,
+          status: 'OVERDUE', amountCents: 1001,
+        }),
+        updateMany,
+      },
+      payment: { create: jest.fn().mockResolvedValue({ id: 'pay-1' }), findFirst: jest.fn() },
+    }))
+    jest.spyOn(service, 'sendPaymentConfirmationWhatsApp').mockResolvedValue({} as any)
+
+    await expect(service.payCharge({
+      orgId: 'org-1', chargeId: 'ch-1', amountCents: 1001, method: 'PIX',
+    })).resolves.toMatchObject({ paymentId: 'pay-1', idempotent: false })
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ orgId: 'org-1', status: { in: ['PENDING', 'OVERDUE'] } }),
+    }))
+    expect(timeline.logInTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('propaga falha da Timeline dentro da transação e não confirma idempotência', async () => {
+    const { service, prisma, idempotency, timeline } = buildService()
+    idempotency.begin.mockResolvedValue({ mode: 'execute', recordId: 'idem-1' })
+    timeline.logInTransaction.mockRejectedValue(new Error('timeline indisponível'))
+    prisma.$transaction.mockImplementation(async (cb: any) => cb({
+      charge: { findFirst: jest.fn().mockResolvedValue({
+        id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null,
+        status: 'PENDING', amountCents: 1000,
+      }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      payment: { create: jest.fn().mockResolvedValue({ id: 'pay-1' }), findFirst: jest.fn() },
+    }))
+
+    await expect(service.payCharge({
+      orgId: 'org-1', chargeId: 'ch-1', amountCents: 1000, method: 'PIX',
+    })).rejects.toThrow('timeline indisponível')
+    expect(idempotency.complete).not.toHaveBeenCalled()
+    expect(idempotency.fail).toHaveBeenCalledWith('idem-1', undefined)
+  })
+
+  it('propaga falha ao criar Payment sem criar evidência oficial', async () => {
+    const { service, prisma, idempotency, timeline } = buildService()
+    idempotency.begin.mockResolvedValue({ mode: 'execute', recordId: 'idem-1' })
+    prisma.$transaction.mockImplementation(async (cb: any) => cb({
+      charge: { findFirst: jest.fn().mockResolvedValue({
+        id: 'ch-1', orgId: 'org-1', customerId: 'c-1', serviceOrderId: null,
+        status: 'PENDING', amountCents: 1000,
+      }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      payment: { create: jest.fn().mockRejectedValue(new Error('payment failed')), findFirst: jest.fn() },
+    }))
+
+    await expect(service.payCharge({
+      orgId: 'org-1', chargeId: 'ch-1', amountCents: 1000, method: 'PIX',
+    })).rejects.toThrow('payment failed')
+    expect(timeline.logInTransaction).not.toHaveBeenCalled()
+    expect(idempotency.complete).not.toHaveBeenCalled()
   })
 
   it('bloqueia lembrete de cobrança para charge paga', async () => {
