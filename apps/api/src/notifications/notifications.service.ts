@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { QueueService } from '../queue/queue.service'
 import { QUEUE_NAMES } from '../queue/queue.constants'
 import { isSafeNotificationRouteHint } from '@nexogestao/common'
-import { NotificationPubSubService } from './notification-pubsub.service'
+import { NotificationPublishResult, NotificationPubSubService } from './notification-pubsub.service'
 import { NOTIFICATION_TRANSPORT_KIND, NOTIFICATION_TRANSPORT_VERSION } from './notification-transport'
 
 export type NotificationAudience =
@@ -77,6 +77,7 @@ export function notificationJobId(orgId: string, eventKey: string) {
 
 @Injectable()
 export class NotificationsService {
+  private readonly recipientPublishResults = new Map<string, NotificationPublishResult & { eventId: string }>()
   constructor(
     private readonly prisma: PrismaService,
     private readonly queueService: QueueService,
@@ -139,7 +140,7 @@ export class NotificationsService {
         include: { recipients: { select: { id: true, userId: true, createdAt: true } } },
       })
       const persistedRecipients = Array.isArray(created.recipients) ? created.recipients : []
-      await Promise.all(persistedRecipients.map(recipient => this.transport.publish({
+      await Promise.all(persistedRecipients.map(recipient => this.publishRecipient({
         version: NOTIFICATION_TRANSPORT_VERSION,
         kind: NOTIFICATION_TRANSPORT_KIND,
         eventId: recipient.id,
@@ -264,7 +265,7 @@ export class NotificationsService {
       where: { notificationId, notification: { orgId } },
       select: { id: true, userId: true, createdAt: true },
     })
-    await Promise.all((recipients ?? []).map(recipient => this.transport.publish({
+    await Promise.all((recipients ?? []).map(recipient => this.publishRecipient({
       version: NOTIFICATION_TRANSPORT_VERSION,
       kind: NOTIFICATION_TRANSPORT_KIND,
       eventId: recipient.id,
@@ -273,5 +274,12 @@ export class NotificationsService {
       notificationId,
       createdAt: (recipient.createdAt ?? fallbackCreatedAt ?? new Date(0)).toISOString(),
     })))
+  }
+
+  private async publishRecipient(event: Parameters<NotificationPubSubService['publish']>[0]) {
+    const result = await this.transport.publish(event)
+    const recipientResult = { eventId: event.eventId, ...result }
+    this.recipientPublishResults.set(event.eventId, recipientResult)
+    return recipientResult
   }
 }

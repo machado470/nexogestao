@@ -30,10 +30,10 @@ export class NotificationsController {
     const orgId = req.user.orgId as string
     const userId = req.user.sub as string
     const marker = req.headers['last-event-id']
-    const write = (frame: string) => !res.destroyed && !res.writableEnded && res.write(frame)
+    let closed = false
+    const write = (frame: string) => this.writeFrame(res, frame, () => closed)
     const registration = this.hub.add(orgId, userId, write, () => res.end())
     if (!registration) { res.statusCode = 429; res.end(); return }
-    let closed = false
     let heartbeat: NodeJS.Timeout | undefined
     let revalidate: NodeJS.Timeout | undefined
     let expiry: NodeJS.Timeout | undefined
@@ -52,11 +52,11 @@ export class NotificationsController {
 
     const replayed = await this.replay(orgId, userId, marker, res, () => closed)
     if (closed) return
-    if (!replayed || !registration.finishReplay(replayed)) {
+    if (!replayed || !await registration.finishReplay(replayed)) {
       await this.writeFrame(res, 'event: resync\ndata: {"kind":"resync"}\n\n', () => closed)
       close(); return
     }
-    heartbeat = setInterval(() => { try { write(heartbeatFrame()) } catch { close() } }, 25_000)
+    heartbeat = setInterval(() => { void write(heartbeatFrame()).then(ok => { if (!ok) close() }) }, 25_000)
     revalidate = setInterval(async () => {
       const active = await this.prisma.user.count({ where: { id: userId, orgId, active: true } }).catch(() => 0)
       if (!active) close()
@@ -70,13 +70,17 @@ export class NotificationsController {
     try {
       if (res.write(frame)) return true
       return await new Promise<boolean>(resolve => {
+        let settled = false
         const finish = (result: boolean) => {
+          if (settled) return
+          settled = true
           res.removeListener('drain', onDrain); res.removeListener('close', onClose); res.removeListener('error', onClose)
           resolve(result)
         }
         const onDrain = () => finish(!closed())
         const onClose = () => finish(false)
         res.once('drain', onDrain); res.once('close', onClose); res.once('error', onClose)
+        if (closed() || res.destroyed || res.writableEnded) finish(false)
       })
     } catch { return false }
   }

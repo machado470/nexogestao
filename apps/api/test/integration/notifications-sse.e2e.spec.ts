@@ -135,15 +135,32 @@ describeRealIntegration('Notifications SSE multi-instance (real PostgreSQL + Red
 
   it('entrega via Redis da instância A para stream na instância B e limpa a conexão', async () => {
     const pubSubA = appA.get(NotificationPubSubService); const pubSubB = appB.get(NotificationPubSubService)
-    expect((await pubSubA.waitUntilReady()).publisherReady).toBe(true)
-    expect((await pubSubB.waitUntilReady()).subscribed).toBe(true)
+    expect(await pubSubA.waitUntilReady()).toEqual({ publisherReady: true, subscriberReady: true, subscribed: true, shuttingDown: false })
+    expect(await pubSubB.waitUntilReady()).toEqual({ publisherReady: true, subscriberReady: true, subscribed: true, shuttingDown: false })
+    expect(pubSubA.diagnostics().channel).toBe(pubSubB.diagnostics().channel)
+    const publish = jest.spyOn(pubSubA, 'publish')
+    const hubB = appB.get(NotificationStreamHub); const deliver = jest.spyOn(hubB, 'deliver')
     const stream = openSse(token(userA, orgA)); await stream.connection; await stream.waitUntilReady()
+    expect(hubB.count()).toBe(1)
     const notification = await create('cross-instance')
     const recipient = await prisma.notificationRecipient.findFirstOrThrow({ where: { notificationId: notification.id, userId: userA } })
+    expect(publish).toHaveBeenCalledTimes(1)
+    const envelope = publish.mock.calls[0][0]
+    expect(envelope).toEqual({
+      version: 1, kind: 'notification.created', eventId: recipient.id, orgId: orgA, userId: userA,
+      notificationId: notification.id, createdAt: recipient.createdAt.toISOString(),
+    })
+    expect(publish.mock.results[0].type).toBe('return')
+    await expect(publish.mock.results[0].value).resolves.toEqual({ status: 'published', subscriberCount: expect.any(Number) })
+    expect((await publish.mock.results[0].value).subscriberCount).toBeGreaterThanOrEqual(2)
+    expect(deliver).toHaveBeenCalledWith(envelope)
+    const delivery = deliver.mock.results.find(result => result.type === 'return' && result.value)?.value
+    await expect(delivery).resolves.toEqual([true])
     const text = await stream.waitForEvent(`id: ${recipient.id}`)
     expect(text).toContain(`id: ${recipient.id}\nevent: notification.created`)
     expect(text).not.toContain(orgA); expect(text).not.toContain(userA); expect(text).not.toContain(notification.id)
     await stream.close(); await stream.cleanup()
+    publish.mockRestore(); deliver.mockRestore()
   })
 
   it('isola usuário e tenant e recupera por replay persistido', async () => {

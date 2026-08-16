@@ -10,6 +10,7 @@ export type NotificationPubSubReadiness = {
   subscribed: boolean
   shuttingDown: boolean
 }
+export type NotificationPubSubDiagnostics = NotificationPubSubReadiness & { channel: string }
 
 export type NotificationPublishResult =
   | { status: 'published'; subscriberCount: number }
@@ -60,10 +61,11 @@ export class NotificationPubSubService implements OnModuleInit, OnModuleDestroy 
       this.subscriberReady = false; this.subscribed = false; this.logger.warn('Redis Pub/Sub reconectando')
     })
     this.subscriber.on('end', () => { this.subscriberReady = false; this.subscribed = false })
-    this.subscriber.on('message', (_channel, raw) => {
+    this.subscriber.on('message', (receivedChannel, raw) => {
+      if (receivedChannel !== this.channel) { this.logRejected('channel'); return }
       const event = parseNotificationTransportEvent(raw)
-      if (!event) { this.logger.warn('Envelope de notificação inválido ignorado'); return }
-      this.hub.deliver(event)
+      if (!event) { this.logRejected('envelope'); return }
+      void this.hub.deliver(event).catch(() => this.logger.warn('Falha ao entregar envelope ao hub'))
     })
     // Eagerly start both roles. publish() and waitUntilReady() share these exact
     // operations, so concurrent bootstrap never calls connect() twice.
@@ -82,6 +84,13 @@ export class NotificationPubSubService implements OnModuleInit, OnModuleDestroy 
       subscribed: this.subscribed,
       shuttingDown: this.shuttingDown,
     }
+  }
+
+  diagnostics(): NotificationPubSubDiagnostics { return { channel: this.channel, ...this.readiness() } }
+
+  private logRejected(reason: 'channel' | 'envelope') {
+    const diagnostic = this.diagnostics()
+    this.logger.warn(`Envelope de notificação rejeitado (${reason}); ${JSON.stringify(diagnostic)}`)
   }
 
   async waitUntilReady(timeoutMs = DEFAULT_READY_TIMEOUT_MS): Promise<NotificationPubSubReadiness> {
