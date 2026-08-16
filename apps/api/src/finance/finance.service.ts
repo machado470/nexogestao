@@ -19,6 +19,7 @@ import { ChargesQueryDto } from './dto/charges-query.dto'
 import { AnalyticsService, UsageMetricEvent } from '../analytics/analytics.service'
 import { RequestContextService } from '../common/context/request-context.service'
 import { MetricsService } from '../common/metrics/metrics.service'
+import { OutboxService } from '../outbox/outbox.service'
 import {
   OperationalExecutionStatus,
   buildOperationalResult,
@@ -59,6 +60,7 @@ export class FinanceService {
     private readonly idempotency: IdempotencyService,
     private readonly metrics: MetricsService,
     private readonly audit: AuditService,
+    private readonly outbox: OutboxService,
   ) {}
 
   private logCritical(params: {
@@ -516,18 +518,39 @@ export class FinanceService {
     try {
       let charge: any = null
       try {
-        charge = await this.prisma.charge.create({
-          data: {
+        charge = await this.prisma.$transaction(async tx => {
+          const created = await tx.charge.create({
+            data: {
+              orgId: input.orgId,
+              customerId: input.customerId,
+              idempotencyKey,
+              amountCents: input.amountCents,
+              dueDate: input.dueDate,
+              status: 'PENDING',
+              notes: input.notes ?? null,
+              serviceOrderId: input.serviceOrderId ?? null,
+            },
+            include: { customer: true },
+          })
+          const timelineEvent = await this.timeline.logInTransaction({
             orgId: input.orgId,
-            customerId: input.customerId,
-            idempotencyKey,
-            amountCents: input.amountCents,
-            dueDate: input.dueDate,
-            status: 'PENDING',
-            notes: input.notes ?? null,
-            serviceOrderId: input.serviceOrderId ?? null,
-          },
-          include: { customer: true },
+            action: 'CHARGE_CREATED',
+            description: `Cobrança criada para ${created.customer?.name ?? 'cliente'}`,
+            customerId: created.customerId,
+            serviceOrderId: created.serviceOrderId,
+            chargeId: created.id,
+            metadata: { actorUserId: input.actorUserId ?? null, amountCents: created.amountCents, dueDate: created.dueDate.toISOString(), origin: 'operational' },
+          }, tx)
+          await this.outbox.enqueue(tx, {
+            orgId: input.orgId,
+            eventType: 'CHARGE_CREATED',
+            aggregateType: 'Charge',
+            aggregateId: created.id,
+            actorId: input.actorUserId,
+            idempotencyKey: `charge-created:${idempotencyKey}`,
+            payload: { timelineEventId: timelineEvent.id, chargeId: created.id, customerId: created.customerId },
+          })
+          return created
         })
       } catch (err: any) {
         if (err?.code !== 'P2002') throw err
@@ -563,23 +586,6 @@ export class FinanceService {
           })
         })
       }
-
-      await this.safeTimelineLog({
-        orgId: input.orgId,
-        action: 'CHARGE_CREATED',
-        description: `Cobrança criada para ${charge.customer?.name ?? 'cliente'}`,
-        customerId: charge.customerId,
-        serviceOrderId: charge.serviceOrderId,
-        chargeId: charge.id,
-        metadata: {
-          actorUserId: input.actorUserId ?? null,
-          customerId: charge.customerId,
-          serviceOrderId: charge.serviceOrderId,
-          chargeId: charge.id,
-          amountCents: charge.amountCents,
-          dueDate: charge.dueDate.toISOString(),
-        },
-      })
 
       this.logCritical({
         level: whatsappFallbackUsed ? 'warn' : 'log',
@@ -996,7 +1002,7 @@ export class FinanceService {
         },
       })
 
-      await this.timeline.logInTransaction(
+      const timelineEvent = await this.timeline.logInTransaction(
         {
           orgId: input.orgId,
           action: 'PAYMENT_RECEIVED',
@@ -1018,6 +1024,22 @@ export class FinanceService {
         },
         tx,
       )
+
+      await this.outbox.enqueue(tx, {
+        orgId: input.orgId,
+        eventType: 'PAYMENT_RECEIVED',
+        aggregateType: 'Payment',
+        aggregateId: payment.id,
+        actorId: input.actorUserId,
+        idempotencyKey: `payment-received:${idempotencyKey}`,
+        occurredAt: paidAt,
+        payload: {
+          timelineEventId: timelineEvent.id,
+          paymentId: payment.id,
+          chargeId: charge.id,
+          customerId: charge.customerId,
+        },
+      })
 
           return { charge, payment, idempotent: false }
       },

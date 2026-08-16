@@ -62,6 +62,7 @@ import { OrganizationSettingsModule } from './organization-settings/organization
 import { WebhookModule } from './webhooks/webhook.module'
 import { SentryModule } from './common/sentry/sentry.module'
 import { CommercialModule } from './commercial/commercial.module'
+import { OutboxModule } from './outbox/outbox.module'
 
 const IS_DEVELOPMENT = (process.env.NODE_ENV ?? '').toLowerCase() === 'development'
 const IS_TEST = (process.env.NODE_ENV ?? '').toLowerCase() === 'test'
@@ -108,6 +109,7 @@ class AllowAllThrottlerGuard implements CanActivate {
     EmailModule,
     WebhookModule,
     CommercialModule,
+    OutboxModule,
 
     BootstrapModule,
     AuthModule,

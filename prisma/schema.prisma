@@ -39,6 +39,7 @@ model Organization {
   whatsAppWebhookEvents        WhatsAppWebhookEvent[]
   whatsAppActionExecutions     WhatsAppActionExecution[]
   operationalActionExecutions  OperationalActionExecution[]
+  operationalOutboxEvents      OperationalOutboxEvent[]
   notifications                Notification[]
 
   subscription     Subscription?
@@ -186,6 +187,39 @@ model TimelineEvent {
   @@index([orgId, serviceOrderId, createdAt])
   @@index([orgId, appointmentId, createdAt])
   @@index([orgId, chargeId, createdAt])
+}
+
+/// Entrega transacional de fatos operacionais. O registro permanece para
+/// inspeção mesmo depois do processamento ou de uma falha definitiva.
+model OperationalOutboxEvent {
+  id             String   @id @default(uuid())
+  orgId          String
+  eventType      String
+  schemaVersion  Int      @default(1)
+  aggregateType  String
+  aggregateId    String
+  actorId        String?
+  correlationId  String
+  causationId    String?
+  idempotencyKey String
+  payload        Json
+  status         String   @default("PENDING")
+  attempts       Int      @default(0)
+  availableAt    DateTime @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  lastError      String?
+  occurredAt     DateTime @default(now())
+  processedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, idempotencyKey])
+  @@index([status, availableAt, createdAt])
+  @@index([orgId, status, availableAt])
+  @@index([lockedAt, status])
+  @@index([orgId, aggregateType, aggregateId, occurredAt])
 }
 
 model Track {

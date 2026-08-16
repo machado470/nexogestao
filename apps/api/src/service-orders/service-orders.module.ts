@@ -14,6 +14,7 @@ import { OnboardingModule } from '../onboarding/onboarding.module'
 import { WhatsAppModule } from '../whatsapp/whatsapp.module'
 import { QuotasModule } from '../quotas/quotas.module'
 import { AnalyticsModule } from '../analytics/analytics.module'
+import { OutboxModule } from '../outbox/outbox.module'
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AnalyticsModule } from '../analytics/analytics.module'
     WhatsAppModule,
     QuotasModule,
     AnalyticsModule,
+    OutboxModule,
   ],
   controllers: [ServiceOrdersController],
   providers: [ServiceOrdersService, ServiceOrderTenantAccessGuard],
