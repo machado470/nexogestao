@@ -72,12 +72,12 @@ describe('InternalStatsController authorization', () => {
 
   it('permite ao OPERADOR (STAFF) ler a próxima ação somente do orgId autenticado', async () => {
     await request(app.getHttpServer())
-      .get('/internal/operational-signals?limit=8')
+      .get('/internal/operational-signals?limit=8&orgId=org-b')
       .set('x-test-role', 'STAFF')
       .set('x-test-org', 'org-a')
       .expect(200)
     const response = await request(app.getHttpServer())
-      .get('/internal/operational-signals/next-best-action')
+      .get('/internal/operational-signals/next-best-action?orgId=org-b')
       .set('x-test-role', 'STAFF')
       .set('x-test-org', 'org-a')
       .expect(200)
