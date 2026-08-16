@@ -12,4 +12,9 @@ describe("parseSseBuffer", () => {
     const parsed = parseSseBuffer(": heartbeat\n\nevent: ready\ndata: {}\n\nevent: resync\ndata: {}\n\n")
     expect(parsed.events.map(event => event.event)).toEqual(["ready", "resync"])
   })
+  it("ignora ids e nomes de evento inseguros e limita memória", () => {
+    expect(parseSseBuffer("id: bad id\nevent: bad event\ndata: x\n\n").events)
+      .toEqual([{ event: "message", data: "x" }])
+    expect(() => parseSseBuffer("x".repeat(256 * 1024 + 1))).toThrow("buffer limit")
+  })
 })

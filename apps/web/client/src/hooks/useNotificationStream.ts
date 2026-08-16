@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 
 export type NotificationStreamStatus = "connecting" | "connected" | "reconnecting" | "disconnected" | "unauthorized" | "forbidden" | "degraded";
 export type ParsedSseEvent = { id?: string; event: string; data: string };
+const MAX_SSE_BUFFER = 256 * 1024;
+const SAFE_EVENT_ID = /^[a-zA-Z0-9_-]{1,128}$/;
+const SAFE_EVENT_NAME = /^[a-zA-Z0-9._-]{1,64}$/;
 
 export function parseSseBuffer(buffer: string): { events: ParsedSseEvent[]; rest: string } {
+  if (buffer.length > MAX_SSE_BUFFER) throw new Error("SSE buffer limit exceeded");
   const normalized = buffer.replace(/\r\n/g, "\n");
   const blocks = normalized.split("\n\n");
   const rest = blocks.pop() ?? "";
@@ -15,8 +19,8 @@ export function parseSseBuffer(buffer: string): { events: ParsedSseEvent[]; rest
       const separator = line.indexOf(":");
       const field = separator < 0 ? line : line.slice(0, separator);
       const value = separator < 0 ? "" : line.slice(separator + 1).replace(/^ /, "");
-      if (field === "id") id = value;
-      else if (field === "event") event = value;
+      if (field === "id" && SAFE_EVENT_ID.test(value)) id = value;
+      else if (field === "event" && SAFE_EVENT_NAME.test(value)) event = value;
       else if (field === "data") data.push(value);
     }
     if (data.length || event !== "message") events.push({ id, event, data: data.join("\n") });
@@ -38,7 +42,8 @@ export function useNotificationStream(enabled: boolean, onSynchronize: () => voi
     });
     const online = () => new Promise<void>(resolve => {
       if (navigator.onLine) return resolve();
-      window.addEventListener("online", () => resolve(), { once: true });
+      const finish = () => { window.removeEventListener("online", finish); lifecycle.signal.removeEventListener("abort", finish); resolve(); };
+      window.addEventListener("online", finish, { once: true }); lifecycle.signal.addEventListener("abort", finish, { once: true });
     });
     const run = async () => {
       while (!lifecycle.signal.aborted) {
@@ -51,11 +56,12 @@ export function useNotificationStream(enabled: boolean, onSynchronize: () => voi
           if (response.status === 401) { setStatus("unauthorized"); return; }
           if (response.status === 403) { setStatus("forbidden"); return; }
           if (!response.ok || !response.body) throw new Error("stream unavailable");
-          setStatus("connected"); attempt = 0; let buffer = ""; const reader = response.body.getReader(); const decoder = new TextDecoder();
-          while (!lifecycle.signal.aborted) {
+          setStatus("connected"); let receivedEvent = false; let buffer = ""; const reader = response.body.getReader(); const decoder = new TextDecoder();
+          try { while (!lifecycle.signal.aborted) {
             const chunk = await reader.read(); if (chunk.done) break;
             buffer += decoder.decode(chunk.value, { stream: true }); const parsed = parseSseBuffer(buffer); buffer = parsed.rest;
             for (const event of parsed.events) {
+              receivedEvent = true;
               if (event.id) lastEventId = event.id;
               if (event.event === "ready") continue;
               if (event.event === "notification.created") {
@@ -64,7 +70,8 @@ export function useNotificationStream(enabled: boolean, onSynchronize: () => voi
                 coalescedSync();
               } else if (event.event === "resync") coalescedSync();
             }
-          }
+          } } finally { await reader.cancel().catch(() => undefined); }
+          if (receivedEvent) attempt = 0;
         } catch { if (!lifecycle.signal.aborted) setStatus("degraded"); }
         finally { lifecycle.signal.removeEventListener("abort", abortActive); active = null; }
         if (lifecycle.signal.aborted) break;

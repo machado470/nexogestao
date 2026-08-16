@@ -31,8 +31,8 @@ export class NotificationsController {
     const userId = req.user.sub as string
     const marker = req.headers['last-event-id']
     const write = (frame: string) => !res.destroyed && res.write(frame)
-    const cleanupHub = this.hub.add(orgId, userId, write, () => res.end())
-    if (!cleanupHub) { res.end(); return }
+    const registration = this.hub.add(orgId, userId, write, () => res.end())
+    if (!registration) { res.statusCode = 429; res.end(); return }
     let closed = false
     let heartbeat: NodeJS.Timeout | undefined
     let revalidate: NodeJS.Timeout | undefined
@@ -43,12 +43,17 @@ export class NotificationsController {
       if (heartbeat) clearInterval(heartbeat)
       if (revalidate) clearInterval(revalidate)
       if (expiry) clearTimeout(expiry)
-      cleanupHub()
+      registration.remove()
       if (!res.writableEnded) res.end()
     }
     req.once('close', close); res.once('error', close)
 
-    await this.replay(orgId, userId, marker, write)
+    const replayed = await this.replay(orgId, userId, marker, write)
+    if (closed) return
+    if (!registration.finishReplay(replayed)) {
+      if (!res.writableEnded) res.write('event: resync\ndata: {"kind":"resync"}\n\n')
+      close(); return
+    }
     heartbeat = setInterval(() => { try { write(heartbeatFrame()) } catch { close() } }, 25_000)
     revalidate = setInterval(async () => {
       const active = await this.prisma.user.count({ where: { id: userId, orgId, active: true } }).catch(() => 0)
@@ -59,12 +64,13 @@ export class NotificationsController {
   }
 
   private async replay(orgId: string, userId: string, marker: unknown, write: (frame: string) => boolean) {
-    if (marker === undefined) { write('event: ready\ndata: {"kind":"ready"}\n\n'); return }
-    if (!isSafeLastEventId(marker)) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return }
+    const replayed = new Set<string>()
+    if (marker === undefined) { write('event: ready\ndata: {"kind":"ready"}\n\n'); return replayed }
+    if (!isSafeLastEventId(marker)) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return replayed }
     const cursor = await this.prisma.notificationRecipient.findFirst({
       where: { id: marker, userId, notification: { orgId } }, select: { id: true, createdAt: true },
     })
-    if (!cursor) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return }
+    if (!cursor) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return replayed }
     const rows = await this.prisma.notificationRecipient.findMany({
       where: { userId, notification: { orgId }, OR: [
         { createdAt: { gt: cursor.createdAt } },
@@ -73,12 +79,16 @@ export class NotificationsController {
       select: { id: true, userId: true, createdAt: true, notification: { select: { id: true, orgId: true } } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 101,
     })
-    if (rows.length > 100) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return }
-    for (const row of rows) write(notificationFrame({
+    if (rows.length > 100) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return replayed }
+    for (const row of rows) {
+      replayed.add(row.id)
+      if (!write(notificationFrame({
       version: NOTIFICATION_TRANSPORT_VERSION, kind: NOTIFICATION_TRANSPORT_KIND,
       eventId: row.id, orgId: row.notification.orgId, userId: row.userId,
       notificationId: row.notification.id, createdAt: row.createdAt.toISOString(),
-    }))
+      }))) break
+    }
+    return replayed
   }
 
   @Get()
