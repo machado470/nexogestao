@@ -4,8 +4,9 @@ import { RolesGuard } from '../auth/guards/roles.guard'
 import { Roles } from '../auth/decorators/roles.decorator'
 import { OperationalMonitoringService } from './operational-monitoring.service'
 import { OperationalIncidentsService } from './operational-incidents.service'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
 @Roles('ADMIN')
 @Controller('internal/operations')
 export class OperationsController {

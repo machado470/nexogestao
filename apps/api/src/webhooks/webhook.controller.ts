@@ -6,8 +6,9 @@ import { WebhookService } from './webhook.service'
 import { CreateWebhookDto } from './dto/create-webhook.dto'
 import { UpdateWebhookDto } from './dto/update-webhook.dto'
 import { WebhookDeliveriesQueryDto } from './dto/webhook-deliveries-query.dto'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
 @Controller('webhooks')
 export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
@@ -58,7 +59,7 @@ export class WebhookController {
     const data = await this.webhookService.replayFailedDelivery({
       orgId: req.user.orgId,
       deliveryId,
-      actorUserId: req.user?.id ?? 'unknown',
+      actorUserId: req.user.sub,
     })
     return { ok: true, data }
   }

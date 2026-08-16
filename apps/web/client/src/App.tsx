@@ -546,6 +546,7 @@ const BillingRoute = lazyProtectedPage(BillingPage, {
 });
 
 const OperationalCockpitRoute = lazyProtectedPage(OperationalCockpitPage, {
+  requiredRoles: ["ADMIN"],
   requireCompletedOnboarding: true,
 });
 

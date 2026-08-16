@@ -13,11 +13,11 @@ describe("OperationalCockpitPage selectors", () => {
 
   it("retorna apenas filas degradadas", () => {
     const list = getDegradedQueues([
-      { name: "a", status: "healthy" },
-      { name: "b", status: "degraded" },
-      { name: "c", status: "stalled" },
+      { queue: "a", degraded: false, waiting: 0, failed: 0 },
+      { queue: "b", degraded: true, waiting: 2, failed: 0 },
+      { queue: "c", degraded: true, waiting: 0, failed: 1 },
     ]);
-    expect(list.map(item => item.name)).toEqual(["b", "c"]);
+    expect(list.map(item => item.queue)).toEqual(["b", "c"]);
   });
 
   it("empty states permanecem vazios", () => {

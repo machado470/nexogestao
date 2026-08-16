@@ -7,10 +7,11 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module'
 import { FinanceModule } from '../finance/finance.module'
 import { RiskModule } from '../risk/risk.module'
 import { GovernanceModule } from '../governance/governance.module'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 
 @Module({
   imports: [PrismaModule, TimelineModule, WhatsAppModule, FinanceModule, RiskModule, GovernanceModule],
   controllers: [OperationalActionsController],
-  providers: [OperationalActionsService],
+  providers: [OperationalActionsService, ActiveUserGuard],
 })
 export class OperationalActionsModule {}
