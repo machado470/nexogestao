@@ -40,6 +40,19 @@ describe('NotificationsService persistent recipients', () => {
     }) }))
   })
 
+  it('preserva a notificação persistida quando Redis está indisponível', async () => {
+    prisma.user.findMany.mockResolvedValue([{ id: 'user-a' }])
+    prisma.notification.findUnique.mockResolvedValue(null)
+    prisma.notification.create.mockResolvedValue({
+      id: 'n1', orgId: 'org-a', createdAt: input.occurredAt,
+      recipients: [{ id: 'r1', userId: 'user-a', createdAt: input.occurredAt }],
+    })
+    transport.publish.mockResolvedValueOnce({ status: 'unavailable', subscriberCount: null })
+
+    await expect(service.createNotification(input)).resolves.toMatchObject({ id: 'n1' })
+    expect(transport.publish).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'r1' }))
+  })
+
   it('retry idempotente retorna o registro existente', async () => {
     prisma.user.findMany.mockResolvedValue([{ id: 'user-a' }])
     prisma.notification.findUnique.mockResolvedValueOnce(null)
