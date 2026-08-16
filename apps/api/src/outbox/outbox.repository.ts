@@ -36,14 +36,25 @@ export class OutboxRepository {
     })
   }
 
-  markFailed(input: { id: string; workerId: string; attempts: number; maxAttempts: number; error: string }) {
-    const definitive = input.attempts >= input.maxAttempts
-    const delayMs = Math.min(60_000, 1_000 * 2 ** Math.max(0, input.attempts - 1))
+  markRetry(input: { id: string; workerId: string; attempts: number; error: string; backoffBaseMs?: number }) {
+    const delayMs = Math.min(60_000, (input.backoffBaseMs ?? 1_000) * 2 ** Math.max(0, input.attempts - 1))
     return this.prisma.operationalOutboxEvent.updateMany({
       where: { id: input.id, status: 'PROCESSING', lockedBy: input.workerId },
       data: {
-        status: definitive ? 'FAILED' : 'RETRY',
+        status: 'RETRY',
         availableAt: new Date(Date.now() + delayMs),
+        lockedAt: null,
+        lockedBy: null,
+        lastError: input.error,
+      },
+    })
+  }
+
+  markFailed(input: { id: string; workerId: string; error: string }) {
+    return this.prisma.operationalOutboxEvent.updateMany({
+      where: { id: input.id, status: 'PROCESSING', lockedBy: input.workerId },
+      data: {
+        status: 'FAILED',
         lockedAt: null,
         lockedBy: null,
         lastError: input.error,

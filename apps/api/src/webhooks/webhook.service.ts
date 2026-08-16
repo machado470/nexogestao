@@ -149,6 +149,7 @@ export class WebhookService {
     endpointId: string
     eventType: string
     payload: Record<string, any>
+    idempotencyKey?: string
   }) {
     const delegate = this.webhookDeliveryDelegate
     if (!delegate) {
@@ -162,6 +163,18 @@ export class WebhookService {
         disabled: true,
       }
     }
+
+    if (input.idempotencyKey) return delegate.upsert({
+      where: { endpointId_idempotencyKey: { endpointId: input.endpointId, idempotencyKey: input.idempotencyKey } },
+      create: {
+        endpointId: input.endpointId,
+        eventType: input.eventType,
+        payload: input.payload,
+        idempotencyKey: input.idempotencyKey,
+        status: 'PENDING',
+      },
+      update: {},
+    })
 
     return delegate.create({
       data: {

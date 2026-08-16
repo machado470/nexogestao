@@ -10,7 +10,7 @@ describe('OutboxWorker', () => {
     const repository = {
       claimBatch: jest.fn().mockResolvedValue([event]),
       markProcessed: jest.fn().mockResolvedValue({ count: 1 }),
-      markFailed: jest.fn(),
+      markFailed: jest.fn(), markRetry: jest.fn(),
     }
     const webhooks = { dispatchTimelineEvent: jest.fn().mockResolvedValue(undefined) }
     const worker = new OutboxWorker(repository as any, webhooks as any, { get: jest.fn().mockReturnValue(undefined) } as any)
@@ -23,13 +23,13 @@ describe('OutboxWorker', () => {
   it('agenda retry com erro sanitizado sem marcar processado', async () => {
     const repository = {
       claimBatch: jest.fn().mockResolvedValue([event]), markProcessed: jest.fn(),
-      markFailed: jest.fn().mockResolvedValue({ count: 1 }),
+      markFailed: jest.fn(), markRetry: jest.fn().mockResolvedValue({ count: 1 }),
     }
     const webhooks = { dispatchTimelineEvent: jest.fn().mockRejectedValue(new Error('token=segredo timeout')) }
     const worker = new OutboxWorker(repository as any, webhooks as any, { get: jest.fn().mockReturnValue(undefined) } as any)
     await worker.tick()
     await worker.onApplicationShutdown()
     expect(repository.markProcessed).not.toHaveBeenCalled()
-    expect(repository.markFailed).toHaveBeenCalledWith(expect.objectContaining({ error: 'token=<redacted> timeout' }))
+    expect(repository.markRetry).toHaveBeenCalledWith(expect.objectContaining({ error: 'token=<redacted> timeout' }))
   })
 })

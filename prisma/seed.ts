@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { seedDemoOrg } from './seed-demo-org'
 import { seedPilot } from './seed-pilot'
+import { assertSeedAllowed } from './seed-guard'
 
 import bcrypt from 'bcryptjs'
 
@@ -118,12 +119,7 @@ async function runBasicSeed() {
 
 async function main() {
   const seedMode = env('SEED_MODE', 'pilot').toLowerCase()
-  const nodeEnv = env('NODE_ENV').toLowerCase()
-  if (nodeEnv === 'production' && env('ALLOW_PRODUCTION_SEED') !== 'I_UNDERSTAND_DATA_MUTATION') {
-    throw new Error(
-      'Seed bloqueada em produção. Use migrations no deploy; execução excepcional exige ALLOW_PRODUCTION_SEED=I_UNDERSTAND_DATA_MUTATION.',
-    )
-  }
+  assertSeedAllowed()
 
   if (seedMode === 'demo' || seedMode === 'demo-org') {
     await runDemoOrgSeed()
