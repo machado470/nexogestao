@@ -40,4 +40,9 @@ export class GovernanceReadController {
   async autoScore(@Req() req: any) {
     return this.read.getAutoScore(req.user.orgId)
   }
+
+  @Get('operational-state')
+  async operationalState(@Req() req: any) {
+    return this.read.getOperationalState(req.user.orgId)
+  }
 }

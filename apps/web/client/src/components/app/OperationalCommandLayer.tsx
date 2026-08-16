@@ -23,7 +23,8 @@ export type OperationalStateLevel =
   | "NORMAL"
   | "WARNING"
   | "RESTRICTED"
-  | "SUSPENDED";
+  | "SUSPENDED"
+  | "UNKNOWN";
 
 export type OperationalFlowStageState =
   | "done"
@@ -59,6 +60,11 @@ const operationalStateTone: Record<
     label: "Operação bloqueada",
     badgeTone: "danger",
     className: "border-[var(--danger)]/40 bg-[var(--danger)]/8",
+  },
+  UNKNOWN: {
+    label: "Estado não determinado",
+    badgeTone: "accent",
+    className: "border-[var(--border-subtle)]/75",
   },
 };
 
@@ -132,7 +138,7 @@ export function NexoGovernanceDecisionCard({
         <div className="min-w-0">
           <p className="nexo-overline">Comando operacional</p>
           <h3 className="mt-0.5 text-lg font-black uppercase leading-tight tracking-tight text-[var(--text-primary)]">
-            {level}
+            {level === "UNKNOWN" ? "Estado não determinado" : level}
           </h3>
           <p className="text-xs font-semibold text-[var(--text-secondary)]">
             {title}
