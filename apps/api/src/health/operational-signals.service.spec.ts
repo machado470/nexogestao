@@ -32,6 +32,34 @@ describe('OperationalSignalsService', () => {
     const result = await service.getNextBestAction(orgId)
     expect(result?.actionType).toBeTruthy()
     expect(result?.entityId).toBeTruthy()
+    expect(result?.routeHint).not.toContain('/internal/')
+    expect(result?.source).toBeTruthy()
+    expect(result?.detectedAt).toBeTruthy()
+  })
+
+  it('retorna null quando nenhuma ação real existe', async () => {
+    const emptyPrisma = {
+      charge: { findMany: jest.fn().mockResolvedValue([]) },
+      whatsAppMessage: { findMany: jest.fn().mockResolvedValue([]) },
+    }
+    const emptyDiagnostics = { runForOrg: jest.fn().mockResolvedValue({ findings: [] }) }
+    await expect(
+      new OperationalSignalsService(emptyPrisma as any, emptyDiagnostics as any)
+        .getNextBestAction('org-empty'),
+    ).resolves.toBeNull()
+  })
+
+  it('isola todas as consultas e sinais pelo tenant autenticado', async () => {
+    const service = new OperationalSignalsService(prisma, diagnostics as any)
+    const result = await service.listForOrg('org-a', 20)
+    expect(diagnostics.runForOrg).toHaveBeenLastCalledWith('org-a', 100)
+    expect(prisma.charge.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ orgId: 'org-a' }) }),
+    )
+    expect(prisma.whatsAppMessage.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ orgId: 'org-a' }) }),
+    )
+    expect(result.signals.every((signal: any) => signal.orgId === 'org-a')).toBe(true)
   })
 
   it('não retorna dados sensíveis', async () => {

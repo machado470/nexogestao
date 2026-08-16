@@ -11,7 +11,6 @@ import {
   TrendingDown,
   WalletCards,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -60,7 +59,6 @@ type OperationalSignal = {
   chargeId?: string | null;
   messageId?: string | null;
 };
-type NextBestActionSignal = OperationalSignal & { reason?: string };
 type AttentionItem = {
   id: string;
   severity: Severity;
@@ -168,7 +166,7 @@ type DashboardAlerts = {
  * Fonte de dados do cockpit operacional:
  * - dashboard.kpis: volumes, comparação histórica, WhatsApp Signals e governança quando o BFF entregar.
  * - dashboard.alerts: alertas financeiros/O.S. e fila transversal leve.
- * - /internal/operational-signals: riscos operacionais e próxima melhor ação do motor existente.
+ * - dashboard.operationalSignals: riscos e próxima ação via BFF autenticado.
  * - nexo.timeline.listByOrg: prova operacional recente; sem eventos, o dashboard declara ausência em vez de inventar tendência.
  * Tudo abaixo é cálculo de priorização no frontend, preservando contratos, rotas, API e Prisma.
  */
@@ -341,13 +339,6 @@ function compactIncidentTitle(title: string) {
 
 function extractFirstNumber(value: string) {
   return value.match(/(?:R\$\s*)?[0-9][0-9.]*?(?:,[0-9]{2})?/)?.[0];
-}
-
-function normalizeOperationLevel(value: string): OperationalStateLevel | null {
-  const normalized = value.toUpperCase();
-  return ["NORMAL", "WARNING", "RESTRICTED", "SUSPENDED"].includes(normalized)
-    ? (normalized as OperationalStateLevel)
-    : null;
 }
 
 function formatEventDateTime(value: unknown) {
@@ -788,28 +779,15 @@ export default function ExecutiveDashboard() {
       { limit: 10 },
       { enabled: isAuthenticated, retry: false }
     );
-  const operationalSignalsQuery = useQuery({
-    queryKey: ["internal-operational-signals"],
-    queryFn: async () => {
-      const response = await fetch("/internal/operational-signals?limit=8", {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("signals fetch failed");
-      return (await response.json()) as { signals?: OperationalSignal[] };
-    },
+  const operationalStateQuery = trpc.dashboard.operationalState.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
   });
-  const nextBestActionQuery = useQuery({
-    queryKey: ["internal-operational-signals-next-best-action"],
-    queryFn: async () => {
-      const response = await fetch(
-        "/internal/operational-signals/next-best-action",
-        { credentials: "include" }
-      );
-      if (!response.ok) throw new Error("next best action fetch failed");
-      return (await response.json()) as NextBestActionSignal | null;
-    },
+  const operationalSignalsQuery = trpc.dashboard.operationalSignals.useQuery(
+    { limit: 8 },
+    { enabled: isAuthenticated, retry: false }
+  );
+  const nextBestActionQuery = trpc.dashboard.nextBestAction.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
   });
@@ -849,21 +827,11 @@ export default function ExecutiveDashboard() {
   const overdueCharges = alerts.overdueCharges?.count ?? 0;
   const missingCharges = alerts.doneOrdersWithoutCharge?.count ?? 0;
   const timelineEvents = normalizeTimelineEvents(timelineQuery.data);
-  const governance = asRecord(metrics.governance);
-  const governanceLevel = normalizeOperationLevel(
-    readString(governance, "level")
-  );
-  const operationLevel: OperationalStateLevel = pageError
-    ? "SUSPENDED"
-    : (governanceLevel ??
-      (criticalCount > 0
-        ? "RESTRICTED"
-        : attention.length > 0
-          ? "WARNING"
-          : "NORMAL"));
-  const operationStateFallback = governanceLevel
-    ? "Estado retornado pela governança."
-    : "Estado operacional não retornado pela fonte atual; nível derivado de alertas e sinais disponíveis.";
+  const operationLevel: OperationalStateLevel =
+    operationalStateQuery.data?.operationalState ?? "UNKNOWN";
+  const operationStateReason = operationalStateQuery.isError
+    ? "Não foi possível consultar o estado operacional."
+    : operationalStateQuery.data?.reason ?? "Estado operacional sem evidência disponível.";
 
   const flow: FlowStage[] = [
     {
@@ -969,7 +937,9 @@ export default function ExecutiveDashboard() {
           ? "blocked"
           : operationLevel === "WARNING"
             ? "warning"
-            : "done",
+            : operationLevel === "NORMAL"
+              ? "done"
+              : "idle",
     },
   ];
   const bottleneck =
@@ -997,22 +967,22 @@ export default function ExecutiveDashboard() {
   const operationStateMetrics = [
     {
       label: "O.S. atrasadas",
-      value: String(overdueOrders),
+      value: alertsQuery.isError ? "—" : String(overdueOrders),
       tone: overdueOrders > 0 ? "danger" : "neutral",
     },
     {
       label: "Cobranças vencidas",
-      value: String(overdueCharges),
+      value: alertsQuery.isError ? "—" : String(overdueCharges),
       tone: overdueCharges > 0 ? "danger" : "neutral",
     },
     {
       label: "Riscos críticos",
-      value: String(criticalCount),
+      value: operationalSignalsQuery.isError ? "—" : String(criticalCount),
       tone: criticalCount > 0 ? "warning" : "neutral",
     },
     {
       label: "Gargalo",
-      value: bottleneck?.label ?? "sem gargalo",
+      value: alertsQuery.isError ? "não calculado" : (bottleneck?.label ?? "sem gargalo"),
       tone: bottleneck ? "warning" : "neutral",
     },
   ] satisfies Array<{
@@ -1039,80 +1009,6 @@ export default function ExecutiveDashboard() {
     true
   );
   const nextBestAction = nextBestActionQuery.data;
-  const highestValueOverdueCharge = (alerts.overdueCharges?.items ?? [])
-    .slice()
-    .sort(
-      (a, b) =>
-        readNumber(asRecord(b), "amountCents") -
-        readNumber(asRecord(a), "amountCents")
-    )[0];
-  const highestValueChargeRecord = asRecord(highestValueOverdueCharge);
-  const highestValueChargeCustomer = readString(
-    asRecord(highestValueChargeRecord.customer),
-    "name"
-  );
-  const firstQueueItem = queue[0];
-  const fallbackAction: RecommendedAction | null = highestValueOverdueCharge
-    ? {
-        title: `Cobrar ${highestValueChargeCustomer || "cliente em atraso"} — ${formatCurrencyFromCents(readNumber(highestValueChargeRecord, "amountCents"))}`,
-        entity: highestValueChargeCustomer || "Cobrança vencida",
-        reason:
-          "Maior cobrança vencida retornada pela leitura financeira atual.",
-        impact:
-          "Ação direta sobre o maior valor parado reduz pressão imediata no caixa.",
-        path: "/finances?view=charges&status=overdue",
-        ctaLabel: "Cobrar carteira vencida",
-        safetyNote:
-          "Fallback local baseado em alertas financeiros já carregados; não executa cobrança automática.",
-        primaryValue: formatCurrencyFromCents(
-          readNumber(highestValueChargeRecord, "amountCents")
-        ),
-      }
-    : overdueOrders > 0
-      ? {
-          title:
-            firstQueueItem?.type === "O.S. atrasada"
-              ? `Destravar ${firstQueueItem.entity}`
-              : "Revisar O.S. atrasadas",
-          entity: firstQueueItem?.entity ?? "Ordens de serviço",
-          reason: `${overdueOrders} O.S. atrasada(s) precisam avançar antes de novas janelas.`,
-          impact:
-            "Destravar a execução protege agenda, cliente e faturamento do serviço.",
-          path:
-            firstQueueItem?.type === "O.S. atrasada"
-              ? firstQueueItem.path
-              : "/service-orders?status=attention",
-          ctaLabel: "Revisar O.S. atrasadas",
-          safetyNote:
-            "Fallback local baseado na fila operacional; não altera status sem ação do usuário.",
-          primaryValue: `${overdueOrders} O.S.`,
-        }
-      : firstQueueItem
-        ? {
-            title: `${firstQueueItem.ctaLabel} — ${firstQueueItem.entity}`,
-            entity: firstQueueItem.entity,
-            reason: `${firstQueueItem.type}: ${firstQueueItem.context}`,
-            impact: `${firstQueueItem.responsibleMissing ? "Responsável não informado" : `Responsável: ${firstQueueItem.responsible}`}. Status atual: ${presentationStatusLabel(firstQueueItem.status)}.`,
-            path: firstQueueItem.path,
-            ctaLabel: firstQueueItem.ctaLabel,
-            safetyNote:
-              "Fallback local da fila operacional; abre o módulo responsável para validação.",
-            primaryValue: firstQueueItem.dueLabel || firstQueueItem.status,
-          }
-        : failedMessages > 0
-          ? {
-              title: "Revisar WhatsApp",
-              entity: "Canal WhatsApp",
-              reason: `${failedMessages} mensagem(ns) com falha podem interromper o contato com clientes.`,
-              impact:
-                "Restabelecer a comunicação evita perda de confirmações e retornos.",
-              path: "/whatsapp",
-              ctaLabel: "Revisar WhatsApp",
-              safetyNote:
-                "Fallback local baseado em métricas de comunicação; abre WhatsApp sem enviar mensagens automaticamente.",
-              primaryValue: `${failedMessages} falha(s)`,
-            }
-          : null;
   const recommendedAction: RecommendedAction | null = nextBestAction
     ? {
         title: formatCurrencyMentions(nextBestAction.title),
@@ -1123,24 +1019,17 @@ export default function ExecutiveDashboard() {
             : nextBestAction.messageId
               ? `Mensagem #${nextBestAction.messageId}`
               : nextBestAction.area || "Operação",
-        reason: formatCurrencyMentions(
-          nextBestAction.reason ??
-            nextBestAction.summary ??
-            "Prioridade indicada pelo motor operacional."
-        ),
-        impact: formatCurrencyMentions(
-          nextBestAction.impact ??
-            "Valide o impacto no módulo responsável antes de executar."
-        ),
-        path: buildSignalPath(nextBestAction),
-        ctaLabel: nextBestAction.suggestedAction ?? "Abrir ação prioritária",
+        reason: formatCurrencyMentions(nextBestAction.reason),
+        impact: formatCurrencyMentions(nextBestAction.impact),
+        path: nextBestAction.routeHint,
+        ctaLabel: nextBestAction.suggestedAction,
         safetyNote:
           "Sinal retornado pelo motor operacional; execução permanece no módulo de origem.",
         primaryValue: extractFirstNumber(
-          `${nextBestAction.title} ${nextBestAction.summary ?? ""} ${nextBestAction.impact ?? ""}`
+          `${nextBestAction.title} ${nextBestAction.impact}`
         ),
       }
-    : fallbackAction;
+    : null;
   const availableComparisons = pulseComparisons.flatMap(
     ([label, key, lowerIsBetter]) => {
       const value = readNullableNumber(comparison, key);
@@ -1303,7 +1192,9 @@ export default function ExecutiveDashboard() {
         ? "WARNING"
         : operationLevel === "RESTRICTED"
           ? "RESTRICTED"
-          : "SUSPENDED";
+          : operationLevel === "SUSPENDED"
+            ? "SUSPENDED"
+            : "Estado não determinado";
   const moneyAtRisk = formatCurrencyFromCents(
     (alerts.overdueCharges?.totalAmountCents ?? 0) +
       (alerts.doneOrdersWithoutCharge?.totalAmountCents ?? 0)
@@ -1330,17 +1221,24 @@ export default function ExecutiveDashboard() {
               Estado: {statusLabel}
             </AppContextChip>
             <AppContextChip tone={criticalCount > 0 ? "danger" : "neutral"}>
-              {criticalCount}{" "}
-              {criticalCount === 1 ? "risco crítico" : "riscos críticos"}
+              {operationalSignalsQuery.isError
+                ? "Riscos críticos indisponíveis"
+                : `${criticalCount} ${criticalCount === 1 ? "risco crítico" : "riscos críticos"}`}
             </AppContextChip>
             <AppContextChip tone={overdueCharges > 0 ? "warning" : "neutral"}>
-              {overdueCharges} cobranças vencidas
+              {alertsQuery.isError
+                ? "Cobranças vencidas indisponíveis"
+                : `${overdueCharges} cobranças vencidas`}
             </AppContextChip>
             <AppContextChip tone={overdueOrders > 0 ? "warning" : "neutral"}>
-              {overdueOrders} O.S. atrasadas
+              {alertsQuery.isError
+                ? "O.S. atrasadas indisponíveis"
+                : `${overdueOrders} O.S. atrasadas`}
             </AppContextChip>
             <AppContextChip tone={bottleneck ? "warning" : "neutral"}>
-              Gargalo: {bottleneck?.label ?? "sem gargalo calculável"}
+              Gargalo: {alertsQuery.isError
+                ? "não calculado"
+                : bottleneck?.label ?? "sem gargalo calculável"}
             </AppContextChip>
           </>
         }
@@ -1407,7 +1305,9 @@ export default function ExecutiveDashboard() {
                   AÇÃO PRIORITÁRIA
                 </p>
                 <strong className="mt-1 block text-lg text-[var(--text-primary)]">
-                  {recommendedAction?.title ?? "Monitorar operação"}
+                  {nextBestActionQuery.isError
+                    ? "Ação prioritária indisponível"
+                    : recommendedAction?.title ?? "Nenhuma ação prioritária retornada"}
                 </strong>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   {recommendedAction?.impact ??
@@ -1421,14 +1321,15 @@ export default function ExecutiveDashboard() {
             <NexoGovernanceDecisionCard
               level={operationLevel}
               title="Estado operacional"
-              reason={attention[0]?.reason ?? operationStateFallback}
+              reason={operationStateReason}
               impact={
-                attention[0]?.impact ??
-                "Fluxo sem bloqueio crítico retornado; acompanhe fila e Timeline."
+                operationalStateQuery.data?.evidenceAt
+                  ? `Evidência registrada em ${formatEventDateTime(operationalStateQuery.data.evidenceAt)}.`
+                  : "Nenhuma evidência operacional confiável disponível."
               }
-              detailsLabel={attention[0]?.ctaLabel ?? "Abrir governança"}
+              detailsLabel="Abrir governança"
               metrics={operationStateMetrics}
-              onDetails={() => navigate(attention[0]?.path ?? "/governance")}
+              onDetails={() => navigate("/governance")}
             />
 
             <NexoEvidenceTimeline
@@ -1465,7 +1366,13 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Ação contextual mais importante retornada pelos sinais operacionais."
           >
-            {recommendedAction ? (
+            {nextBestActionQuery.isError ? (
+              <AppPageErrorState
+                title="Não foi possível consultar a próxima ação."
+                description="A fonte de ações está indisponível; nenhuma recomendação foi fabricada."
+                onAction={() => void nextBestActionQuery.refetch()}
+              />
+            ) : recommendedAction ? (
               <NexoPriorityPanel
                 title={recommendedAction.title}
                 entity={recommendedAction.entity}
@@ -1475,20 +1382,12 @@ export default function ExecutiveDashboard() {
                 primaryValue={recommendedAction.primaryValue}
                 primaryActionLabel={recommendedAction.ctaLabel}
                 onPrimaryAction={() => navigate(recommendedAction.path)}
-                secondaryActionLabel={
-                  nextBestActionQuery.isError ? "Tentar novamente" : undefined
-                }
-                onSecondaryAction={
-                  nextBestActionQuery.isError
-                    ? () => void nextBestActionQuery.refetch()
-                    : undefined
-                }
                 className="border-[var(--accent-primary)]/55 bg-[var(--accent-soft)]/50"
               />
             ) : (
               <AppPageEmptyState
-                title="Nenhuma Próxima Melhor Ação disponível"
-                description="A leitura atual não identificou urgências acionáveis; nenhuma ação artificial foi criada."
+                title="Nenhuma ação prioritária encontrada."
+                description="Nenhuma ação prioritária retornada para o período."
               />
             )}
           </AppSectionBlock>

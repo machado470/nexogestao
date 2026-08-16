@@ -76,14 +76,19 @@ export class GovernanceReadService {
     const [lastRun, peopleAgg] = await Promise.all([
       this.getLatestRun(orgId),
       this.prisma.person.aggregate({
-        where: { orgId },
+        where: { orgId, operationalStateUpdatedAt: { not: null } },
         _count: { id: true },
-        _avg: { riskScore: true },
+        _avg: { operationalRiskScore: true },
       }),
     ])
 
     const peopleCount = peopleAgg._count.id ?? 0
-    const avgRiskScore = Math.round(peopleAgg._avg.riskScore ?? 0)
+    const hasCompletedRun = Boolean(lastRun && lastRun.evaluated > 0)
+    const hasEvaluablePeople =
+      peopleCount > 0 && peopleAgg._avg.operationalRiskScore != null
+    const avgRiskScore = hasEvaluablePeople
+      ? Math.round(peopleAgg._avg.operationalRiskScore as number)
+      : null
 
     const restrictedCount = await this.prisma.person.count({
       where: { orgId, operationalState: 'RESTRICTED' },
@@ -103,12 +108,15 @@ export class GovernanceReadService {
     })
 
     const governanceScore =
-      lastRun?.institutionalRiskScore != null
+      hasCompletedRun
         ? Math.max(0, 100 - lastRun.institutionalRiskScore)
-        : Math.max(0, 100 - avgRiskScore)
+        : hasEvaluablePeople
+          ? Math.max(0, 100 - (avgRiskScore as number))
+          : null
 
-    const level =
-      governanceScore >= 90
+    const level = governanceScore == null
+      ? null
+      : governanceScore >= 90
         ? 'A'
         : governanceScore >= 75
           ? 'B'
@@ -122,16 +130,25 @@ export class GovernanceReadService {
       score: governanceScore,
       level,
       lastUpdated: lastRun?.createdAt ?? null,
-      source: lastRun ? 'GOVERNANCE_RUN' : 'LIVE_FALLBACK',
+      source: hasCompletedRun
+        ? 'GOVERNANCE_RUN'
+        : hasEvaluablePeople
+          ? 'RISK_ENGINE'
+          : 'NO_DATA',
+      availability: governanceScore == null ? 'NO_DATA' : 'AVAILABLE',
+      reason:
+        governanceScore == null
+          ? 'Nenhuma execução concluída com pessoas avaliadas'
+          : null,
       factors: [
         {
           name: 'Risco institucional',
-          value: lastRun?.institutionalRiskScore ?? avgRiskScore,
+          value: hasCompletedRun ? lastRun.institutionalRiskScore : avgRiskScore,
           reference: 'Quanto menor, melhor.',
         },
         {
           name: 'Pessoas avaliadas',
-          value: lastRun?.evaluated ?? peopleCount,
+          value: hasCompletedRun ? lastRun.evaluated : peopleCount,
           reference: 'Base considerada na leitura atual.',
         },
         {
@@ -150,6 +167,43 @@ export class GovernanceReadService {
           reference: 'Carga corretiva operacional ativa.',
         },
       ],
+    }
+  }
+
+  /**
+   * Estado executivo autoritativo. A nota A-E não participa desta decisão:
+   * somente uma execução concluída, com população avaliada, permite consolidar
+   * o pior estado operacional persistido naquele ciclo.
+   */
+  async getOperationalState(orgId: string) {
+    const lastRun = await this.getLatestRun(orgId)
+
+    if (!lastRun || lastRun.evaluated <= 0) {
+      return {
+        operationalState: 'UNKNOWN' as const,
+        source: 'NO_DATA' as const,
+        evidenceAt: null,
+        availability: 'NO_DATA' as const,
+        reason: 'Nenhuma avaliação operacional concluída com dados avaliáveis',
+        evaluatedRecords: 0,
+      }
+    }
+
+    const operationalState = lastRun.suspendedCount > 0
+      ? 'SUSPENDED'
+      : lastRun.restrictedCount > 0
+        ? 'RESTRICTED'
+        : lastRun.warnings > 0
+          ? 'WARNING'
+          : 'NORMAL'
+
+    return {
+      operationalState,
+      source: 'GOVERNANCE_RUN' as const,
+      evidenceAt: lastRun.finishedAt,
+      availability: 'AVAILABLE' as const,
+      reason: `Execução de governança concluída com ${lastRun.evaluated} registro(s) avaliado(s)`,
+      evaluatedRecords: lastRun.evaluated,
     }
   }
 }

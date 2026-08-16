@@ -109,6 +109,32 @@ export class OperationalSignalsService {
     const { signals } = await this.listForOrg(orgId, 20)
     const top = signals[0]
     if (!top) return null
-    return { signalId: top.id, actionType: top.actionType, title: top.suggestedAction, reason: top.reason, impact: top.impact, entityType: top.entityType, entityId: top.entityId, routeHint: `/internal/${top.area.toLowerCase()}`, actionHint: top.suggestedAction, metadata: { severity: top.severity, priorityScore: top.priorityScore } }
+    const routeHint = top.messageId
+      ? '/whatsapp'
+      : top.chargeId
+        ? '/finances?view=charges'
+        : top.serviceOrderId
+          ? `/service-orders?id=${top.serviceOrderId}`
+          : top.area === 'GOVERNANCE' || top.area === 'RISK'
+            ? '/governance'
+            : '/timeline'
+    return {
+      signalId: top.id,
+      actionType: top.actionType,
+      title: top.title,
+      reason: top.reason,
+      impact: top.impact,
+      suggestedAction: top.suggestedAction,
+      area: top.area,
+      entityType: top.entityType,
+      entityId: top.entityId,
+      serviceOrderId: top.serviceOrderId,
+      chargeId: top.chargeId,
+      messageId: top.messageId,
+      routeHint,
+      source: top.source,
+      detectedAt: top.detectedAt,
+      metadata: { severity: top.severity, priorityScore: top.priorityScore },
+    }
   }
 }

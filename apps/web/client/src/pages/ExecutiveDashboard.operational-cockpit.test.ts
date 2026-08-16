@@ -51,9 +51,11 @@ describe("ExecutiveDashboard decision center", () => {
   });
 
   it("uses the real next best action endpoint and an honest empty state", () => {
-    expect(source).toContain("/internal/operational-signals/next-best-action");
-    expect(source).toContain("Nenhuma Próxima Melhor Ação disponível");
-    expect(source).toContain("nenhuma ação artificial foi criada");
+    expect(source).toContain("trpc.dashboard.nextBestAction.useQuery");
+    expect(source).toContain("Nenhuma ação prioritária encontrada.");
+    expect(source).toContain("Nenhuma ação prioritária retornada para o período.");
+    expect(source).not.toContain("Monitorar operação");
+    expect(source).not.toContain("fetch(\"/internal");
   });
 
   it("gives every KPI context and CTA routes to its owning module", () => {
@@ -135,6 +137,23 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain(
       "A operação não cria alertas ou recomendações fictícias"
     );
+  });
+
+  it("keeps governance grade separate from authoritative operational state", () => {
+    expect(source).toContain("trpc.dashboard.operationalState.useQuery");
+    expect(source).toContain('?? "UNKNOWN"');
+    expect(source).toContain("Estado não determinado");
+    expect(source).not.toContain("normalizeOperationLevel");
+    expect(source).not.toMatch(/pageError\s*\?\s*"SUSPENDED"/);
+    expect(source).not.toMatch(/attention\.length[\s\S]{0,100}"NORMAL"/);
+  });
+
+  it("diferencia erro de ação, vazio e ação real sem CTA fictício", () => {
+    expect(source).toContain("Não foi possível consultar a próxima ação.");
+    expect(source).toContain("nextBestAction.routeHint");
+    expect(source).toContain("nextBestAction.suggestedAction");
+    expect(source).not.toContain("Abrir ação prioritária");
+    expect(source).not.toContain("fallbackAction");
   });
 
   it("does not keep the previous mocked operational fixtures", () => {

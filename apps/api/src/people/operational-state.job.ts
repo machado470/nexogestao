@@ -88,6 +88,9 @@ export class OperationalStateJob {
             to: nextState,
             riskScore,
             source: 'OPERATIONAL_STATE_JOB',
+            reason: 'Risco operacional calculado para pessoa ativa',
+            evaluatedRecords: 1,
+            evaluatedAt: now.toISOString(),
           },
         })
       }

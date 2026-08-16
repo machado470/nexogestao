@@ -8,6 +8,59 @@ import {
   markNotificationAsRead,
 } from "../_core/operationalNotifications";
 
+const operationalStateSchema = z.object({
+  operationalState: z.enum([
+    "NORMAL",
+    "WARNING",
+    "RESTRICTED",
+    "SUSPENDED",
+    "UNKNOWN",
+  ]),
+  source: z.enum([
+    "GOVERNANCE_RUN",
+    "RISK_ENGINE",
+    "PERSISTED_OPERATIONAL_STATE",
+    "NO_DATA",
+    "UNAVAILABLE",
+  ]),
+  evidenceAt: z.union([z.string(), z.date()]).nullable(),
+  availability: z.enum(["AVAILABLE", "NO_DATA", "UNAVAILABLE"]),
+  reason: z.string().nullable(),
+  evaluatedRecords: z.number().int().nonnegative(),
+});
+
+const operationalSignalSchema = z.object({
+  id: z.string(),
+  severity: z.enum(["CRITICAL", "WARNING", "INFO"]),
+  area: z.string(),
+  title: z.string(),
+  summary: z.string().optional(),
+  impact: z.string().optional(),
+  suggestedAction: z.string().optional(),
+  serviceOrderId: z.string().nullable().optional(),
+  chargeId: z.string().nullable().optional(),
+  messageId: z.string().nullable().optional(),
+}).passthrough();
+
+const nextBestActionSchema = z.object({
+  signalId: z.string(),
+  actionType: z.string(),
+  title: z.string(),
+  reason: z.string(),
+  impact: z.string(),
+  suggestedAction: z.string(),
+  area: z.string(),
+  entityType: z.string(),
+  entityId: z.string(),
+  serviceOrderId: z.string().nullable(),
+  chargeId: z.string().nullable(),
+  messageId: z.string().nullable(),
+  routeHint: z.string().startsWith("/"),
+  source: z.string(),
+  detectedAt: z.string(),
+  metadata: z.record(z.string(), z.unknown()),
+});
+
 export const dashboardRouter = router({
   status: protectedProcedure.query(async () => ({
     ok: true,
@@ -100,6 +153,39 @@ export const dashboardRouter = router({
       method: "GET",
     });
     return raw?.data ?? raw ?? {};
+  }),
+
+  operationalState: protectedProcedure.query(async ({ ctx }) => {
+    const raw = await nexoFetch<any>(ctx, "/governance/operational-state", {
+      method: "GET",
+    });
+    return operationalStateSchema.parse(raw?.data ?? raw);
+  }),
+
+  operationalSignals: protectedProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(50).default(8) }).optional())
+    .query(async ({ ctx, input }) => {
+      const limit = input?.limit ?? 8;
+      const raw = await nexoFetch<any>(
+        ctx,
+        `/internal/operational-signals?limit=${limit}`,
+        { method: "GET" }
+      );
+      return z.object({
+        generatedAt: z.string(),
+        totalSignals: z.number().int().nonnegative(),
+        signals: z.array(operationalSignalSchema),
+      }).passthrough().parse(raw?.data ?? raw);
+    }),
+
+  nextBestAction: protectedProcedure.query(async ({ ctx }) => {
+    const raw = await nexoFetch<any>(
+      ctx,
+      "/internal/operational-signals/next-best-action",
+      { method: "GET" }
+    );
+    const payload = raw?.data ?? raw;
+    return payload === null ? null : nextBestActionSchema.parse(payload);
   }),
 
   revenueTrend: protectedProcedure.query(async ({ ctx }) => {
