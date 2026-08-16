@@ -2,7 +2,16 @@ import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common'
 import { NotificationTransportEvent, toBrowserEvent } from './notification-transport'
 
 export type StreamWriter = (frame: string) => boolean
-type Connection = { id: number; orgId: string; userId: string; write: StreamWriter; close: () => void; closed: boolean }
+const MAX_PENDING_EVENTS = 100
+type Connection = {
+  id: number; orgId: string; userId: string; write: StreamWriter; close: () => void; closed: boolean
+  replaying: boolean; pending: NotificationTransportEvent[]; overflowed: boolean
+}
+
+export type StreamRegistration = {
+  remove: () => void
+  finishReplay: (replayedEventIds: ReadonlySet<string>) => boolean
+}
 
 export function notificationFrame(event: NotificationTransportEvent) {
   return `id: ${event.eventId}\nevent: ${event.kind}\ndata: ${JSON.stringify(toBrowserEvent(event))}\n\n`
@@ -20,14 +29,33 @@ export class NotificationStreamHub implements OnApplicationShutdown {
     const key = `${orgId}\0${userId}`
     const set = this.connections.get(key) ?? new Set<Connection>()
     if (set.size >= this.maxPerUser) return null
-    const connection: Connection = { id: this.nextId++, orgId, userId, write, close, closed: false }
+    const connection: Connection = {
+      id: this.nextId++, orgId, userId, write, close, closed: false,
+      replaying: true, pending: [], overflowed: false,
+    }
     set.add(connection); this.connections.set(key, set)
     this.logger.log(`Stream aberto; conexões=${this.count()}`)
-    return () => {
+    const remove = () => {
       if (connection.closed) return
-      connection.closed = true; set.delete(connection)
+      connection.closed = true; connection.pending.length = 0; set.delete(connection)
       if (!set.size) this.connections.delete(key)
       this.logger.log(`Stream encerrado; conexões=${this.count()}`)
+    }
+    return {
+      remove,
+      finishReplay: (replayedEventIds: ReadonlySet<string>) => {
+        if (connection.closed) return false
+        connection.replaying = false
+        if (connection.overflowed) { remove(); return false }
+        const pending = connection.pending
+          .filter(event => !replayedEventIds.has(event.eventId))
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.eventId.localeCompare(b.eventId))
+        connection.pending = []
+        for (const event of pending) {
+          if (!this.write(connection, notificationFrame(event))) return false
+        }
+        return true
+      },
     }
   }
 
@@ -36,8 +64,26 @@ export class NotificationStreamHub implements OnApplicationShutdown {
     if (!set) return
     for (const connection of [...set]) {
       if (connection.closed) continue
-      try { connection.write(notificationFrame(event)) } catch { connection.close() }
+      if (connection.replaying) {
+        if (connection.pending.length >= MAX_PENDING_EVENTS) connection.overflowed = true
+        else connection.pending.push(event)
+        continue
+      }
+      this.write(connection, notificationFrame(event))
     }
+  }
+
+  private write(connection: Connection, frame: string) {
+    try {
+      if (connection.write(frame)) return true
+    } catch { /* close below */ }
+    connection.closed = true
+    connection.pending.length = 0
+    const set = this.connections.get(`${connection.orgId}\0${connection.userId}`)
+    set?.delete(connection)
+    if (set && !set.size) this.connections.delete(`${connection.orgId}\0${connection.userId}`)
+    try { connection.close() } catch { /* socket already closed */ }
+    return false
   }
 
   count() { return [...this.connections.values()].reduce((total, set) => total + set.size, 0) }
