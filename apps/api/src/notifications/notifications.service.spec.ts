@@ -7,6 +7,7 @@ const prisma = {
   notificationRecipient: { findMany: jest.fn(), count: jest.fn(), updateMany: jest.fn() },
 }
 const queue = { addJob: jest.fn() }
+const transport = { publish: jest.fn().mockResolvedValue(true) }
 const input: CreateNotificationInput = {
   orgId: 'org-a', eventKey: 'customer.created:c1', type: 'CUSTOMER_CREATED',
   title: 'Cliente criado', message: 'Cliente criado.', severity: 'INFO', source: 'customers',
@@ -18,7 +19,7 @@ describe('NotificationsService persistent recipients', () => {
   let service: NotificationsService
   beforeEach(() => {
     jest.clearAllMocks()
-    service = new NotificationsService(prisma as never, queue as never)
+    service = new NotificationsService(prisma as never, queue as never, transport as never)
   })
 
   it('rejeita destinatário inativo ou de outro tenant', async () => {

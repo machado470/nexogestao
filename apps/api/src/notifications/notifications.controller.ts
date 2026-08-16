@@ -1,12 +1,85 @@
-import { Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common'
+import { Controller, Get, Header, Param, Patch, Post, Query, Request, Res, UseGuards } from '@nestjs/common'
+import type { Response } from 'express'
 import { NotificationsService } from './notifications.service'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { ActiveUserGuard } from '../auth/guards/active-user.guard'
+import { PrismaService } from '../prisma/prisma.service'
+import { heartbeatFrame, NotificationStreamHub, notificationFrame } from './notification-stream-hub.service'
+import { isSafeLastEventId, NOTIFICATION_TRANSPORT_KIND, NOTIFICATION_TRANSPORT_VERSION } from './notification-transport'
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard, ActiveUserGuard)
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly prisma: PrismaService,
+    private readonly hub: NotificationStreamHub,
+  ) {}
+
+  @Get('stream')
+  @Header('Content-Type', 'text/event-stream')
+  async stream(@Request() req, @Res() res: Response) {
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Content-Encoding': 'identity',
+    })
+    res.flushHeaders()
+    const orgId = req.user.orgId as string
+    const userId = req.user.sub as string
+    const marker = req.headers['last-event-id']
+    const write = (frame: string) => !res.destroyed && res.write(frame)
+    const cleanupHub = this.hub.add(orgId, userId, write, () => res.end())
+    if (!cleanupHub) { res.end(); return }
+    let closed = false
+    let heartbeat: NodeJS.Timeout | undefined
+    let revalidate: NodeJS.Timeout | undefined
+    let expiry: NodeJS.Timeout | undefined
+    const close = () => {
+      if (closed) return
+      closed = true
+      if (heartbeat) clearInterval(heartbeat)
+      if (revalidate) clearInterval(revalidate)
+      if (expiry) clearTimeout(expiry)
+      cleanupHub()
+      if (!res.writableEnded) res.end()
+    }
+    req.once('close', close); res.once('error', close)
+
+    await this.replay(orgId, userId, marker, write)
+    heartbeat = setInterval(() => { try { write(heartbeatFrame()) } catch { close() } }, 25_000)
+    revalidate = setInterval(async () => {
+      const active = await this.prisma.user.count({ where: { id: userId, orgId, active: true } }).catch(() => 0)
+      if (!active) close()
+    }, 25_000)
+    const expiresIn = Math.max(0, Number(req.user.exp ?? 0) * 1000 - Date.now())
+    expiry = setTimeout(close, Math.min(expiresIn || 1, 2_147_483_647))
+  }
+
+  private async replay(orgId: string, userId: string, marker: unknown, write: (frame: string) => boolean) {
+    if (marker === undefined) { write('event: ready\ndata: {"kind":"ready"}\n\n'); return }
+    if (!isSafeLastEventId(marker)) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return }
+    const cursor = await this.prisma.notificationRecipient.findFirst({
+      where: { id: marker, userId, notification: { orgId } }, select: { id: true, createdAt: true },
+    })
+    if (!cursor) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return }
+    const rows = await this.prisma.notificationRecipient.findMany({
+      where: { userId, notification: { orgId }, OR: [
+        { createdAt: { gt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, id: { gt: cursor.id } },
+      ] },
+      select: { id: true, userId: true, createdAt: true, notification: { select: { id: true, orgId: true } } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 101,
+    })
+    if (rows.length > 100) { write('event: resync\ndata: {"kind":"resync"}\n\n'); return }
+    for (const row of rows) write(notificationFrame({
+      version: NOTIFICATION_TRANSPORT_VERSION, kind: NOTIFICATION_TRANSPORT_KIND,
+      eventId: row.id, orgId: row.notification.orgId, userId: row.userId,
+      notificationId: row.notification.id, createdAt: row.createdAt.toISOString(),
+    }))
+  }
 
   @Get()
   getMyNotifications(

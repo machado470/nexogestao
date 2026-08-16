@@ -10,6 +10,8 @@ import { PrismaService } from '../prisma/prisma.service'
 import { QueueService } from '../queue/queue.service'
 import { QUEUE_NAMES } from '../queue/queue.constants'
 import { isSafeNotificationRouteHint } from '@nexogestao/common'
+import { NotificationPubSubService } from './notification-pubsub.service'
+import { NOTIFICATION_TRANSPORT_KIND, NOTIFICATION_TRANSPORT_VERSION } from './notification-transport'
 
 export type NotificationAudience =
   | { kind: 'user'; userId: string }
@@ -78,6 +80,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queueService: QueueService,
+    private readonly transport: NotificationPubSubService,
   ) {}
 
   async enqueueNotification(input: CreateNotificationInput) {
@@ -107,14 +110,16 @@ export class NotificationsService {
         ? existing.recipients.map(({ userId }) => userId)
         : await this.resolveAudience(input.orgId, input.audience)
       const hash = payloadHash(input, recipientIds)
-      return this.assertIdempotent(existing, hash)
+      const result = this.assertIdempotent(existing, hash)
+      await this.publishRecipients(existing.orgId, existing.id, existing.createdAt)
+      return result
     }
 
     const recipientIds = await this.resolveAudience(input.orgId, input.audience)
     const hash = payloadHash(input, recipientIds)
 
     try {
-      return await this.prisma.notification.create({
+      const created = await this.prisma.notification.create({
         data: {
           orgId: input.orgId,
           eventKey: input.eventKey,
@@ -131,13 +136,29 @@ export class NotificationsService {
           occurredAt: input.occurredAt,
           recipients: { create: recipientIds.map((userId) => ({ userId })) },
         },
+        include: { recipients: { select: { id: true, userId: true, createdAt: true } } },
       })
+      const persistedRecipients = Array.isArray(created.recipients) ? created.recipients : []
+      await Promise.all(persistedRecipients.map(recipient => this.transport.publish({
+        version: NOTIFICATION_TRANSPORT_VERSION,
+        kind: NOTIFICATION_TRANSPORT_KIND,
+        eventId: recipient.id,
+        orgId: created.orgId,
+        userId: recipient.userId,
+        notificationId: created.id,
+        createdAt: recipient.createdAt.toISOString(),
+      })))
+      return created
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const winner = await this.prisma.notification.findUnique({
           where: { orgId_eventKey: { orgId: input.orgId, eventKey: input.eventKey } },
         })
-        if (winner) return this.assertIdempotent(winner, hash)
+        if (winner) {
+          const result = this.assertIdempotent(winner, hash)
+          await this.publishRecipients(winner.orgId, winner.id, winner.createdAt)
+          return result
+        }
       }
       throw error
     }
@@ -236,5 +257,21 @@ export class NotificationsService {
       throw new ConflictException('eventKey já utilizado com payload ou audiência diferente')
     }
     return existing
+  }
+
+  private async publishRecipients(orgId: string, notificationId: string, fallbackCreatedAt: Date) {
+    const recipients = await this.prisma.notificationRecipient.findMany({
+      where: { notificationId, notification: { orgId } },
+      select: { id: true, userId: true, createdAt: true },
+    })
+    await Promise.all((recipients ?? []).map(recipient => this.transport.publish({
+      version: NOTIFICATION_TRANSPORT_VERSION,
+      kind: NOTIFICATION_TRANSPORT_KIND,
+      eventId: recipient.id,
+      orgId,
+      userId: recipient.userId,
+      notificationId,
+      createdAt: (recipient.createdAt ?? fallbackCreatedAt ?? new Date(0)).toISOString(),
+    })))
   }
 }

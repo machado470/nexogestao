@@ -10,6 +10,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerExecutionLogRoutes } from "./executionLog";
 import { serveStatic, setupVite } from "./vite";
+import { registerNotificationStreamRoute } from "./notificationStream";
 
 async function startServer() {
   const app = express();
@@ -21,6 +22,7 @@ async function startServer() {
   registerOAuthRoutes(app);
   registerConsentRoutes(app);
   registerExecutionLogRoutes(app);
+  registerNotificationStreamRoute(app);
 
   app.use(
     "/api/trpc",
