@@ -16,10 +16,14 @@
     "prisma:migrate:status": "prisma migrate status --schema ../../prisma/schema.prisma",
     "prisma:seed": "prisma db seed --schema ../../prisma/schema.prisma",
     "prisma": "node ../../scripts/prisma-cli.mjs",
+    "pretest": "pnpm --dir ../.. prepare:workspace",
     "test": "jest --config jest.config.js --runInBand",
+    "pretest:unit": "pnpm --dir ../.. prepare:workspace",
     "test:unit": "jest --config jest.config.js --runInBand --testPathIgnorePatterns test/integration/",
+    "pretest:integration:real": "pnpm --dir ../.. prepare:workspace",
     "test:integration:real": "RUN_REAL_INTEGRATION=true jest --config jest.config.js --runInBand test/integration/",
     "validate:execution:v5": "ts-node --project tsconfig.json --transpile-only scripts/validate-execution-v5.ts",
+    "pretypecheck": "pnpm --dir ../.. prepare:workspace",
     "typecheck": "pnpm exec tsc -p tsconfig.json --noEmit"
   },
   "prisma": {

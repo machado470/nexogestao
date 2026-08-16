@@ -3,7 +3,9 @@
     "target": "es2017",
     "module": "commonjs",
     "declaration": true,
+    "composite": true,
     "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true
   },
