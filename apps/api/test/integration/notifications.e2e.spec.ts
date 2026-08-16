@@ -1,76 +1,41 @@
-import { CanActivate, INestApplication } from '@nestjs/common'
+import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { JwtService } from '@nestjs/jwt'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
 import request from 'supertest'
-import { ActiveUserGuard } from '../../src/auth/guards/active-user.guard'
-import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard'
-import { NotificationsController } from '../../src/notifications/notifications.controller'
-import {
-  CreateNotificationInput,
-  notificationJobId,
-  NotificationsService,
-} from '../../src/notifications/notifications.service'
+import { AppModule } from '../../src/app.module'
+import { CreateNotificationInput, notificationJobId, NotificationsService } from '../../src/notifications/notifications.service'
 import { PrismaService } from '../../src/prisma/prisma.service'
-import {
-  describeRealIntegration,
-  REAL_INTEGRATION_ENABLED_MESSAGE,
-  REAL_INTEGRATION_SKIP_REASON,
-  RUN_REAL_INTEGRATION,
-} from './infra-guards'
+import { describeRealIntegration, REAL_INTEGRATION_ENABLED_MESSAGE, REAL_INTEGRATION_SKIP_REASON, RUN_REAL_INTEGRATION } from './infra-guards'
 
 if (!RUN_REAL_INTEGRATION) console.warn(`[integration-skip] ${REAL_INTEGRATION_SKIP_REASON}`)
 else console.info(`[integration-run] ${REAL_INTEGRATION_ENABLED_MESSAGE}`)
 
-const allow: CanActivate = { canActivate: () => true }
-
-describeRealIntegration('Notifications persistence (e2e)', () => {
-  jest.setTimeout(60_000)
+describeRealIntegration('Notifications persistence and authorization (e2e)', () => {
+  jest.setTimeout(90_000)
   let app: INestApplication
   let prisma: PrismaService
   let service: NotificationsService
-  const orgA = randomUUID()
-  const orgB = randomUUID()
-  const userA = randomUUID()
-  const userA2 = randomUUID()
-  const userB = randomUUID()
-
-  const input = (eventKey: string, audience: CreateNotificationInput['audience']): CreateNotificationInput => ({
-    orgId: orgA,
-    eventKey,
-    type: 'CUSTOMER_CREATED',
-    title: 'Novo cliente',
-    message: 'Cliente criado.',
-    severity: 'INFO',
-    source: 'notifications-e2e',
-    audience,
-    routeHint: '/customers?customerId=c1',
-    occurredAt: new Date('2026-08-16T10:00:00.000Z'),
+  const orgA = randomUUID(), orgB = randomUUID()
+  const userA1 = randomUUID(), userA2 = randomUUID(), userA3 = randomUUID(), userB1 = randomUUID()
+  const jwt = new JwtService({ secret: process.env.JWT_SECRET })
+  const auth = (userId: string, orgId: string, role = 'ADMIN') => ({
+    Authorization: `Bearer ${jwt.sign({ sub: userId, orgId, role })}`,
+  })
+  const input = (eventKey: string, audience: CreateNotificationInput['audience'], overrides: Partial<CreateNotificationInput> = {}): CreateNotificationInput => ({
+    orgId: orgA, eventKey, type: 'CUSTOMER_CREATED', title: 'Novo cliente', message: 'Cliente criado.',
+    severity: 'INFO', source: 'notifications-e2e', audience, routeHint: '/customers?customerId=c1',
+    occurredAt: new Date('2026-08-16T10:00:00.000Z'), ...overrides,
   })
 
   beforeAll(async () => {
-    const module = await Test.createTestingModule({
-      controllers: [NotificationsController],
-      providers: [
-        PrismaService,
-        NotificationsService,
-      ],
-    })
-      .overrideProvider(NotificationsService)
-      .useFactory({
-        inject: [PrismaService],
-        factory: (database: PrismaService) => new NotificationsService(database, { addJob: jest.fn() } as never),
-      })
-      .overrideGuard(JwtAuthGuard).useValue(allow)
-      .overrideGuard(ActiveUserGuard).useValue(allow)
-      .compile()
-
+    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET must be explicitly configured for integration tests')
+    const module = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = module.createNestApplication()
-    app.use((req: any, _res: any, next: () => void) => {
-      req.user = { orgId: req.headers['x-org-id'], sub: req.headers['x-user-id'] }
-      next()
-    })
+    app.setGlobalPrefix('v1')
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
     await app.init()
     prisma = app.get(PrismaService)
     service = app.get(NotificationsService)
@@ -79,9 +44,10 @@ describeRealIntegration('Notifications persistence (e2e)', () => {
       { id: orgB, name: 'Notifications B', slug: `notifications-${orgB}` },
     ] })
     await prisma.user.createMany({ data: [
-      { id: userA, orgId: orgA, email: `${userA}@test.invalid`, role: 'ADMIN', active: true },
+      { id: userA1, orgId: orgA, email: `${userA1}@test.invalid`, role: 'ADMIN', active: true },
       { id: userA2, orgId: orgA, email: `${userA2}@test.invalid`, role: 'STAFF', active: true },
-      { id: userB, orgId: orgB, email: `${userB}@test.invalid`, role: 'ADMIN', active: true },
+      { id: userA3, orgId: orgA, email: `${userA3}@test.invalid`, role: 'STAFF', active: false },
+      { id: userB1, orgId: orgB, email: `${userB1}@test.invalid`, role: 'ADMIN', active: true },
     ] })
   })
 
@@ -92,49 +58,77 @@ describeRealIntegration('Notifications persistence (e2e)', () => {
     await app?.close()
   })
 
-  it('prova leitura individual e isolamento multi-tenant por HTTP', async () => {
-    const created = await service.createNotificationNow(input('individual-read', { kind: 'user', userId: userA }))
-
-    await request(app.getHttpServer()).get('/notifications')
-      .set('x-org-id', orgA).set('x-user-id', userA)
-      .expect(200).expect(({ body }) => expect(body.items.some((item: any) => item.id === created.id)).toBe(true))
-    await request(app.getHttpServer()).get('/notifications')
-      .set('x-org-id', orgA).set('x-user-id', userA2)
-      .expect(200).expect(({ body }) => expect(body.items.some((item: any) => item.id === created.id)).toBe(false))
-    await request(app.getHttpServer()).patch(`/notifications/${created.id}/read`)
-      .set('x-org-id', orgB).set('x-user-id', userB).expect(404)
-    await request(app.getHttpServer()).patch(`/notifications/${created.id}/read`)
-      .set('x-org-id', orgA).set('x-user-id', userA).expect(200)
+  it('uses real JWT and ActiveUserGuard without allowing the request to select a tenant', async () => {
+    await request(app.getHttpServer()).get('/v1/notifications').expect(401)
+    await request(app.getHttpServer()).get('/v1/notifications').set('Authorization', 'Bearer invalid').expect(401)
+    await request(app.getHttpServer()).get('/v1/notifications').set(auth(userA3, orgA)).expect(403)
+    await request(app.getHttpServer()).get('/v1/notifications?orgId=' + orgB).set(auth(userA1, orgA)).set('x-org-id', orgB).expect(200)
+    await request(app.getHttpServer()).get('/v1/notifications').set(auth(userB1, orgB)).expect(200)
   })
 
-  it('prova concorrência idempotente e uma única materialização', async () => {
-    const attempts = await Promise.all(
-      Array.from({ length: 8 }, () => service.createNotificationNow(input('concurrent', { kind: 'user', userId: userA }))),
-    )
-    expect(new Set(attempts.map(({ id }) => id)).size).toBe(1)
-    expect(await prisma.notification.count({ where: { orgId: orgA, eventKey: 'concurrent' } })).toBe(1)
-    expect(await prisma.notificationRecipient.count({ where: { notificationId: attempts[0].id } })).toBe(1)
+  it('proves individual reads, unread counts, and tenant isolation over authenticated HTTP', async () => {
+    const individual = await service.createNotificationNow(input('individual-read', { kind: 'user', userId: userA1 }))
+    expect(await prisma.notificationRecipient.count({ where: { notificationId: individual.id } })).toBe(1)
+    const a1 = await request(app.getHttpServer()).get('/v1/notifications').set(auth(userA1, orgA)).expect(200)
+    expect(a1.body.items.some((item: any) => item.id === individual.id)).toBe(true)
+    const a2 = await request(app.getHttpServer()).get('/v1/notifications').set(auth(userA2, orgA)).expect(200)
+    expect(a2.body.items.some((item: any) => item.id === individual.id)).toBe(false)
+    await request(app.getHttpServer()).patch(`/v1/notifications/${individual.id}/read`).set(auth(userB1, orgB)).expect(404)
+
+    const organizational = await service.createNotificationNow(input('organization-read', { kind: 'organization' }))
+    expect(await prisma.notificationRecipient.findMany({ where: { notificationId: organizational.id }, orderBy: { userId: 'asc' }, select: { userId: true } }))
+      .toEqual([{ userId: userA1 }, { userId: userA2 }].sort((a, b) => a.userId.localeCompare(b.userId)))
+    expect(await service.getUnreadCount(orgA, userA1)).toBe(await prisma.notificationRecipient.count({ where: { userId: userA1, readAt: null, notification: { orgId: orgA } } }))
+    expect(await service.getUnreadCount(orgA, userA2)).toBe(1)
+    await request(app.getHttpServer()).patch(`/v1/notifications/${organizational.id}/read`).set(auth(userA1, orgA)).expect(200)
+    expect(await service.getUnreadCount(orgA, userA2)).toBe(1)
+    await request(app.getHttpServer()).post('/v1/notifications/read-all').set(auth(userA1, orgA)).expect(201)
+    expect(await service.getUnreadCount(orgA, userA2)).toBe(1)
+    expect(await service.getUnreadCount(orgB, userB1)).toBe(0)
   })
 
-  it('mantém o snapshot organizacional ao repetir o evento', async () => {
-    const organizational = input('organization-snapshot', { kind: 'organization' })
-    const created = await service.createNotificationNow(organizational)
+  it('proves idempotency, semantic conflicts, concurrency, and per-tenant event keys', async () => {
+    const base = input('idempotent', { kind: 'user', userId: userA1 })
+    const first = await service.createNotificationNow(base)
+    await expect(service.createNotificationNow(base)).resolves.toMatchObject({ id: first.id })
+    expect(await prisma.notification.count({ where: { orgId: orgA, eventKey: 'idempotent' } })).toBe(1)
+    expect(await prisma.notificationRecipient.count({ where: { notificationId: first.id } })).toBe(1)
+    await expect(service.createNotificationNow({ ...base, audience: { kind: 'user', userId: userA2 } })).rejects.toMatchObject({ status: 409 })
+    await expect(service.createNotificationNow({ ...base, audience: { kind: 'organization' } })).rejects.toMatchObject({ status: 409 })
+    await expect(service.createNotificationNow({ ...base, message: 'Materialmente diferente' })).rejects.toMatchObject({ status: 409 })
+
+    const concurrent = input('concurrent', { kind: 'organization' })
+    const attempts = await Promise.all(Array.from({ length: 8 }, () => service.createNotificationNow(concurrent)))
+    expect(new Set(attempts.map(item => item.id)).size).toBe(1)
+    expect(await prisma.notificationRecipient.count({ where: { notificationId: attempts[0].id } })).toBe(2)
+    await expect(service.createNotificationNow({ ...base, orgId: orgB, audience: { kind: 'user', userId: userB1 } })).resolves.toBeTruthy()
+  })
+
+  it('keeps organizational delivery as a historical snapshot', async () => {
+    const created = await service.createNotificationNow(input('snapshot', { kind: 'organization' }))
+    const lateUser = randomUUID()
+    await prisma.user.create({ data: { id: lateUser, orgId: orgA, email: `${lateUser}@test.invalid`, role: 'STAFF', active: true } })
     await prisma.user.update({ where: { id: userA2 }, data: { active: false } })
-    await expect(service.createNotificationNow(organizational)).resolves.toMatchObject({ id: created.id })
-    expect(await prisma.notificationRecipient.count({ where: { notificationId: created.id } })).toBe(2)
+    await expect(service.createNotificationNow(input('snapshot', { kind: 'organization' }))).resolves.toMatchObject({ id: created.id })
+    const recipients = await prisma.notificationRecipient.findMany({ where: { notificationId: created.id }, select: { userId: true } })
+    expect(recipients.map(item => item.userId).sort()).toEqual([userA1, userA2].sort())
   })
 
-  it('aceita o jobId SHA-256 em Redis/BullMQ real', async () => {
+  it('uses deterministic opaque SHA-256 job IDs accepted by real BullMQ/Redis', async () => {
     const connection = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null })
     const queue = new Queue(`notifications-e2e-${randomUUID()}`, { connection })
     try {
       const id = notificationJobId(orgA, 'redis-job')
-      const job = await queue.add('create-notification', {}, { jobId: id })
-      expect(job.id).toBe(id)
+      expect(id).toMatch(/^[a-f0-9]{64}$/)
+      expect(id).not.toContain(':')
+      expect(id).not.toContain(orgA)
+      expect(id).not.toContain('redis-job')
+      expect((await queue.add('create-notification', {}, { jobId: id })).id).toBe(id)
+      expect((await queue.add('create-notification', {}, { jobId: id })).id).toBe(id)
+      expect(notificationJobId(orgB, 'redis-job')).not.toBe(id)
+      expect(notificationJobId(orgA, 'other-job')).not.toBe(id)
     } finally {
-      await queue.obliterate({ force: true })
-      await queue.close()
-      await connection.quit()
+      await queue.obliterate({ force: true }); await queue.close(); await connection.quit()
     }
   })
 })

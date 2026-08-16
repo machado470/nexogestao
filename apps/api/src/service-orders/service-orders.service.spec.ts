@@ -1,4 +1,28 @@
+import { Logger } from '@nestjs/common'
 import { ServiceOrdersService } from './service-orders.service'
+
+describe('ServiceOrdersService notification failure isolation', () => {
+  it('continues the operational flow after persisting the order once', async () => {
+    const created = { id: 'so-1', orgId: 'org-1', customerId: 'customer-1', title: 'Instalação', status: 'OPEN', appointmentId: null, assignedToPersonId: null, createdAt: new Date(), customer: { id: 'customer-1', name: 'Cliente', phone: null }, assignedTo: null }
+    const prisma: any = { customer: { findFirst: jest.fn().mockResolvedValue({ id: 'customer-1', name: 'Cliente' }) }, serviceOrder: { create: jest.fn().mockResolvedValue(created) } }
+    const notifications = { createNotification: jest.fn().mockRejectedValue(new Error('sensitive failure details')) }
+    const onboarding = { completeOnboardingStep: jest.fn() }
+    const logger = jest.spyOn(Logger.prototype, 'error').mockImplementation()
+    const service = new ServiceOrdersService(
+      prisma, { log: jest.fn() } as any, { log: jest.fn() } as any, { syncAndLogStateChange: jest.fn() } as any,
+      {} as any, {} as any, notifications as any, onboarding as any, { enqueueMessage: jest.fn() } as any,
+      { track: jest.fn() } as any, { begin: jest.fn().mockResolvedValue({ mode: 'execute', recordId: 'idem-1' }), complete: jest.fn(), fail: jest.fn() } as any,
+    )
+    await expect(service.create({ orgId: 'org-1', createdBy: 'user-1', personId: null, customerId: 'customer-1', title: 'Instalação' })).resolves.toBe(created)
+    expect(prisma.serviceOrder.create).toHaveBeenCalledTimes(1)
+    expect(notifications.createNotification).toHaveBeenCalledTimes(1)
+    expect(notifications.createNotification).toHaveBeenCalledWith(expect.objectContaining({ eventKey: 'service-order.created:so-1', routeHint: '/service-orders?id=so-1' }))
+    expect(onboarding.completeOnboardingStep).toHaveBeenCalled()
+    expect(logger).toHaveBeenCalledWith({ event: 'notification_producer_failed', producer: 'service-order.created', orgId: 'org-1', entityId: 'so-1', errorType: 'Error' })
+    expect(JSON.stringify(logger.mock.calls)).not.toContain('sensitive failure details')
+    logger.mockRestore()
+  })
+})
 
 describe('ServiceOrdersService timeline hardening', () => {
   it('emite SERVICE_ORDER_COMPLETED ao concluir O.S.', async () => {
