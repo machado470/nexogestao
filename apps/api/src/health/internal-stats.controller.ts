@@ -50,14 +50,16 @@ export class InternalStatsController {
     return this.operationalDiagnosticsService.runForOrg(req.user.orgId, Number.isFinite(parsedLimit) ? parsedLimit : 100)
   }
 
-  @UseGuards(JwtAuthGuard, ActiveUserGuard)
+  @UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
+  @Roles('OPERADOR')
   @Get('operational-signals')
   async operationalSignals(@Request() req: any, @Query('limit') limit?: string) {
     const parsedLimit = Number(limit ?? 20)
     return this.operationalSignalsService.listForOrg(req.user.orgId, Number.isFinite(parsedLimit) ? parsedLimit : 20)
   }
 
-  @UseGuards(JwtAuthGuard, ActiveUserGuard)
+  @UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
+  @Roles('OPERADOR')
   @Get('operational-signals/next-best-action')
   async nextBestAction(@Request() req: any) {
     return this.operationalSignalsService.getNextBestAction(req.user.orgId)

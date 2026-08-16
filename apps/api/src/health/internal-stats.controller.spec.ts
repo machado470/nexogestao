@@ -21,9 +21,13 @@ describe('InternalStatsController authorization', () => {
   const queueService = { getQueueStatus: jest.fn() }
   const waMetrics = { snapshot: jest.fn() }
   const queueObservability = { snapshot: jest.fn() }
+  const nextBestAction = {
+    signalId: 'signal-org-a',
+    entityId: 'charge-org-a',
+  }
   const operationalSignals = {
     listForOrg: jest.fn().mockResolvedValue({ signals: [], totalSignals: 0 }),
-    getNextBestAction: jest.fn().mockResolvedValue(null),
+    getNextBestAction: jest.fn().mockResolvedValue(nextBestAction),
   }
 
   beforeAll(async () => {
@@ -66,18 +70,20 @@ describe('InternalStatsController authorization', () => {
     expect(queueService.getQueueStatus).not.toHaveBeenCalled()
   })
 
-  it('permite ao usuário ativo ler somente sinais e ação do próprio tenant', async () => {
+  it('permite ao OPERADOR (STAFF) ler a próxima ação somente do orgId autenticado', async () => {
     await request(app.getHttpServer())
       .get('/internal/operational-signals?limit=8')
-      .set('x-test-role', 'OPERADOR')
+      .set('x-test-role', 'STAFF')
       .set('x-test-org', 'org-a')
       .expect(200)
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .get('/internal/operational-signals/next-best-action')
-      .set('x-test-role', 'OPERADOR')
+      .set('x-test-role', 'STAFF')
       .set('x-test-org', 'org-a')
       .expect(200)
+    expect(response.body).toEqual(nextBestAction)
     expect(operationalSignals.listForOrg).toHaveBeenCalledWith('org-a', 8)
     expect(operationalSignals.getNextBestAction).toHaveBeenCalledWith('org-a')
+    expect(operationalSignals.getNextBestAction).not.toHaveBeenCalledWith('org-b')
   })
 })

@@ -41,17 +41,38 @@ describe("Dashboard BFF executive truth", () => {
   });
 
   it("consulta sinais e ação nas rotas /v1 sem aceitar orgId do navegador", async () => {
+    const nextBestAction = {
+      signalId: "signal-org-from-session",
+      actionType: "COLLECT_OVERDUE_CHARGE",
+      title: "Cobrança vencida pendente de ação",
+      reason: "CHARGE_OVERDUE",
+      impact: "Afeta caixa e previsibilidade financeira.",
+      suggestedAction: "Cobrar cliente.",
+      area: "FINANCE",
+      entityType: "Charge",
+      entityId: "charge-org-from-session",
+      serviceOrderId: null,
+      chargeId: "charge-org-from-session",
+      messageId: null,
+      routeHint: "/finances?view=charges",
+      source: "FINANCE",
+      detectedAt: "2026-08-15T00:00:00.000Z",
+      metadata: { severity: "WARNING", priorityScore: 70 },
+    };
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({
         orgId: "org-from-session", generatedAt: "2026-08-15T00:00:00.000Z",
         totalSignals: 0, signals: [],
       }), { status: 200 }))
-      .mockResolvedValueOnce(new Response("null", { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        data: nextBestAction,
+      }), { status: 200 }));
     const api = caller().dashboard;
     await expect(api.operationalSignals({ limit: 8 })).resolves.toEqual(
       expect.objectContaining({ signals: [], totalSignals: 0 })
     );
-    await expect(api.nextBestAction()).resolves.toBeNull();
+    await expect(api.nextBestAction()).resolves.toEqual(nextBestAction);
     expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/v1\/internal\/operational-signals\?limit=8$/);
     expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/v1\/internal\/operational-signals\/next-best-action$/);
     expect(fetchMock.mock.calls.every(([url]) => !String(url).includes("orgId"))).toBe(true);
