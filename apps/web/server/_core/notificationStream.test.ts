@@ -35,6 +35,34 @@ describe("notification SSE BFF proxy", () => {
     }));
   });
 
+  it("mantém o upstream aberto depois de ready até o navegador desconectar", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const cancelled = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(value) { controller = value; },
+      cancel() { cancelled(); },
+    });
+    upstreamFetch.mockResolvedValue(new Response(body, {
+      status: 200, headers: { "content-type": "text/event-stream" },
+    }));
+
+    const response = await nativeFetch(`${baseUrl}/api/notifications/stream?token=ignored&orgId=ignored&userId=ignored`, {
+      headers: { Authorization: "Bearer cookie-token" },
+    });
+    const reader = response.body!.getReader(); const decoder = new TextDecoder();
+    const upstreamSignal = upstreamFetch.mock.calls[0][1].signal as AbortSignal;
+    expect(upstreamSignal.aborted).toBe(false);
+    controller.enqueue(new TextEncoder().encode("event: ready\ndata: {}\n\n"));
+    expect(decoder.decode((await reader.read()).value)).toContain("event: ready");
+    expect(upstreamSignal.aborted).toBe(false);
+    controller.enqueue(new TextEncoder().encode("id: recipient_1\nevent: notification.created\ndata: {}\n\n"));
+    expect(decoder.decode((await reader.read()).value)).toContain("event: notification.created");
+    expect(upstreamFetch.mock.calls[0][0]).toBe("http://api.test/v1/notifications/stream");
+
+    await reader.cancel();
+    await vi.waitFor(() => { expect(upstreamSignal.aborted).toBe(true); expect(cancelled).toHaveBeenCalledOnce(); });
+  });
+
   it("não abre upstream sem sessão válida e rejeita cursor inseguro", async () => {
     vi.mocked(fetchNexoMe).mockResolvedValueOnce(null);
     expect((await nativeFetch(`${baseUrl}/api/notifications/stream`, { headers: { Authorization: "Bearer token" } })).status).toBe(401);
@@ -45,7 +73,9 @@ describe("notification SSE BFF proxy", () => {
   });
 
   it("preserva status de autenticação do upstream", async () => {
-    upstreamFetch.mockResolvedValue(new Response("denied", { status: 403 }));
-    expect((await nativeFetch(`${baseUrl}/api/notifications/stream`, { headers: { Authorization: "Bearer token" } })).status).toBe(403);
+    for (const status of [401, 403, 503]) {
+      upstreamFetch.mockResolvedValueOnce(new Response("denied", { status }));
+      expect((await nativeFetch(`${baseUrl}/api/notifications/stream`, { headers: { Authorization: "Bearer token" } })).status).toBe(status);
+    }
   });
 });

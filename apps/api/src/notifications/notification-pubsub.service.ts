@@ -12,6 +12,8 @@ export class NotificationPubSubService implements OnModuleInit, OnModuleDestroy 
   private readonly channel = `nexogestao:${process.env.NODE_ENV ?? 'development'}:notifications:v1`
   private publisher?: IORedis
   private subscriber?: IORedis
+  private readonly subscriberReady = new Promise<void>(resolve => { this.resolveSubscriberReady = resolve })
+  private resolveSubscriberReady!: () => void
   constructor(@Inject(QUEUE_CONNECTION) private readonly redis: IORedis, private readonly hub: NotificationStreamHub) {}
 
   onModuleInit() {
@@ -28,7 +30,15 @@ export class NotificationPubSubService implements OnModuleInit, OnModuleDestroy 
     })
     void this.subscriber.connect()
       .then(() => this.subscriber?.subscribe(this.channel))
+      .then(() => this.resolveSubscriberReady())
       .catch(() => this.logger.warn('Subscriber indisponível; consultas persistentes permanecem ativas'))
+  }
+
+  async waitUntilReady(timeoutMs = 5_000) {
+    return new Promise<boolean>(resolve => {
+      const timeout = setTimeout(() => resolve(false), timeoutMs)
+      void this.subscriberReady.then(() => { clearTimeout(timeout); resolve(true) })
+    })
   }
 
   async publish(event: NotificationTransportEvent) {
