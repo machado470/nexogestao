@@ -631,13 +631,21 @@ export class ServiceOrdersService {
       },
     })
 
-    await this.notificationsService.createNotification(
-      created.orgId,
-      'CUSTOMER_CREATED' as any,
-      `Nova O.S. "${created.title}" criada para ${created.customer.name}.`,
-      params.createdBy,
-      { serviceOrderId: created.id },
-    )
+    await this.notificationsService.createNotification({
+      orgId: created.orgId,
+      eventKey: `service-order.created:${created.id}`,
+      type: 'SERVICE_ORDER_CREATED',
+      title: 'Nova ordem de serviço',
+      message: `Nova O.S. "${created.title}" criada para ${created.customer.name}.`,
+      severity: 'INFO',
+      source: 'service-orders',
+      audience: { kind: 'user', userId: params.createdBy },
+      entityType: 'SERVICE_ORDER',
+      entityId: created.id,
+      routeHint: `/service-orders/${created.id}`,
+      metadata: { serviceOrderId: created.id },
+      occurredAt: created.createdAt,
+    })
 
     await this.enqueueServiceOrderCreatedMessage({
       orgId: created.orgId,

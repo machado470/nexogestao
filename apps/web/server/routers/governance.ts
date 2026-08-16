@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../_core/trpc";
 import { nexoFetch } from "../_core/nexoClient";
-import { emitOperationalNotification } from "../_core/operationalNotifications";
 
 export const governanceRouter = router({
   status: protectedProcedure.query(async () => ({
@@ -61,23 +60,8 @@ export const governanceRouter = router({
         newLevel: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      if (ctx.user?.organizationId && input.previousLevel !== input.newLevel) {
-        await emitOperationalNotification({
-          orgId: ctx.user.organizationId,
-          type: "RISK_LEVEL_CHANGED",
-          metadata: {
-            entityId: input.entityId,
-            previousLevel: input.previousLevel,
-            newLevel: input.newLevel,
-          },
-        });
-      }
-
-      return {
-        ok: true,
-        ...input,
-      };
+    .mutation(() => {
+      throw new Error("Alteração de risco indisponível: não há mutação confirmada no backend");
     }),
 
   executeAction: protectedProcedure

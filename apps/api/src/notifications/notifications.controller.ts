@@ -1,50 +1,40 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Request,
-  UseGuards,
-} from '@nestjs/common'
+import { Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common'
 import { NotificationsService } from './notifications.service'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 
 @Controller('notifications')
+@UseGuards(JwtAuthGuard, ActiveUserGuard)
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get()
-  async getMyNotifications(@Request() req) {
-    const orgId = req.user.orgId
-    const userId = req.user.sub
-    return this.notificationsService.getNotifications(orgId, userId)
+  getMyNotifications(
+    @Request() req,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('category') category?: string,
+  ) {
+    return this.notificationsService.getNotifications(req.user.orgId, req.user.sub, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      category,
+    })
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('unread-count')
   async getUnreadCount(@Request() req) {
-    const orgId = req.user.orgId
-    const userId = req.user.sub
-
-    const unread = await this.notificationsService.getUnreadCount(orgId, userId)
-    return { unread }
+    const unreadCount = await this.notificationsService.getUnreadCount(req.user.orgId, req.user.sub)
+    return { unreadCount }
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('read-all')
-  async markAllAsRead(@Request() req) {
-    const orgId = req.user.orgId
-    const userId = req.user.sub
-    return this.notificationsService.markAllAsRead(orgId, userId)
+  markAllAsRead(@Request() req) {
+    return this.notificationsService.markAllAsRead(req.user.orgId, req.user.sub)
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch(':id/read')
-  async markAsRead(@Request() req, @Param('id') id: string) {
-    const orgId = req.user.orgId
-    const userId = req.user.sub
-    return this.notificationsService.markAsRead(orgId, userId, id)
+  markAsRead(@Request() req, @Param('id') id: string) {
+    return this.notificationsService.markAsRead(req.user.orgId, req.user.sub, id)
   }
 }

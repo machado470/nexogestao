@@ -8,7 +8,6 @@ import { registerConsentRoutes } from "./consent";
 import { getNexoApiResolutionMetadata } from "./nexoApiUrl";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { subscribeToNotificationCenterEvents } from "./notificationCenterEvents";
 import { registerExecutionLogRoutes } from "./executionLog";
 import { serveStatic, setupVite } from "./vite";
 
