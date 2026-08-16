@@ -140,27 +140,57 @@ describeRealIntegration('Notifications SSE multi-instance (real PostgreSQL + Red
     expect(pubSubA.diagnostics().channel).toBe(pubSubB.diagnostics().channel)
     const publish = jest.spyOn(pubSubA, 'publish')
     const hubB = appB.get(NotificationStreamHub); const deliver = jest.spyOn(hubB, 'deliver')
-    const stream = openSse(token(userA, orgA)); await stream.connection; await stream.waitUntilReady()
-    expect(hubB.count()).toBe(1)
-    const notification = await create('cross-instance')
-    const recipient = await prisma.notificationRecipient.findFirstOrThrow({ where: { notificationId: notification.id, userId: userA } })
-    expect(publish).toHaveBeenCalledTimes(1)
-    const envelope = publish.mock.calls[0][0]
-    expect(envelope).toEqual({
-      version: 1, kind: 'notification.created', eventId: recipient.id, orgId: orgA, userId: userA,
-      notificationId: notification.id, createdAt: recipient.createdAt.toISOString(),
-    })
-    expect(publish.mock.results[0].type).toBe('return')
-    await expect(publish.mock.results[0].value).resolves.toEqual({ status: 'published', subscriberCount: expect.any(Number) })
-    expect((await publish.mock.results[0].value).subscriberCount).toBeGreaterThanOrEqual(2)
-    expect(deliver).toHaveBeenCalledWith(envelope)
-    const delivery = deliver.mock.results.find(result => result.type === 'return' && result.value)?.value
-    await expect(delivery).resolves.toEqual([true])
-    const text = await stream.waitForEvent(`id: ${recipient.id}`)
-    expect(text).toContain(`id: ${recipient.id}\nevent: notification.created`)
-    expect(text).not.toContain(orgA); expect(text).not.toContain(userA); expect(text).not.toContain(notification.id)
-    await stream.close(); await stream.cleanup()
-    publish.mockRestore(); deliver.mockRestore()
+    const stream = openSse(token(userA, orgA))
+    const resultForEvent = <T extends { mock: { calls: unknown[][]; results: Array<{ type: string; value: unknown }> } }>(spy: T, eventId: string) => {
+      const index = spy.mock.calls.findIndex(call => (call[0] as { eventId?: string })?.eventId === eventId)
+      expect(index).toBeGreaterThanOrEqual(0)
+      expect(spy.mock.results[index].type).toBe('return')
+      return spy.mock.results[index].value as Promise<unknown>
+    }
+    const occurrences = (text: string, eventId: string) => text.split(`id: ${eventId}\n`).length - 1
+    try {
+      await stream.connection; await stream.waitUntilReady()
+      expect(hubB.count()).toBe(1)
+
+      const notification = await create('cross-instance-transition')
+      const recipient = await prisma.notificationRecipient.findFirstOrThrow({ where: { notificationId: notification.id, userId: userA } })
+      const envelope = publish.mock.calls.find(call => call[0].eventId === recipient.id)?.[0]
+      expect(envelope).toEqual({
+        version: 1, kind: 'notification.created', eventId: recipient.id, orgId: orgA, userId: userA,
+        notificationId: notification.id, createdAt: recipient.createdAt.toISOString(),
+      })
+      const published = await resultForEvent(publish, recipient.id) as { status: string; subscriberCount: number }
+      expect(published).toEqual({ status: 'published', subscriberCount: expect.any(Number) })
+      expect(published.subscriberCount).toBeGreaterThanOrEqual(2)
+      expect(deliver).toHaveBeenCalledWith(envelope)
+      const firstDelivery = await resultForEvent(deliver, recipient.id)
+      // [] significa que o evento chegou durante replay -> live e foi buffered; o frame abaixo prova o flush.
+      expect([[], [true]]).toContainEqual(firstDelivery)
+      const firstText = await stream.waitForEvent(`id: ${recipient.id}`)
+      expect(firstText).toContain(`id: ${recipient.id}\nevent: notification.created`)
+      expect(occurrences(firstText, recipient.id)).toBe(1)
+      expect(firstText).not.toContain(orgA); expect(firstText).not.toContain(userA); expect(firstText).not.toContain(notification.id)
+      expect(hubB.count()).toBe(1)
+
+      const liveNotification = await create('cross-instance-definitely-live')
+      const liveRecipient = await prisma.notificationRecipient.findFirstOrThrow({ where: { notificationId: liveNotification.id, userId: userA } })
+      const liveEnvelope = publish.mock.calls.find(call => call[0].eventId === liveRecipient.id)?.[0]
+      expect(liveEnvelope).toEqual({
+        version: 1, kind: 'notification.created', eventId: liveRecipient.id, orgId: orgA, userId: userA,
+        notificationId: liveNotification.id, createdAt: liveRecipient.createdAt.toISOString(),
+      })
+      const livePublished = await resultForEvent(publish, liveRecipient.id) as { status: string; subscriberCount: number }
+      expect(livePublished.status).toBe('published'); expect(livePublished.subscriberCount).toBeGreaterThanOrEqual(2)
+      expect(deliver).toHaveBeenCalledWith(liveEnvelope)
+      await expect(resultForEvent(deliver, liveRecipient.id)).resolves.toEqual([true])
+      const liveText = await stream.waitForEvent(`id: ${liveRecipient.id}`)
+      expect(liveText).toContain(`id: ${liveRecipient.id}\nevent: notification.created`)
+      expect(occurrences(liveText, recipient.id)).toBe(1); expect(occurrences(liveText, liveRecipient.id)).toBe(1)
+      expect(hubB.count()).toBe(1)
+    } finally {
+      publish.mockRestore(); deliver.mockRestore()
+      await stream.close(); await stream.cleanup()
+    }
   })
 
   it('isola usuário e tenant e recupera por replay persistido', async () => {
