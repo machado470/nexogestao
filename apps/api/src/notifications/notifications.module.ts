@@ -5,6 +5,8 @@ import { AuthModule } from '../auth/auth.module'
 import { QueueModule } from '../queue/queue.module'
 import { PrismaModule } from '../prisma/prisma.module'
 import { NotificationProcessor } from '../queue/processors/notification.processor'
+import { NotificationPubSubService } from './notification-pubsub.service'
+import { NotificationStreamHub } from './notification-stream-hub.service'
 
 @Module({
   imports: [
@@ -14,7 +16,9 @@ import { NotificationProcessor } from '../queue/processors/notification.processo
   ],
   providers: [
     NotificationsService,
-    NotificationProcessor
+    NotificationProcessor,
+    NotificationStreamHub,
+    NotificationPubSubService
   ],
   controllers: [NotificationsController],
   exports: [NotificationsService],

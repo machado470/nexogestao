@@ -33,6 +33,7 @@ import { canAny, type Permission, type Role } from "@/lib/rbac";
 import { useIsMobile } from "@/hooks/useMobile";
 import { trpc } from "@/lib/trpc";
 import { useAutomationRunner } from "@/hooks/useAutomationRunner";
+import { useNotificationStream } from "@/hooks/useNotificationStream";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import {
   NexoAppShell,
@@ -104,6 +105,13 @@ export function MainLayout({ children }: MainLayoutProps) {
   });
   const persistentNotifications = notificationQuery.data?.items ?? [];
   const unreadCount = notificationQuery.data?.unreadCount;
+  const notificationStreamStatus = useNotificationStream(isAuthenticated, () => {
+    void Promise.all([
+      trpcUtils.dashboard.notificationCenter.list.invalidate(),
+      trpcUtils.dashboard.notificationCenter.unreadCount.invalidate(),
+      trpcUtils.dashboard.notifications.invalidate(),
+    ]);
+  });
 
   const isMobile = useIsMobile();
   const [sidebarCollapsed, setSidebarCollapsed] =
@@ -537,7 +545,11 @@ export function MainLayout({ children }: MainLayoutProps) {
                       >
                         <DropdownMenuLabel className="flex items-center justify-between px-3 py-2">
                           <span>Notificações</span>
-                          <span className="text-xs font-normal text-[var(--text-muted)]">Atualizado por consulta</span>
+                          <span className="text-xs font-normal text-[var(--text-muted)]">
+                            {notificationStreamStatus === "connected" ? "Atualização em tempo real ativa" :
+                              notificationStreamStatus === "reconnecting" || notificationStreamStatus === "connecting" ? "Reconectando atualizações…" :
+                                "Dados disponíveis por consulta"}
+                          </span>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         {notificationQuery.isLoading ? (
