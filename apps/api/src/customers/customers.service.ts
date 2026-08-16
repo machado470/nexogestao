@@ -14,6 +14,7 @@ import { AUDIT_ACTIONS } from '../audit/audit.actions'
 import { AnalyticsService, UsageMetricEvent } from '../analytics/analytics.service'
 import { Prisma } from '@prisma/client'
 import { IdempotencyService } from '../common/idempotency/idempotency.service'
+import { notificationRoutes } from '@nexogestao/common'
 
 function normalizeEmail(v?: string): string | null {
   const s = (v ?? '').trim().toLowerCase()
@@ -322,7 +323,7 @@ export class CustomersService {
         audience: { kind: 'user', userId: params.createdBy },
         entityType: 'CUSTOMER',
         entityId: created.id,
-        routeHint: `/customers?customerId=${created.id}`,
+        routeHint: notificationRoutes.customer(created.id),
         metadata: { customerId: created.id },
         occurredAt: created.createdAt,
       })
@@ -332,7 +333,7 @@ export class CustomersService {
         producer: 'customer.created',
         orgId: created.orgId,
         entityId: created.id,
-        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.name : 'UnknownError',
       })
     }
 

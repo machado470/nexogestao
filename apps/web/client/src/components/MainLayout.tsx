@@ -44,6 +44,7 @@ import { BrandSignature } from "@/components/BrandSignature";
 import { AppShell } from "@/components/AppShell";
 import { useOperationalMemoryState } from "@/hooks/useOperationalMemory";
 import { cn } from "@/lib/utils";
+import { isSafeNotificationRouteHint } from "../../../../../packages/common/src/notification-route";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -551,20 +552,23 @@ export function MainLayout({ children }: MainLayoutProps) {
                             <Bell className="mx-auto h-5 w-5 text-[var(--text-muted)]" />
                             <p className="mt-2 text-sm text-[var(--text-muted)]">Nenhuma notificação no momento.</p>
                           </div>
-                        ) : persistentNotifications.map(item => (
+                        ) : persistentNotifications.map(item => {
+                          const safeRouteHint = isSafeNotificationRouteHint(item.routeHint) ? item.routeHint : null;
+                          return (
                           <DropdownMenuItem
                             key={item.id}
-                            className={cn("flex cursor-pointer flex-col items-start gap-1 rounded-xl px-3 py-2", !item.read && "bg-[var(--surface-subtle)]")}
+                            className={cn("flex flex-col items-start gap-1 rounded-xl px-3 py-2", safeRouteHint && "cursor-pointer", !item.read && "bg-[var(--surface-subtle)]")}
                             onSelect={evt => {
                               evt.preventDefault();
                               if (!item.read) markNotificationRead.mutate({ id: item.id });
-                              if (item.routeHint && !item.routeHint.startsWith("/internal/")) navigate(item.routeHint);
+                              if (safeRouteHint) navigate(safeRouteHint);
                             }}
                           >
                             <p className="text-sm font-medium text-[var(--text-primary)]">{item.title}</p>
                             <p className="line-clamp-2 text-xs text-[var(--text-muted)]">{item.message}</p>
                           </DropdownMenuItem>
-                        ))}
+                          );
+                        })}
                       </DropdownMenuContent>
                     </DropdownMenu>
 

@@ -17,8 +17,8 @@
     "prisma:seed": "prisma db seed --schema ../../prisma/schema.prisma",
     "prisma": "node ../../scripts/prisma-cli.mjs",
     "test": "jest --config jest.config.js --runInBand",
-    "test:unit": "jest --config jest.config.js --runInBand --testPathIgnorePatterns test/integration/canonical-operational-workflow.spec.ts",
-    "test:integration:real": "RUN_REAL_INTEGRATION=true jest --config jest.config.js --runInBand test/integration/canonical-operational-workflow.spec.ts",
+    "test:unit": "jest --config jest.config.js --runInBand --testPathIgnorePatterns test/integration/",
+    "test:integration:real": "RUN_REAL_INTEGRATION=true jest --config jest.config.js --runInBand test/integration/",
     "validate:execution:v5": "ts-node --project tsconfig.json --transpile-only scripts/validate-execution-v5.ts",
     "typecheck": "pnpm exec tsc -p tsconfig.json --noEmit"
   },

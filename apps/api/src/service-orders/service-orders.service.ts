@@ -26,6 +26,7 @@ import {
   ensureServiceOrderTransition,
 } from '../common/domain/state-transitions'
 import { IdempotencyService } from '../common/idempotency/idempotency.service'
+import { notificationRoutes } from '@nexogestao/common'
 
 function normalizeText(v?: string): string | null {
   const s = (v ?? '').trim()
@@ -646,7 +647,7 @@ export class ServiceOrdersService {
         audience: { kind: 'user', userId: params.createdBy },
         entityType: 'SERVICE_ORDER',
         entityId: created.id,
-        routeHint: `/service-orders?serviceOrderId=${created.id}`,
+        routeHint: notificationRoutes.serviceOrder(created.id),
         metadata: { serviceOrderId: created.id },
         occurredAt: created.createdAt,
       })
@@ -656,7 +657,7 @@ export class ServiceOrdersService {
         producer: 'service-order.created',
         orgId: created.orgId,
         entityId: created.id,
-        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.name : 'UnknownError',
       })
     }
 

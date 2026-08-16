@@ -72,7 +72,8 @@ jobs:
       - name: Targeted tenant tests
         run: pnpm --filter ./apps/api test -- src/common/tenant-ops/tenant-ops.service.spec.ts
 
-      - name: Real multi-tenant isolation E2E
+      # The script discovers every authorized suite under apps/api/test/integration.
+      - name: Real multi-tenant isolation E2E (all integration suites)
         env:
           RUN_REAL_INTEGRATION: "true"
         run: pnpm --filter ./apps/api test:integration:real

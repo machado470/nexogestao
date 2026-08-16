@@ -9,6 +9,7 @@ import { Prisma, Notification } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { QueueService } from '../queue/queue.service'
 import { QUEUE_NAMES } from '../queue/queue.constants'
+import { isSafeNotificationRouteHint } from '@nexogestao/common'
 
 export type NotificationAudience =
   | { kind: 'user'; userId: string }
@@ -90,7 +91,7 @@ export class NotificationsService {
 
   async createNotificationNow(input: CreateNotificationInput): Promise<Notification> {
     if (!input.eventKey.trim()) throw new BadRequestException('eventKey é obrigatório')
-    if (input.routeHint && (!input.routeHint.startsWith('/') || input.routeHint.startsWith('/internal/'))) {
+    if (input.routeHint && !isSafeNotificationRouteHint(input.routeHint)) {
       throw new BadRequestException('routeHint não permitido')
     }
 
