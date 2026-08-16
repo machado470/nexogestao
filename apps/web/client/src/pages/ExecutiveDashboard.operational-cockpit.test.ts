@@ -142,10 +142,18 @@ describe("ExecutiveDashboard decision center", () => {
   it("keeps governance grade separate from authoritative operational state", () => {
     expect(source).toContain("trpc.dashboard.operationalState.useQuery");
     expect(source).toContain('?? "UNKNOWN"');
-    expect(source).toContain("Estado não determinado");
+    expect(source).toContain("executiveDashboardStateLabel[dashboardState]");
     expect(source).not.toContain("normalizeOperationLevel");
     expect(source).not.toMatch(/pageError\s*\?\s*"SUSPENDED"/);
     expect(source).not.toMatch(/attention\.length[\s\S]{0,100}"NORMAL"/);
+  });
+
+  it("renders explicit dashboard states and a real onboarding CTA", () => {
+    expect(source).toContain("resolveExecutiveDashboardState");
+    expect(source).toContain('dashboardState !== "EMPTY"');
+    expect(source).toContain("Ainda não há dados operacionais");
+    expect(source).toContain("Cadastrar ou importar primeiro cliente");
+    expect(source).toContain('navigate("/customers")');
   });
 
   it("diferencia erro de ação, vazio e ação real sem CTA fictício", () => {

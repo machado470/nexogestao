@@ -18,6 +18,10 @@ import { trpc } from "@/lib/trpc";
 import { useRenderWatchdog } from "@/hooks/useRenderWatchdog";
 import { presentationStatusLabel } from "@/lib/presentation-status";
 import {
+  executiveDashboardStateLabel,
+  resolveExecutiveDashboardState,
+} from "@/lib/executive-dashboard-state";
+import {
   AppContextChip,
   AppOperationalHeader,
   AppPageEmptyState,
@@ -810,8 +814,23 @@ export default function ExecutiveDashboard() {
   )
     ? (pendingWhatsAppApprovalsQuery.data as WhatsAppActionExecution[])
     : [];
-  const pageLoading = kpisQuery.isLoading || alertsQuery.isLoading;
-  const pageError = kpisQuery.isError || alertsQuery.isError;
+  const pageLoading =
+    kpisQuery.isLoading ||
+    alertsQuery.isLoading ||
+    operationalStateQuery.isLoading ||
+    operationalSignalsQuery.isLoading ||
+    nextBestActionQuery.isLoading;
+  const pageError =
+    kpisQuery.isError ||
+    alertsQuery.isError ||
+    operationalStateQuery.isError ||
+    operationalSignalsQuery.isError ||
+    nextBestActionQuery.isError;
+  const dashboardState = resolveExecutiveDashboardState({
+    isLoading: pageLoading,
+    isError: pageError,
+    backendState: operationalStateQuery.data?.dashboardState,
+  });
   const comparison = asRecord(metrics.comparison);
   const pulseComparisons: Array<[string, ComparisonKey, boolean?]> = [
     ["Receita recebida", "revenueReceivedPct"],
@@ -1040,8 +1059,7 @@ export default function ExecutiveDashboard() {
   );
   const missingComparisonCount =
     pulseComparisons.length - availableComparisons.length;
-  const hasOperationalData =
-    Object.keys(metrics).length > 0 || attention.length > 0 || queue.length > 0;
+  const hasOperationalData = dashboardState !== "EMPTY";
   const weeklyRevenueInCents = readNumber(metrics, "weeklyRevenueInCents");
   const kpiCards = [
     {
@@ -1185,16 +1203,7 @@ export default function ExecutiveDashboard() {
       trend: overdueChargesTrend,
     },
   ];
-  const statusLabel =
-    operationLevel === "NORMAL"
-      ? "NORMAL"
-      : operationLevel === "WARNING"
-        ? "WARNING"
-        : operationLevel === "RESTRICTED"
-          ? "RESTRICTED"
-          : operationLevel === "SUSPENDED"
-            ? "SUSPENDED"
-            : "Estado não determinado";
+  const statusLabel = executiveDashboardStateLabel[dashboardState];
   const moneyAtRisk = formatCurrencyFromCents(
     (alerts.overdueCharges?.totalAmountCents ?? 0) +
       (alerts.doneOrdersWithoutCharge?.totalAmountCents ?? 0)
@@ -1216,7 +1225,7 @@ export default function ExecutiveDashboard() {
             <AppContextChip>{formatPeriod()}</AppContextChip>
             <AppContextChip>Período: Hoje / Semana / 30 dias</AppContextChip>
             <AppContextChip
-              tone={operationLevel === "NORMAL" ? "success" : "accent"}
+              tone={dashboardState === "HEALTHY" ? "success" : "accent"}
             >
               Estado: {statusLabel}
             </AppContextChip>
@@ -1253,18 +1262,28 @@ export default function ExecutiveDashboard() {
       {pageError ? (
         <AppPageErrorState
           title="Não foi possível ler a operação"
-          description="Falhou a consulta de métricas ou alertas. A operação não assume que está tudo bem quando a leitura está indisponível."
+          description="Não foi possível consultar a próxima ação. Falhou essa ou outra fonte do Dashboard; a operação não assume que está tudo bem quando a leitura está indisponível."
           onAction={() => {
             void kpisQuery.refetch();
             void alertsQuery.refetch();
+            void operationalStateQuery.refetch();
+            void operationalSignalsQuery.refetch();
+            void nextBestActionQuery.refetch();
           }}
         />
       ) : null}
       {!pageLoading && !pageError && !hasOperationalData ? (
-        <AppPageEmptyState
-          title="Ainda não há dados operacionais para priorizar"
-          description="Cadastre clientes, agendamentos, O.S. e cobranças. A operação não cria alertas ou recomendações fictícias para preencher este espaço."
-        />
+        <div className="space-y-3">
+          <AppPageEmptyState
+            title="Ainda não há dados operacionais"
+            description="Nenhuma avaliação operacional foi concluída com dados avaliáveis. Cadastre ou importe o primeiro cliente para iniciar. A operação não cria alertas ou recomendações fictícias, nem inventa riscos, valores, cobranças ou ações."
+          />
+          <div className="flex justify-center">
+            <Button onClick={() => navigate("/customers")}>
+              Cadastrar ou importar primeiro cliente
+            </Button>
+          </div>
+        </div>
       ) : null}
 
       {!pageLoading && !pageError && hasOperationalData ? (
@@ -1366,13 +1385,7 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Ação contextual mais importante retornada pelos sinais operacionais."
           >
-            {nextBestActionQuery.isError ? (
-              <AppPageErrorState
-                title="Não foi possível consultar a próxima ação."
-                description="A fonte de ações está indisponível; nenhuma recomendação foi fabricada."
-                onAction={() => void nextBestActionQuery.refetch()}
-              />
-            ) : recommendedAction ? (
+            {recommendedAction ? (
               <NexoPriorityPanel
                 title={recommendedAction.title}
                 entity={recommendedAction.entity}

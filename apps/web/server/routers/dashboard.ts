@@ -9,6 +9,7 @@ import {
 } from "../_core/operationalNotifications";
 
 const operationalStateSchema = z.object({
+  dashboardState: z.enum(["EMPTY", "HEALTHY", "ATTENTION", "CRITICAL"]),
   operationalState: z.enum([
     "NORMAL",
     "WARNING",

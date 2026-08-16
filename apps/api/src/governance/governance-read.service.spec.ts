@@ -20,6 +20,7 @@ describe('GovernanceReadService executive truth', () => {
 
     await expect(service.getOperationalState('org-a')).resolves.toEqual(
       expect.objectContaining({
+        dashboardState: 'EMPTY',
         operationalState: 'UNKNOWN',
         source: 'NO_DATA',
         evaluatedRecords: 0,
@@ -34,17 +35,17 @@ describe('GovernanceReadService executive truth', () => {
   })
 
   it.each([
-    [{ suspendedCount: 0, restrictedCount: 0, warnings: 1 }, 'WARNING'],
-    [{ suspendedCount: 0, restrictedCount: 1, warnings: 0 }, 'RESTRICTED'],
-    [{ suspendedCount: 1, restrictedCount: 0, warnings: 0 }, 'SUSPENDED'],
-  ])('preserva o pior estado persistido da execução', async (counts, expected) => {
+    [{ suspendedCount: 0, restrictedCount: 0, warnings: 1 }, 'WARNING', 'ATTENTION'],
+    [{ suspendedCount: 0, restrictedCount: 1, warnings: 0 }, 'RESTRICTED', 'CRITICAL'],
+    [{ suspendedCount: 1, restrictedCount: 0, warnings: 0 }, 'SUSPENDED', 'CRITICAL'],
+  ])('preserva o pior estado persistido da execução', async (counts, expected, dashboardState) => {
     const prisma = createPrisma({
       evaluated: 2,
       finishedAt: new Date('2026-08-15T10:00:00Z'),
       ...counts,
     })
     await expect(new GovernanceReadService(prisma as any).getOperationalState('org-a'))
-      .resolves.toEqual(expect.objectContaining({ operationalState: expected }))
+      .resolves.toEqual(expect.objectContaining({ operationalState: expected, dashboardState }))
   })
 
   it('permite NORMAL somente após execução saudável com dados reais', async () => {
@@ -58,6 +59,7 @@ describe('GovernanceReadService executive truth', () => {
     })
     await expect(new GovernanceReadService(prisma as any).getOperationalState('org-a'))
       .resolves.toEqual(expect.objectContaining({
+        dashboardState: 'HEALTHY',
         operationalState: 'NORMAL',
         source: 'GOVERNANCE_RUN',
         evidenceAt: finishedAt,
