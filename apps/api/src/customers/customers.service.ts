@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
@@ -58,6 +59,8 @@ function parseExpectedUpdatedAt(value?: string): Date {
 
 @Injectable()
 export class CustomersService {
+  private readonly logger = new Logger(CustomersService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly timeline: TimelineService,
@@ -307,21 +310,31 @@ export class CustomersService {
       },
     })
 
-    await this.notificationsService.createNotification({
-      orgId: created.orgId,
-      eventKey: `customer.created:${created.id}`,
-      type: 'CUSTOMER_CREATED',
-      title: 'Novo cliente',
-      message: `Novo cliente ${created.name} criado.`,
-      severity: 'INFO',
-      source: 'customers',
-      audience: { kind: 'user', userId: params.createdBy },
-      entityType: 'CUSTOMER',
-      entityId: created.id,
-      routeHint: `/customers/${created.id}`,
-      metadata: { customerId: created.id },
-      occurredAt: created.createdAt,
-    })
+    try {
+      await this.notificationsService.createNotification({
+        orgId: created.orgId,
+        eventKey: `customer.created:${created.id}`,
+        type: 'CUSTOMER_CREATED',
+        title: 'Novo cliente',
+        message: `Novo cliente ${created.name} criado.`,
+        severity: 'INFO',
+        source: 'customers',
+        audience: { kind: 'user', userId: params.createdBy },
+        entityType: 'CUSTOMER',
+        entityId: created.id,
+        routeHint: `/customers?customerId=${created.id}`,
+        metadata: { customerId: created.id },
+        occurredAt: created.createdAt,
+      })
+    } catch (error) {
+      this.logger.error({
+        event: 'notification_producer_failed',
+        producer: 'customer.created',
+        orgId: created.orgId,
+        entityId: created.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
     await this.onboardingService.completeOnboardingStep(
       params.orgId,

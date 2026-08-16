@@ -60,9 +60,16 @@ function payloadHash(input: CreateNotificationInput, recipientIds: string[]) {
     routeHint: input.routeHint ?? null,
     metadata: input.metadata ?? null,
     occurredAt: input.occurredAt,
+    audience: input.audience.kind === 'user'
+      ? { kind: 'user', userId: input.audience.userId }
+      : { kind: 'organization' },
     recipients: [...recipientIds].sort(),
   }
   return createHash('sha256').update(JSON.stringify(canonicalize(material))).digest('hex')
+}
+
+export function notificationJobId(orgId: string, eventKey: string) {
+  return createHash('sha256').update(`${orgId}\0${eventKey}`).digest('hex')
 }
 
 @Injectable()
@@ -77,7 +84,7 @@ export class NotificationsService {
       QUEUE_NAMES.NOTIFICATIONS,
       'create-notification',
       input,
-      { jobId: `${input.orgId}:${input.eventKey}` },
+      { jobId: notificationJobId(input.orgId, input.eventKey) },
     )
   }
 
@@ -92,7 +99,13 @@ export class NotificationsService {
       include: { recipients: { select: { userId: true } } },
     })
     if (existing) {
-      const hash = payloadHash(input, existing.recipients.map(({ userId }) => userId))
+      // Organizational delivery is a snapshot: retries retain the recipients selected
+      // by the winning request. Individual delivery must still resolve the requested
+      // user, rather than being normalized with recipients already persisted.
+      const recipientIds = input.audience.kind === 'organization'
+        ? existing.recipients.map(({ userId }) => userId)
+        : await this.resolveAudience(input.orgId, input.audience)
+      const hash = payloadHash(input, recipientIds)
       return this.assertIdempotent(existing, hash)
     }
 

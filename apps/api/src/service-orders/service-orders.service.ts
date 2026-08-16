@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
@@ -150,6 +151,8 @@ type FinancialSummary = {
 
 @Injectable()
 export class ServiceOrdersService {
+  private readonly logger = new Logger(ServiceOrdersService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly timeline: TimelineService,
@@ -631,21 +634,31 @@ export class ServiceOrdersService {
       },
     })
 
-    await this.notificationsService.createNotification({
-      orgId: created.orgId,
-      eventKey: `service-order.created:${created.id}`,
-      type: 'SERVICE_ORDER_CREATED',
-      title: 'Nova ordem de serviço',
-      message: `Nova O.S. "${created.title}" criada para ${created.customer.name}.`,
-      severity: 'INFO',
-      source: 'service-orders',
-      audience: { kind: 'user', userId: params.createdBy },
-      entityType: 'SERVICE_ORDER',
-      entityId: created.id,
-      routeHint: `/service-orders/${created.id}`,
-      metadata: { serviceOrderId: created.id },
-      occurredAt: created.createdAt,
-    })
+    try {
+      await this.notificationsService.createNotification({
+        orgId: created.orgId,
+        eventKey: `service-order.created:${created.id}`,
+        type: 'SERVICE_ORDER_CREATED',
+        title: 'Nova ordem de serviço',
+        message: `Nova O.S. "${created.title}" criada para ${created.customer.name}.`,
+        severity: 'INFO',
+        source: 'service-orders',
+        audience: { kind: 'user', userId: params.createdBy },
+        entityType: 'SERVICE_ORDER',
+        entityId: created.id,
+        routeHint: `/service-orders?serviceOrderId=${created.id}`,
+        metadata: { serviceOrderId: created.id },
+        occurredAt: created.createdAt,
+      })
+    } catch (error) {
+      this.logger.error({
+        event: 'notification_producer_failed',
+        producer: 'service-order.created',
+        orgId: created.orgId,
+        entityId: created.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
     await this.enqueueServiceOrderCreatedMessage({
       orgId: created.orgId,

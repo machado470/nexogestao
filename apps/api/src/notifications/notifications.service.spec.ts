@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common'
-import { NotificationsService, CreateNotificationInput } from './notifications.service'
+import { NotificationsService, CreateNotificationInput, notificationJobId } from './notifications.service'
 
 const prisma = {
   user: { findMany: jest.fn() },
@@ -56,6 +56,47 @@ describe('NotificationsService persistent recipients', () => {
     await expect(service.createNotification(input)).rejects.toThrow(ConflictException)
   })
 
+  it('não normaliza uma audiência individual divergente com recipients persistidos', async () => {
+    prisma.notification.findUnique.mockResolvedValue({
+      id: 'n1', payloadHash: 'irrelevante', recipients: [{ userId: 'user-a' }],
+    })
+    prisma.user.findMany.mockResolvedValue([{ id: 'user-b' }])
+
+    await expect(service.createNotification({
+      ...input,
+      audience: { kind: 'user', userId: 'user-b' },
+    })).rejects.toThrow(ConflictException)
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { orgId: 'org-a', active: true, id: 'user-b' },
+    }))
+  })
+
+  it('preserva o snapshot de recipients organizacionais nos retries', async () => {
+    prisma.notification.findUnique.mockResolvedValueOnce(null)
+    prisma.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }])
+    prisma.notification.create.mockImplementation(async ({ data }) => ({ id: 'n1', ...data }))
+    const organizational = { ...input, audience: { kind: 'organization' } as const }
+    const created = await service.createNotification(organizational)
+
+    prisma.notification.findUnique.mockResolvedValueOnce({
+      ...created, recipients: [{ userId: 'u1' }, { userId: 'u2' }],
+    })
+    prisma.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }, { id: 'u3' }])
+
+    await expect(service.createNotification(organizational)).resolves.toMatchObject({ id: 'n1' })
+    expect(prisma.user.findMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('diferencia audiência individual de snapshot organizacional equivalente', async () => {
+    prisma.notification.findUnique.mockResolvedValueOnce(null)
+    prisma.user.findMany.mockResolvedValue([{ id: 'user-a' }])
+    prisma.notification.create.mockImplementation(async ({ data }) => ({ id: 'n1', ...data }))
+    const created = await service.createNotification({ ...input, audience: { kind: 'organization' } })
+    prisma.notification.findUnique.mockResolvedValueOnce({ ...created, recipients: [{ userId: 'user-a' }] })
+
+    await expect(service.createNotification(input)).rejects.toThrow(ConflictException)
+  })
+
   it('lista exclusivamente o recipient autenticado e retorna contagem autoritativa', async () => {
     prisma.notificationRecipient.findMany.mockResolvedValue([])
     prisma.notificationRecipient.count.mockResolvedValueOnce(0).mockResolvedValueOnce(3)
@@ -88,10 +129,12 @@ describe('NotificationsService persistent recipients', () => {
     }))
   })
 
-  it('usa eventKey estável como id do job BullMQ', async () => {
+  it('usa SHA-256 determinístico e compatível com BullMQ como jobId', async () => {
     await service.enqueueNotification(input)
     expect(queue.addJob).toHaveBeenCalledWith(expect.anything(), 'create-notification', input, {
-      jobId: 'org-a:customer.created:c1',
+      jobId: notificationJobId('org-a', 'customer.created:c1'),
     })
+    expect(notificationJobId('org-a', 'customer.created:c1')).toMatch(/^[a-f0-9]{64}$/)
+    expect(notificationJobId('org-a', 'customer.created:c1')).not.toContain(':')
   })
 })
