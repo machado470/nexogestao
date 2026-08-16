@@ -12,6 +12,7 @@ describe('ServiceOrdersService notification failure isolation', () => {
       prisma, { log: jest.fn() } as any, { log: jest.fn() } as any, { syncAndLogStateChange: jest.fn() } as any,
       {} as any, {} as any, notifications as any, onboarding as any, { enqueueMessage: jest.fn() } as any,
       { track: jest.fn() } as any, { begin: jest.fn().mockResolvedValue({ mode: 'execute', recordId: 'idem-1' }), complete: jest.fn(), fail: jest.fn() } as any,
+      { enqueue: jest.fn() } as any,
     )
     await expect(service.create({ orgId: 'org-1', createdBy: 'user-1', personId: null, customerId: 'customer-1', title: 'Instalação' })).resolves.toBe(created)
     expect(prisma.serviceOrder.create).toHaveBeenCalledTimes(1)
@@ -57,7 +58,10 @@ describe('ServiceOrdersService timeline hardening', () => {
         }),
       ),
     }
-    const timeline = { log: jest.fn().mockResolvedValue(undefined) }
+    const timeline = {
+      log: jest.fn().mockResolvedValue(undefined),
+      logInTransaction: jest.fn().mockResolvedValue({ id: 'timeline-1' }),
+    }
     const audit = { log: jest.fn().mockResolvedValue(undefined) }
     const operationalState = { syncAndLogStateChange: jest.fn().mockResolvedValue(undefined) }
     const finance = { ensureChargeForServiceOrderDone: jest.fn() }
@@ -84,6 +88,7 @@ describe('ServiceOrdersService timeline hardening', () => {
       whatsApp as any,
       analytics as any,
       idempotency as any,
+      { enqueue: jest.fn().mockResolvedValue({ id: 'outbox-1' }) } as any,
     )
 
     await service.update({
@@ -97,12 +102,13 @@ describe('ServiceOrdersService timeline hardening', () => {
       },
     })
 
-    expect(timeline.log).toHaveBeenCalledWith(
+    expect(timeline.logInTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'SERVICE_ORDER_COMPLETED',
         serviceOrderId: 'so-1',
         customerId: 'c-1',
       }),
+      expect.anything(),
     )
   })
 })

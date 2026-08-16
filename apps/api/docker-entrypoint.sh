@@ -52,6 +52,10 @@ run_prisma_generate() {
 
 run_seed_if_enabled() {
   if [ "${SEED_MODE:-}" != "" ]; then
+    if is_prod && [ "${ALLOW_PRODUCTION_SEED:-}" != "I_UNDERSTAND_DATA_MUTATION" ]; then
+      log "FATAL: seed bloqueada em produção"
+      exit 1
+    fi
     log "seed enabled (SEED_MODE=$SEED_MODE) -> running prisma:seed"
     pnpm run prisma:seed
   else

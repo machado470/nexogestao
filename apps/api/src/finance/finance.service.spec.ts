@@ -13,6 +13,7 @@ describe('FinanceService hardening', () => {
       payment: { findFirst: jest.fn() },
       $transaction: jest.fn(),
     } as any
+    prisma.$transaction.mockImplementation(async (cb: any) => cb(prisma))
 
     const whatsapp = {} as any
     const timeline = {
@@ -28,6 +29,7 @@ describe('FinanceService hardening', () => {
     } as any
     const metrics = { increment: jest.fn() } as any
     const audit = { log: jest.fn().mockResolvedValue(undefined) } as any
+    const outbox = { enqueue: jest.fn().mockResolvedValue({ id: 'outbox-1' }) } as any
 
     const service = new FinanceService(
       prisma,
@@ -38,6 +40,7 @@ describe('FinanceService hardening', () => {
       idempotency,
       metrics,
       audit,
+      outbox,
     )
 
     return { service, prisma, idempotency, metrics, audit, timeline }
@@ -519,6 +522,7 @@ describe('FinanceService cancelCharge', () => {
       {} as any,
       { increment: jest.fn() } as any,
       audit,
+      { enqueue: jest.fn() } as any,
     )
     return { service, prisma, timeline, audit }
   }
@@ -625,6 +629,7 @@ describe('FinanceService operational queue', () => {
       {} as any,
       { increment: jest.fn() } as any,
       {} as any,
+      { enqueue: jest.fn() } as any,
     )
     return { service, prisma, timeline }
   }

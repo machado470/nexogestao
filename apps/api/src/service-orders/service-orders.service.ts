@@ -27,6 +27,7 @@ import {
 } from '../common/domain/state-transitions'
 import { IdempotencyService } from '../common/idempotency/idempotency.service'
 import { notificationRoutes } from '@nexogestao/common'
+import { OutboxService } from '../outbox/outbox.service'
 
 function normalizeText(v?: string): string | null {
   const s = (v ?? '').trim()
@@ -166,6 +167,7 @@ export class ServiceOrdersService {
     private readonly whatsApp: WhatsAppService,
     private readonly analytics: AnalyticsService,
     private readonly idempotency: IdempotencyService,
+    private readonly outbox: OutboxService,
   ) {}
 
   private async enqueueServiceOrderCreatedMessage(params: {
@@ -772,11 +774,12 @@ export class ServiceOrdersService {
     }
 
     let doneTransitionIdemRecordId: string | null = null
+    let doneTransitionIdempotencyKey: string | null = null
     const isDoneTransition =
       data.status === 'DONE' && before.status !== 'DONE'
 
     if (isDoneTransition) {
-      const doneTransitionIdempotencyKey =
+      doneTransitionIdempotencyKey =
         params.idempotencyKey?.trim() ||
         ['service-order-done', params.orgId, params.id].join(':')
 
@@ -854,6 +857,35 @@ export class ServiceOrdersService {
           throw new NotFoundException('Ordem de serviço não encontrada')
         }
 
+        const timelineEvent = await this.timeline.logInTransaction({
+          orgId: params.orgId,
+          personId: params.personId,
+          action: 'SERVICE_ORDER_COMPLETED',
+          description: `Ordem de serviço concluída: ${row.title}`,
+          customerId: row.customerId,
+          serviceOrderId: row.id,
+          appointmentId: row.appointmentId,
+          metadata: {
+            actorUserId: params.updatedBy ?? null,
+            previousStatus: before.status,
+            nextStatus: row.status,
+            origin: 'operational',
+          },
+        }, tx)
+        await this.outbox.enqueue(tx, {
+          orgId: params.orgId,
+          eventType: 'SERVICE_ORDER_COMPLETED',
+          aggregateType: 'ServiceOrder',
+          aggregateId: row.id,
+          actorId: params.updatedBy,
+          idempotencyKey: `service-order-completed:${doneTransitionIdempotencyKey!}`,
+          payload: {
+            timelineEventId: timelineEvent.id,
+            serviceOrderId: row.id,
+            customerId: row.customerId,
+          },
+        })
+
         return { updated: row, transitioned: true }
       })
 
@@ -903,7 +935,7 @@ export class ServiceOrdersService {
 
     const context = `Ordem de serviço atualizada: ${updated.title}`
 
-    await this.timeline.log({
+    if (!isDoneTransition) await this.timeline.log({
       orgId: params.orgId,
       personId: params.personId,
       action: statusToAction(updated.status),
@@ -922,24 +954,6 @@ export class ServiceOrdersService {
     })
 
     if (data.status === 'DONE' && before.status !== 'DONE') {
-      await this.timeline.log({
-        orgId: params.orgId,
-        personId: params.personId,
-        action: 'SERVICE_ORDER_COMPLETED',
-        description: `Ordem de serviço concluída: ${updated.title}`,
-        customerId: updated.customerId,
-        serviceOrderId: updated.id,
-        appointmentId: updated.appointmentId ?? null,
-        metadata: {
-          serviceOrderId: updated.id,
-          customerId: updated.customerId,
-          appointmentId: updated.appointmentId ?? null,
-          responsibleId: updated.assignedToPersonId ?? null,
-          previousStatus: before.status,
-          nextStatus: updated.status,
-        },
-      })
-
       void this.analytics.track({
         orgId: params.orgId,
         userId: params.updatedBy ?? undefined,
