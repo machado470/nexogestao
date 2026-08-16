@@ -33,9 +33,11 @@ export function registerNotificationStreamRoute(app: Express) {
       res.status(400).json({ error: "Last-Event-ID inválido" }); return;
     }
     const abort = new AbortController();
-    const onClose = () => abort.abort();
-    req.once("close", onClose); res.once("close", onClose);
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    const onDisconnect = () => { abort.abort(); void reader?.cancel().catch(() => undefined); };
+    // `req.close` also fires when a perfectly healthy GET request has finished
+    // being read. The lifetime of SSE is owned by the response instead.
+    req.once("aborted", onDisconnect); res.once("close", onDisconnect); res.once("error", onDisconnect);
     try {
       const upstream = await fetch(`${resolveNexoApiUrl()}/notifications/stream`, {
         headers: { Authorization: `Bearer ${token}`, ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}) },
@@ -59,10 +61,11 @@ export function registerNotificationStreamRoute(app: Express) {
         if (!res.write(Buffer.from(value)) && !await waitForDrain(res, abort.signal)) break;
       }
     } catch (error) {
-      if (!res.headersSent) res.status(503).json({ error: "Stream indisponível" });
+      if (!abort.signal.aborted && !res.headersSent) res.status(503).json({ error: "Stream indisponível" });
     } finally {
-      req.removeListener("close", onClose);
-      res.removeListener("close", onClose);
+      req.removeListener("aborted", onDisconnect);
+      res.removeListener("close", onDisconnect);
+      res.removeListener("error", onDisconnect);
       if (reader) await reader.cancel().catch(() => undefined);
       if (!res.writableEnded) res.end();
     }

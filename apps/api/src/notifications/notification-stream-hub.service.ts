@@ -65,6 +65,7 @@ export class NotificationStreamHub implements OnApplicationShutdown {
     for (const connection of [...set]) {
       if (connection.closed) continue
       if (connection.replaying) {
+        if (connection.pending.some(pending => pending.eventId === event.eventId)) continue
         if (connection.pending.length >= MAX_PENDING_EVENTS) connection.overflowed = true
         else connection.pending.push(event)
         continue

@@ -39,4 +39,28 @@ describe('notification realtime transport', () => {
     expect(parseNotificationTransportEvent(JSON.stringify({ ...event, createdAt: '2026-08-16T10:00:00Z' }))).toBeNull()
     expect(parseNotificationTransportEvent(JSON.stringify({ ...event, createdAt: '2026-02-30T10:00:00.000Z' }))).toBeNull()
   })
+  it('limita cada usuário a cinco conexões e remove de forma idempotente', () => {
+    const hub = new NotificationStreamHub(); const registrations = []
+    for (let index = 0; index < 5; index++) registrations.push(hub.add('org_a', 'user_a', () => true, jest.fn())!)
+    expect(hub.add('org_a', 'user_a', () => true, jest.fn())).toBeNull(); expect(hub.count()).toBe(5)
+    registrations[0].remove(); registrations[0].remove(); expect(hub.count()).toBe(4)
+  })
+  it('detecta overflow durante replay e limpa todo o pending', () => {
+    const hub = new NotificationStreamHub(); const registration = hub.add('org_a', 'user_a', () => true, jest.fn())!
+    for (let index = 0; index < 101; index++) hub.deliver({ ...event, eventId: `recipient_${index}` })
+    expect(registration.finishReplay(new Set())).toBe(false); expect(hub.count()).toBe(0)
+  })
+  it('deduplica a transição replay/live e trata backpressure no replay', () => {
+    const hub = new NotificationStreamHub(); const frames: string[] = []; const close = jest.fn()
+    const registration = hub.add('org_a', 'user_a', frame => { frames.push(frame); return false }, close)!
+    hub.deliver(event); hub.deliver(event)
+    expect(registration.finishReplay(new Set())).toBe(false)
+    expect(frames).toHaveLength(1); expect(close).toHaveBeenCalledTimes(1); expect(hub.count()).toBe(0)
+  })
+  it('shutdown fecha cada conexão uma única vez e limpa registros', () => {
+    const hub = new NotificationStreamHub(); const closes = [jest.fn(), jest.fn()]
+    hub.add('org_a', 'user_a', () => true, closes[0]); hub.add('org_a', 'user_b', () => true, closes[1])
+    hub.onApplicationShutdown(); hub.onApplicationShutdown()
+    expect(closes[0]).toHaveBeenCalledTimes(1); expect(closes[1]).toHaveBeenCalledTimes(1); expect(hub.count()).toBe(0)
+  })
 })
