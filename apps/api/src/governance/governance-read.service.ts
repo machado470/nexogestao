@@ -180,6 +180,7 @@ export class GovernanceReadService {
 
     if (!lastRun || lastRun.evaluated <= 0) {
       return {
+        dashboardState: 'EMPTY' as const,
         operationalState: 'UNKNOWN' as const,
         source: 'NO_DATA' as const,
         evidenceAt: null,
@@ -197,7 +198,14 @@ export class GovernanceReadService {
           ? 'WARNING'
           : 'NORMAL'
 
+    const dashboardState = operationalState === 'NORMAL'
+      ? 'HEALTHY'
+      : operationalState === 'WARNING'
+        ? 'ATTENTION'
+        : 'CRITICAL'
+
     return {
+      dashboardState,
       operationalState,
       source: 'GOVERNANCE_RUN' as const,
       evidenceAt: lastRun.finishedAt,

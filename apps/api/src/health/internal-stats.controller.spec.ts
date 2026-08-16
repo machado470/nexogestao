@@ -21,9 +21,13 @@ describe('InternalStatsController authorization', () => {
   const queueService = { getQueueStatus: jest.fn() }
   const waMetrics = { snapshot: jest.fn() }
   const queueObservability = { snapshot: jest.fn() }
+  const operationalSignals = {
+    listForOrg: jest.fn().mockResolvedValue({ signals: [], totalSignals: 0 }),
+    getNextBestAction: jest.fn().mockResolvedValue(null),
+  }
 
   beforeAll(async () => {
-    const mocks = [queueService, waMetrics, { runForOrg: jest.fn() }, { listForOrg: jest.fn(), getNextBestAction: jest.fn() }, queueObservability, { exportJson: jest.fn() }]
+    const mocks = [queueService, waMetrics, { runForOrg: jest.fn() }, operationalSignals, queueObservability, { exportJson: jest.fn() }]
     let index = 0
     const module = await Test.createTestingModule({
       controllers: [InternalStatsController],
@@ -60,5 +64,20 @@ describe('InternalStatsController authorization', () => {
     })
     expect(JSON.stringify(body)).not.toContain('org-b')
     expect(queueService.getQueueStatus).not.toHaveBeenCalled()
+  })
+
+  it('permite ao usuário ativo ler somente sinais e ação do próprio tenant', async () => {
+    await request(app.getHttpServer())
+      .get('/internal/operational-signals?limit=8')
+      .set('x-test-role', 'OPERADOR')
+      .set('x-test-org', 'org-a')
+      .expect(200)
+    await request(app.getHttpServer())
+      .get('/internal/operational-signals/next-best-action')
+      .set('x-test-role', 'OPERADOR')
+      .set('x-test-org', 'org-a')
+      .expect(200)
+    expect(operationalSignals.listForOrg).toHaveBeenCalledWith('org-a', 8)
+    expect(operationalSignals.getNextBestAction).toHaveBeenCalledWith('org-a')
   })
 })

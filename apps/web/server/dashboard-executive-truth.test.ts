@@ -19,6 +19,7 @@ describe("Dashboard BFF executive truth", () => {
   it("consulta estado pela API /v1, encaminha autenticação e preserva UNKNOWN", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({
+        dashboardState: "EMPTY",
         operationalState: "UNKNOWN",
         source: "NO_DATA",
         evidenceAt: null,
@@ -28,7 +29,7 @@ describe("Dashboard BFF executive truth", () => {
       }), { status: 200 })
     );
     await expect(caller().dashboard.operationalState()).resolves.toEqual(
-      expect.objectContaining({ operationalState: "UNKNOWN", source: "NO_DATA" })
+      expect.objectContaining({ dashboardState: "EMPTY", operationalState: "UNKNOWN", source: "NO_DATA" })
     );
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/v1\/governance\/operational-state$/),
