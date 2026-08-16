@@ -31,7 +31,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { canAny, type Permission, type Role } from "@/lib/rbac";
 import { useIsMobile } from "@/hooks/useMobile";
-import { useNotificationStore } from "@/stores/notificationStore";
+import { trpc } from "@/lib/trpc";
 import { useAutomationRunner } from "@/hooks/useAutomationRunner";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import {
@@ -87,9 +87,22 @@ export function MainLayout({ children }: MainLayoutProps) {
   const { role, user, logout, isLoggingOut, loading, isAuthenticated } =
     useAuth();
   const { theme, toggleTheme } = useTheme();
-  const notifications = useNotificationStore(state => state.notifications);
-  const clearNotifications = useNotificationStore(state => state.clear);
-  const removeNotification = useNotificationStore(state => state.remove);
+  const trpcUtils = trpc.useUtils();
+  const notificationQuery = trpc.dashboard.notificationCenter.list.useQuery(
+    { page: 1, limit: 6, category: "all" },
+    { enabled: isAuthenticated, retry: false },
+  );
+  const markNotificationRead = trpc.dashboard.notificationCenter.markAsRead.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        trpcUtils.dashboard.notificationCenter.list.invalidate(),
+        trpcUtils.dashboard.notificationCenter.unreadCount.invalidate(),
+        trpcUtils.dashboard.notifications.invalidate(),
+      ]);
+    },
+  });
+  const persistentNotifications = notificationQuery.data?.items ?? [];
+  const unreadCount = notificationQuery.data?.unreadCount;
 
   const isMobile = useIsMobile();
   const [sidebarCollapsed, setSidebarCollapsed] =
@@ -510,9 +523,9 @@ export function MainLayout({ children }: MainLayoutProps) {
                           aria-label="Notificações"
                         >
                           <Bell className="h-4 w-4" />
-                          {notifications.length > 0 ? (
+                          {typeof unreadCount === "number" && unreadCount > 0 ? (
                             <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[10px] font-semibold text-[var(--text-primary)]">
-                              {Math.min(notifications.length, 9)}
+                              {Math.min(unreadCount, 9)}
                             </span>
                           ) : null}
                         </button>
@@ -523,50 +536,35 @@ export function MainLayout({ children }: MainLayoutProps) {
                       >
                         <DropdownMenuLabel className="flex items-center justify-between px-3 py-2">
                           <span>Notificações</span>
-                          {notifications.length > 0 ? (
-                            <button
-                              type="button"
-                              onClick={clearNotifications}
-                              className="text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
-                            >
-                              Limpar
-                            </button>
-                          ) : null}
+                          <span className="text-xs font-normal text-[var(--text-muted)]">Atualizado por consulta</span>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        {notifications.length === 0 ? (
+                        {notificationQuery.isLoading ? (
+                          <div className="px-3 py-8 text-center text-sm text-[var(--text-muted)]">Carregando notificações…</div>
+                        ) : notificationQuery.isError ? (
+                          <div className="px-3 py-8 text-center">
+                            <p className="text-sm text-[var(--danger)]">Não foi possível carregar as notificações.</p>
+                            <button type="button" onClick={() => notificationQuery.refetch()} className="mt-2 text-xs font-medium text-[var(--accent)]">Tentar novamente</button>
+                          </div>
+                        ) : persistentNotifications.length === 0 ? (
                           <div className="px-3 py-8 text-center">
                             <Bell className="mx-auto h-5 w-5 text-[var(--text-muted)]" />
-                            <p className="mt-2 text-sm text-[var(--text-muted)]">
-                              Nenhuma notificação no momento.
-                            </p>
+                            <p className="mt-2 text-sm text-[var(--text-muted)]">Nenhuma notificação no momento.</p>
                           </div>
-                        ) : (
-                          notifications
-                            .slice()
-                            .reverse()
-                            .slice(0, 6)
-                            .map(item => (
-                              <DropdownMenuItem
-                                key={item.id}
-                                className="flex cursor-pointer flex-col items-start gap-1 rounded-xl px-3 py-2"
-                                onSelect={evt => {
-                                  evt.preventDefault();
-                                  item.action?.onClick();
-                                  removeNotification(item.id);
-                                }}
-                              >
-                                <p className="text-sm font-medium text-[var(--text-primary)]">
-                                  {item.title}
-                                </p>
-                                {item.description ? (
-                                  <p className="line-clamp-2 text-xs text-[var(--text-muted)]">
-                                    {item.description}
-                                  </p>
-                                ) : null}
-                              </DropdownMenuItem>
-                            ))
-                        )}
+                        ) : persistentNotifications.map(item => (
+                          <DropdownMenuItem
+                            key={item.id}
+                            className={cn("flex cursor-pointer flex-col items-start gap-1 rounded-xl px-3 py-2", !item.read && "bg-[var(--surface-subtle)]")}
+                            onSelect={evt => {
+                              evt.preventDefault();
+                              if (!item.read) markNotificationRead.mutate({ id: item.id });
+                              if (item.routeHint && !item.routeHint.startsWith("/internal/")) navigate(item.routeHint);
+                            }}
+                          >
+                            <p className="text-sm font-medium text-[var(--text-primary)]">{item.title}</p>
+                            <p className="line-clamp-2 text-xs text-[var(--text-muted)]">{item.message}</p>
+                          </DropdownMenuItem>
+                        ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
 

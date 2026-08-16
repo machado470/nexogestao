@@ -39,6 +39,7 @@ model Organization {
   whatsAppWebhookEvents        WhatsAppWebhookEvent[]
   whatsAppActionExecutions     WhatsAppActionExecution[]
   operationalActionExecutions  OperationalActionExecution[]
+  notifications                Notification[]
 
   subscription     Subscription?
   executionConfig  OrganizationExecutionConfig?
@@ -78,6 +79,45 @@ model User {
   person                    Person?
   org                       Organization  @relation(fields: [orgId], references: [id])
   usageMetrics              UsageMetric[]
+  notificationRecipients    NotificationRecipient[]
+}
+
+model Notification {
+  id          String                  @id @default(uuid())
+  orgId       String
+  eventKey    String
+  payloadHash String
+  type        String
+  title       String
+  message     String
+  severity    String
+  source      String
+  entityType  String?
+  entityId    String?
+  routeHint   String?
+  metadata    Json?
+  occurredAt  DateTime
+  createdAt   DateTime                @default(now())
+  org         Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  recipients  NotificationRecipient[]
+
+  @@unique([orgId, eventKey])
+  @@index([orgId, createdAt])
+  @@index([orgId, type, createdAt])
+}
+
+model NotificationRecipient {
+  id             String       @id @default(uuid())
+  notificationId String
+  userId         String
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId, readAt, createdAt])
+  @@index([notificationId])
 }
 
 model Person {

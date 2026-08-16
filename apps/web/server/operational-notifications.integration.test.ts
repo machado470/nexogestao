@@ -1,80 +1,41 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
-import {
-  __resetOperationalNotificationsForTests,
-  emitOperationalNotification,
-} from "./_core/operationalNotifications";
 
-const ORG_10_ID = "00000000-0000-0000-0000-000000000010";
-const ORG_20_ID = "00000000-0000-0000-0000-000000000020";
-
-function createCtx(orgId: string) {
-  return {
-    req: { headers: { cookie: "nexo_token=test-token" } },
-    res: {},
-    user: {
-      id: 1,
-      organizationId: orgId,
-      role: "admin",
-      token: "test-token",
-      validated: true,
-    },
-  } as any;
+function createCtx(org = "org-a") {
+  return { req: { headers: {} }, res: {}, user: { id: 1, organizationId: org, role: "admin", token: "session-token", validated: true } } as any;
 }
+const item = {
+  id: "00000000-0000-4000-8000-000000000001", type: "CUSTOMER_CREATED", title: "Cliente criado",
+  message: "Cliente criado.", severity: "INFO", source: "customers", entityType: "CUSTOMER",
+  entityId: "c1", routeHint: "/customers/c1", metadata: { customerId: "c1" },
+  occurredAt: "2026-08-16T10:00:00Z", createdAt: "2026-08-16T10:00:00Z", read: false, readAt: null,
+};
 
-describe("Operational notifications integration", () => {
-  beforeEach(async () => {
-    await __resetOperationalNotificationsForTests();
+describe("notification BFF persistent authority", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal("fetch", fetchMock); });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        text: async () => JSON.stringify({ id: "entity-1", data: { id: "entity-1" } }),
-      }))
-    );
+  it("uses /v1 API and session bearer instead of Prisma or memory", async () => {
+    fetchMock.mockResolvedValue({ ok: true, text: async () => JSON.stringify({ items: [item], total: 1, page: 1, pages: 1, unreadCount: 1 }) });
+    const result = await appRouter.createCaller(createCtx()).dashboard.notificationCenter.list({ page: 1, limit: 10, category: "all" });
+    expect(result.items).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/v1/notifications?"), expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
+    }));
   });
 
-  it("records risk-level change notification through governance router", async () => {
-    const caller = appRouter.createCaller(createCtx(ORG_10_ID));
-
-    await caller.governance.changeRiskLevel({
-      entityId: "customer-1",
-      previousLevel: "LOW",
-      newLevel: "HIGH",
-    });
-
-    const notifications = await caller.dashboard.notifications({ limit: 10 });
-    const types = notifications.map((n) => n.type);
-
-    expect(types).toContain("RISK_LEVEL_CHANGED");
-    expect(notifications.every((n) => n.orgId === ORG_10_ID)).toBe(true);
+  it("preserves upstream errors rather than returning empty/zero", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 503, text: async () => JSON.stringify({ message: "database unavailable" }) });
+    await expect(appRouter.createCaller(createCtx()).dashboard.notificationCenter.unreadCount()).rejects.toThrow("database unavailable");
   });
 
-  it("scopes notifications by orgId and keeps them visible in dashboard query", async () => {
-    const callerOrg10 = appRouter.createCaller(createCtx(ORG_10_ID));
-    const callerOrg20 = appRouter.createCaller(createCtx(ORG_20_ID));
+  it("rejects authenticated session without organization", async () => {
+    await expect(appRouter.createCaller({ ...createCtx(), user: { ...createCtx().user, organizationId: undefined } } as any).dashboard.notifications({ limit: 10 })).rejects.toThrow("Sessão sem organização");
+  });
 
-    await emitOperationalNotification({
-      orgId: ORG_10_ID,
-      type: "APPOINTMENT_CONFIRMED",
-      metadata: { appointmentId: "apt-10" },
-    });
-    await emitOperationalNotification({
-      orgId: ORG_20_ID,
-      type: "APPOINTMENT_CONFIRMED",
-      metadata: { appointmentId: "apt-20" },
-    });
-
-    const org10Notifications = await callerOrg10.dashboard.notifications({ limit: 10 });
-    const org20Notifications = await callerOrg20.dashboard.notifications({ limit: 10 });
-
-    expect(org10Notifications.length).toBe(1);
-    expect(org20Notifications.length).toBe(1);
-
-    expect(org10Notifications[0]?.metadata).toMatchObject({ appointmentId: "apt-10" });
-    expect(org20Notifications[0]?.metadata).toMatchObject({ appointmentId: "apt-20" });
-    expect(org10Notifications[0]?.orgId).toBe(ORG_10_ID);
-    expect(org20Notifications[0]?.orgId).toBe(ORG_20_ID);
+  it("governance changeRiskLevel does not invent a notification or mutation", async () => {
+    await expect(appRouter.createCaller(createCtx()).governance.changeRiskLevel({ entityId: "c1", previousLevel: "LOW", newLevel: "HIGH" }))
+      .rejects.toThrow("não há mutação confirmada");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

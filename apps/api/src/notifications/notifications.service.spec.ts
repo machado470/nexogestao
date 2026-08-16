@@ -1,98 +1,97 @@
-import { Test, TestingModule } from '@nestjs/testing'
-import { NotFoundException } from '@nestjs/common'
-import { NotificationsService } from './notifications.service'
-import { PrismaService } from '../prisma/prisma.service'
-import { QueueService } from '../queue/queue.service'
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common'
+import { NotificationsService, CreateNotificationInput } from './notifications.service'
 
-const mockQueueService = {
-  addJob: jest.fn(),
+const prisma = {
+  user: { findMany: jest.fn() },
+  notification: { findUnique: jest.fn(), create: jest.fn() },
+  notificationRecipient: { findMany: jest.fn(), count: jest.fn(), updateMany: jest.fn() },
+}
+const queue = { addJob: jest.fn() }
+const input: CreateNotificationInput = {
+  orgId: 'org-a', eventKey: 'customer.created:c1', type: 'CUSTOMER_CREATED',
+  title: 'Cliente criado', message: 'Cliente criado.', severity: 'INFO', source: 'customers',
+  audience: { kind: 'user', userId: 'user-a' }, entityType: 'CUSTOMER', entityId: 'c1',
+  metadata: { b: 2, a: 1 }, occurredAt: new Date('2026-08-16T10:00:00Z'),
 }
 
-const mockPrisma = {
-  notification: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    count: jest.fn(),
-    updateMany: jest.fn(),
-  },
-}
-
-describe('NotificationsService', () => {
+describe('NotificationsService persistent recipients', () => {
   let service: NotificationsService
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        NotificationsService,
-        { provide: PrismaService, useValue: mockPrisma },
-        { provide: QueueService, useValue: mockQueueService },
-      ],
-    }).compile()
-
-    service = module.get<NotificationsService>(NotificationsService)
+  beforeEach(() => {
     jest.clearAllMocks()
+    service = new NotificationsService(prisma as never, queue as never)
   })
 
-  it('deve incluir notificações globais da organização no feed do usuário', async () => {
-    mockPrisma.notification.findMany.mockResolvedValue([])
-
-    await service.getNotifications('org-1', 'user-1')
-
-    expect(mockPrisma.notification.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          orgId: 'org-1',
-          OR: [{ userId: 'user-1' }, { userId: null }],
-        },
-      }),
-    )
+  it('rejeita destinatário inativo ou de outro tenant', async () => {
+    prisma.user.findMany.mockResolvedValue([])
+    await expect(service.createNotification(input)).rejects.toThrow(BadRequestException)
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { orgId: 'org-a', active: true, id: 'user-a' },
+    }))
   })
 
-  it('deve contar apenas notificações não lidas visíveis para o usuário', async () => {
-    mockPrisma.notification.count.mockResolvedValue(3)
+  it('materializa somente usuários ativos da organização', async () => {
+    prisma.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }])
+    prisma.notification.findUnique.mockResolvedValue(null)
+    prisma.notification.create.mockImplementation(async ({ data }) => ({ id: 'n1', ...data }))
+    await service.createNotification({ ...input, audience: { kind: 'organization' } })
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      recipients: { create: [{ userId: 'u1' }, { userId: 'u2' }] },
+    }) }))
+  })
 
-    const result = await service.getUnreadCount('org-1', 'user-1')
+  it('retry idempotente retorna o registro existente', async () => {
+    prisma.user.findMany.mockResolvedValue([{ id: 'user-a' }])
+    prisma.notification.findUnique.mockResolvedValueOnce(null)
+    prisma.notification.create.mockImplementationOnce(async ({ data }) => ({ id: 'n1', ...data }))
+    const created = await service.createNotification(input)
+    prisma.notification.findUnique.mockResolvedValueOnce({ ...created, recipients: [{ userId: 'user-a' }] })
+    const retried = await service.createNotification(input)
+    expect(retried.id).toBe('n1')
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1)
+  })
 
-    expect(result).toBe(3)
-    expect(mockPrisma.notification.count).toHaveBeenCalledWith({
-      where: {
-        orgId: 'org-1',
-        readAt: null,
-        OR: [{ userId: 'user-1' }, { userId: null }],
-      },
+  it('mesma eventKey com payload diferente gera conflito', async () => {
+    prisma.user.findMany.mockResolvedValue([{ id: 'user-a' }])
+    prisma.notification.findUnique.mockResolvedValue({ id: 'n1', payloadHash: 'different', recipients: [{ userId: 'user-a' }] })
+    await expect(service.createNotification(input)).rejects.toThrow(ConflictException)
+  })
+
+  it('lista exclusivamente o recipient autenticado e retorna contagem autoritativa', async () => {
+    prisma.notificationRecipient.findMany.mockResolvedValue([])
+    prisma.notificationRecipient.count.mockResolvedValueOnce(0).mockResolvedValueOnce(3)
+    const result = await service.getNotifications('org-a', 'user-a')
+    expect(result.unreadCount).toBe(3)
+    expect(prisma.notificationRecipient.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user-a', notification: { orgId: 'org-a' } },
+    }))
+  })
+
+  it('marca leitura individual com escopo de usuário e tenant', async () => {
+    prisma.notificationRecipient.updateMany.mockResolvedValue({ count: 1 })
+    await expect(service.markAsRead('org-a', 'user-a', 'n1')).resolves.toEqual({ success: true })
+    expect(prisma.notificationRecipient.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { notificationId: 'n1', userId: 'user-a', notification: { orgId: 'org-a' }, readAt: null },
+    }))
+  })
+
+  it('não permite ler recipient inexistente ou de outro tenant', async () => {
+    prisma.notificationRecipient.updateMany.mockResolvedValue({ count: 0 })
+    prisma.notificationRecipient.count.mockResolvedValue(0)
+    await expect(service.markAsRead('org-a', 'user-a', 'n1')).rejects.toThrow(NotFoundException)
+  })
+
+  it('markAllAsRead não alcança outro usuário ou tenant', async () => {
+    prisma.notificationRecipient.updateMany.mockResolvedValue({ count: 2 })
+    await expect(service.markAllAsRead('org-a', 'user-a')).resolves.toEqual({ success: true, updated: 2 })
+    expect(prisma.notificationRecipient.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user-a', readAt: null, notification: { orgId: 'org-a' } },
+    }))
+  })
+
+  it('usa eventKey estável como id do job BullMQ', async () => {
+    await service.enqueueNotification(input)
+    expect(queue.addJob).toHaveBeenCalledWith(expect.anything(), 'create-notification', input, {
+      jobId: 'org-a:customer.created:c1',
     })
-  })
-
-  it('deve impedir marcar notificação de outro tenant como lida', async () => {
-    mockPrisma.notification.updateMany.mockResolvedValue({ count: 0 })
-
-    await expect(service.markAsRead('org-1', 'user-1', 'notif-1')).rejects.toThrow(
-      NotFoundException,
-    )
-  })
-
-  it('deve marcar como lida quando notificação pertence ao tenant do usuário', async () => {
-    mockPrisma.notification.updateMany.mockResolvedValue({ count: 1 })
-
-    const result = await service.markAsRead('org-1', 'user-1', 'notif-1')
-
-    expect(result).toEqual({ ok: true })
-    expect(mockPrisma.notification.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          id: 'notif-1',
-          orgId: 'org-1',
-          OR: [{ userId: 'user-1' }, { userId: null }],
-        },
-      }),
-    )
-  })
-
-  it('deve marcar todas como lidas e retornar total atualizado', async () => {
-    mockPrisma.notification.updateMany.mockResolvedValue({ count: 4 })
-
-    const result = await service.markAllAsRead('org-1', 'user-1')
-
-    expect(result).toEqual({ ok: true, updated: 4 })
   })
 })

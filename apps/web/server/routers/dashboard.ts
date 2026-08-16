@@ -1,10 +1,10 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, protectedProcedure } from "../_core/trpc";
 import { nexoFetch } from "../_core/nexoClient";
 import {
   countUnreadOperationalNotifications,
   listOperationalNotifications,
-  listOperationalNotificationsPaginated,
   markNotificationAsRead,
 } from "../_core/operationalNotifications";
 
@@ -76,11 +76,11 @@ export const dashboardRouter = router({
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      if (!ctx.user?.organizationId) return [];
-      return await listOperationalNotifications(
-        ctx.user.organizationId,
-        input?.limit ?? 20
-      );
+      if (!ctx.user?.organizationId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Sessão sem organização" });
+      }
+      const result = await listOperationalNotifications(ctx, { limit: input?.limit ?? 20 });
+      return result.items;
     }),
 
   notificationCenter: router({
@@ -98,17 +98,9 @@ export const dashboardRouter = router({
       )
       .query(async ({ ctx, input }) => {
         if (!ctx.user?.organizationId) {
-          return {
-            items: [],
-            total: 0,
-            page: 1,
-            pages: 1,
-            unreadCount: 0,
-          };
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Sessão sem organização" });
         }
-
-        return listOperationalNotificationsPaginated({
-          orgId: ctx.user.organizationId,
+        return listOperationalNotifications(ctx, {
           page: input?.page ?? 1,
           limit: input?.limit ?? 10,
           category: input?.category ?? "all",
@@ -116,13 +108,10 @@ export const dashboardRouter = router({
       }),
 
     unreadCount: protectedProcedure.query(async ({ ctx }) => {
-      if (!ctx.user?.organizationId) return { unreadCount: 0 };
-
-      const unreadCount = await countUnreadOperationalNotifications(
-        ctx.user.organizationId
-      );
-
-      return { unreadCount };
+      if (!ctx.user?.organizationId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Sessão sem organização" });
+      }
+      return countUnreadOperationalNotifications(ctx);
     }),
 
     markAsRead: protectedProcedure
@@ -132,12 +121,10 @@ export const dashboardRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (!ctx.user?.organizationId) return { success: false };
-
-        return markNotificationAsRead({
-          id: input.id,
-          orgId: ctx.user.organizationId,
-        });
+        if (!ctx.user?.organizationId) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Sessão sem organização" });
+        }
+        return markNotificationAsRead(ctx, input.id);
       }),
   }),
 

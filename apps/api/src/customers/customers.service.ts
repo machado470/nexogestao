@@ -307,13 +307,21 @@ export class CustomersService {
       },
     })
 
-    await this.notificationsService.createNotification(
-      created.orgId,
-      'CUSTOMER_CREATED',
-      `Novo cliente ${created.name} criado.`,
-      params.createdBy,
-      { customerId: created.id },
-    )
+    await this.notificationsService.createNotification({
+      orgId: created.orgId,
+      eventKey: `customer.created:${created.id}`,
+      type: 'CUSTOMER_CREATED',
+      title: 'Novo cliente',
+      message: `Novo cliente ${created.name} criado.`,
+      severity: 'INFO',
+      source: 'customers',
+      audience: { kind: 'user', userId: params.createdBy },
+      entityType: 'CUSTOMER',
+      entityId: created.id,
+      routeHint: `/customers/${created.id}`,
+      metadata: { customerId: created.id },
+      occurredAt: created.createdAt,
+    })
 
     await this.onboardingService.completeOnboardingStep(
       params.orgId,

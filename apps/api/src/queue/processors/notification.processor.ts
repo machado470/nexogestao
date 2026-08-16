@@ -32,13 +32,7 @@ export class NotificationProcessor implements OnModuleInit, OnModuleDestroy {
             status: 'ACTIVE',
           })
 
-          await this.notificationsService.createNotificationNow(
-            job.data.orgId,
-            job.data.type,
-            job.data.message,
-            job.data.userId,
-            job.data.metadata,
-          )
+          await this.notificationsService.createNotificationNow(job.data)
 
           await this.queueService.updateJobStatus({
             queue: QUEUE_NAMES.NOTIFICATIONS,
