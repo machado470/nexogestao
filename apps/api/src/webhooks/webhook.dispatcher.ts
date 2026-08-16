@@ -18,6 +18,7 @@ export class WebhookDispatcher {
   }
 
   async dispatchTimelineEvent(input: {
+    outboxEventId?: string
     orgId: string
     action: string
     timelineEventId: string
@@ -40,6 +41,9 @@ export class WebhookDispatcher {
         endpointId: endpoint.id,
         eventType,
         payload,
+        idempotencyKey: input.outboxEventId
+          ? `outbox:${input.outboxEventId}:endpoint:${endpoint.id}`
+          : `timeline:${input.timelineEventId}:endpoint:${endpoint.id}`,
       })
 
       await this.queueService.addJob(

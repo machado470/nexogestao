@@ -37,3 +37,7 @@ Versões existentes nunca mudam de significado. Mudança incompatível cria nova
 ## Consumidores e prevenção de ciclos
 
 Neste lote, somente o dispatcher de webhooks já existente consome os três fatos protegidos, usando `timelineEventId`. Filas externas e chamadas não rodam na transação. Risco e governança não foram conectados automaticamente à Outbox: fatos com origem `risk`, `governance` ou `derived` não podem ser reintroduzidos como evidência primária sem regra versionada explícita. Uma decisão não pode causar a si mesma; `causationId` e chave idempotente devem encerrar a cadeia.
+
+## Fechamento de entrega do Lote 2
+
+Cada handoff de webhook persistido tem chave `outbox:<eventId>:endpoint:<endpointId>`; o evento fica `PROCESSED` quando todas as entregas foram persistidas e seus jobs aceitos. A resposta HTTP externa pode ocorrer depois e mantém retry próprio: `PROCESSED` não significa confirmação do destino. O identificador do worker pode ser fixado por `OUTBOX_WORKER_ID`; lote, intervalo, lock, tentativas e backoff usam `OUTBOX_BATCH_SIZE`, `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_LOCK_TIMEOUT_MS`, `OUTBOX_MAX_ATTEMPTS` e `OUTBOX_BACKOFF_BASE_MS`, validados como inteiros positivos.

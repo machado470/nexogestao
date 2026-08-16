@@ -41,6 +41,7 @@ model Organization {
   operationalActionExecutions  OperationalActionExecution[]
   operationalOutboxEvents      OperationalOutboxEvent[]
   notifications                Notification[]
+  webhookEndpoints             WebhookEndpoint[]
 
   subscription     Subscription?
   executionConfig  OrganizationExecutionConfig?
@@ -220,6 +221,45 @@ model OperationalOutboxEvent {
   @@index([orgId, status, availableAt])
   @@index([lockedAt, status])
   @@index([orgId, aggregateType, aggregateId, occurredAt])
+}
+
+model WebhookEndpoint {
+  id         String   @id @default(uuid())
+  orgId      String
+  url        String
+  secret     String
+  active     Boolean  @default(true)
+  events     Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([orgId, active, createdAt])
+}
+
+model WebhookDelivery {
+  id             String   @id @default(uuid())
+  endpointId     String
+  eventType      String
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int      @default(0)
+  lastAttemptAt  DateTime?
+  createdAt      DateTime @default(now())
+  idempotencyKey String?
+  endpoint       WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId, idempotencyKey])
+  @@index([endpointId])
+  @@index([eventType])
+  @@index([status])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 model Track {
