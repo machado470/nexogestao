@@ -35,6 +35,25 @@ describe('notification realtime transport', () => {
     await hub.deliver({ ...event, eventId: 'recipient_4' })
     expect(close).toHaveBeenCalledTimes(1); expect(hub.count()).toBe(0)
   })
+  it('bufferiza durante replay e envia uma única vez ao terminar a transição para live', async () => {
+    const hub = new NotificationStreamHub(); const writer = jest.fn().mockReturnValue(true)
+    const registration = hub.add('org_a', 'user_a', writer, jest.fn())!
+
+    await expect(hub.deliver(event)).resolves.toEqual([])
+    await expect(hub.deliver(event)).resolves.toEqual([])
+    expect(writer).not.toHaveBeenCalled()
+    await expect(registration.finishReplay(new Set())).resolves.toBe(true)
+    expect(writer).toHaveBeenCalledTimes(1)
+    expect(writer).toHaveBeenCalledWith(notificationFrame(event))
+  })
+  it('descarta pending que já foi enviado pelo replay persistido', async () => {
+    const hub = new NotificationStreamHub(); const writer = jest.fn().mockReturnValue(true)
+    const registration = hub.add('org_a', 'user_a', writer, jest.fn())!
+
+    await expect(hub.deliver(event)).resolves.toEqual([])
+    await expect(registration.finishReplay(new Set([event.eventId]))).resolves.toBe(true)
+    expect(writer).not.toHaveBeenCalled()
+  })
   it('exige createdAt UTC canônico e uma data civil válida', () => {
     expect(parseNotificationTransportEvent(JSON.stringify({ ...event, createdAt: '2026-08-16T10:00:00Z' }))).toBeNull()
     expect(parseNotificationTransportEvent(JSON.stringify({ ...event, createdAt: '2026-02-30T10:00:00.000Z' }))).toBeNull()
