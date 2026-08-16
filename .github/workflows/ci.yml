@@ -59,6 +59,9 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter ./apps/api prisma:generate
 
+      - name: Prepare shared workspace packages
+        run: pnpm prepare:workspace
+
       - name: Apply migrations to disposable CI database
         run: pnpm --filter ./apps/api exec prisma migrate deploy --schema ../../prisma/schema.prisma
 

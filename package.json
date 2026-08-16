@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare:common": "pnpm --filter @nexogestao/common build",
+    "prepare:workspace": "pnpm prepare:common",
     "dev": "./scripts/dev-full.sh",
     "prisma:generate": "pnpm --filter ./apps/api prisma:generate",
     "prisma:migrate:deploy": "pnpm --filter ./apps/api prisma:migrate:deploy",
