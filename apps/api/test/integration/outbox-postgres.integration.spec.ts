@@ -49,7 +49,7 @@ describeReal('Outbox PostgreSQL real com dois workers', () => {
     expect(claimedA).toHaveLength(6)
     expect(claimedB).toHaveLength(6)
     expect(claimedA.filter(a => claimedB.some(b => b.id === a.id))).toHaveLength(0)
-    expect(new Set([...claimedA, ...claimedB].map(event => event.id))).toHaveSize(12)
+    expect(new Set([...claimedA, ...claimedB].map(event => event.id)).size).toBe(12)
   })
 
   it('protege propriedade, recupera lock abandonado e respeita retry/backoff', async () => {
