@@ -75,14 +75,18 @@ jobs:
       - name: Targeted tenant tests
         run: pnpm --filter ./apps/api test -- src/common/tenant-ops/tenant-ops.service.spec.ts
 
-      # The script discovers every authorized suite under apps/api/test/integration.
-      - name: Real multi-tenant isolation E2E (all integration suites)
+      # Runs the integration suites guarded by RUN_REAL_INTEGRATION against the disposable CI services.
+      - name: Real multi-tenant isolation E2E
         env:
           RUN_REAL_INTEGRATION: "true"
         run: pnpm --filter ./apps/api test:integration:real
 
-      # The API command covers every API test except the real E2E already run above;
-      # the web command covers the complete Vitest suite, avoiding a second E2E run.
+      # Outbox requires an isolated PostgreSQL database and has its own safety guard.
+      - name: Real PostgreSQL Outbox integration
+        run: bash scripts/run-outbox-integration.sh
+
+      # The API command covers every API test except the real integration suites already run above;
+      # the web command covers the complete Vitest suite, avoiding duplicate integration execution.
       - name: Complete test suites
         run: |
           pnpm --filter ./apps/api test:unit
