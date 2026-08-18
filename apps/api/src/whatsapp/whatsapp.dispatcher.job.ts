@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
+import { QueueService } from '../queue/queue.service'
 import { WhatsAppService } from './whatsapp.service'
 import {
   isFatalWhatsAppSendError,
@@ -14,11 +15,19 @@ export class WhatsAppDispatcherJob {
   private readonly logger = new Logger(WhatsAppDispatcherJob.name)
   private readonly provider = createWhatsAppProvider()
 
-  constructor(private readonly whatsApp: WhatsAppService) {}
+  constructor(
+    private readonly whatsApp: WhatsAppService,
+    private readonly queueService: QueueService,
+  ) {}
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async dispatchQueued() {
     if (process.env.DISABLE_WHATSAPP_SCHEDULE === '1') return
+
+    // BullMQ é o caminho primário de despacho. O cron existe apenas como
+    // fallback quando Redis/fila estão indisponíveis; executar os dois ao
+    // mesmo tempo abre uma janela para envio duplicado da mesma mensagem.
+    if (this.queueService.isEnabled()) return
 
     const workerId = `api-${process.pid}`
 
