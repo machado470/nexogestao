@@ -150,8 +150,23 @@ export class WhatsAppProcessor implements OnModuleInit, OnModuleDestroy {
       status: 'ACTIVE',
     })
 
-    const message = await this.whatsApp.findById(job.data.messageId, orgId)
-    if (!message) return
+    const workerId = `bullmq-${process.pid}-${job.id?.toString() ?? job.data.messageId}-${job.attemptsMade + 1}`
+
+    const message = await this.whatsApp.claimMessageForDispatch({
+      id: job.data.messageId,
+      orgId,
+      workerId,
+    })
+
+    if (!message) {
+      await this.queueService.updateJobStatus({
+        queue: QUEUE_NAMES.WHATSAPP,
+        jobId: job.id?.toString() ?? '',
+        status: 'COMPLETED',
+        completed: true,
+      })
+      return
+    }
 
     const result = await this.provider.sendText({
       toPhone: message.toPhone,
@@ -161,6 +176,8 @@ export class WhatsAppProcessor implements OnModuleInit, OnModuleDestroy {
     if (!isWhatsAppSendError(result)) {
       await this.whatsApp.markSent({
         id: message.id,
+          orgId,
+          workerId,
         provider: result.provider,
         providerMessageId: result.providerMessageId,
       })
@@ -178,6 +195,8 @@ export class WhatsAppProcessor implements OnModuleInit, OnModuleDestroy {
     if (isFatalWhatsAppSendError(result)) {
       await this.whatsApp.markFailedTerminal({
         id: message.id,
+          orgId,
+          workerId,
         provider: result.provider,
         errorCode: result.errorCode,
         errorMessage: result.errorMessage,
@@ -208,6 +227,8 @@ export class WhatsAppProcessor implements OnModuleInit, OnModuleDestroy {
 
     await this.whatsApp.markFailedAndRequeue({
       id: message.id,
+        orgId,
+        workerId,
       provider: result.provider,
       errorCode: result.errorCode,
       errorMessage: result.errorMessage,

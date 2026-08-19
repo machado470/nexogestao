@@ -2,6 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
+import { randomUUID } from 'node:crypto'
 import { WhatsAppService } from './whatsapp.service'
 import {
   isFatalWhatsAppSendError,
@@ -20,17 +21,24 @@ export class WhatsAppDispatcherJob {
   async dispatchQueued() {
     if (process.env.DISABLE_WHATSAPP_SCHEDULE === '1') return
 
-    const workerId = `api-${process.pid}`
+    const maxMessagesPerRun = 50
 
-    try {
-      const claimed = await this.whatsApp.claimQueued({ limit: 50, workerId })
-      if (claimed.length === 0) return
+    for (let processed = 0; processed < maxMessagesPerRun; processed += 1) {
+      const workerId = `cron-${process.pid}-${randomUUID()}`
 
-      this.logger.log(
-        `dispatching ${claimed.length} whatsapp message(s) worker=${workerId}`,
-      )
+      try {
+        const claimed = await this.whatsApp.claimQueued({
+          limit: 1,
+          workerId,
+        })
 
-      for (const message of claimed) {
+        const message = claimed[0]
+        if (!message) return
+
+        this.logger.log(
+          `dispatching whatsapp message=${message.id} worker=${workerId}`,
+        )
+
         try {
           const result = await this.provider.sendText({
             toPhone: message.toPhone,
@@ -40,6 +48,8 @@ export class WhatsAppDispatcherJob {
           if (!isWhatsAppSendError(result)) {
             await this.whatsApp.markSent({
               id: message.id,
+              orgId: message.orgId,
+              workerId,
               provider: result.provider,
               providerMessageId: result.providerMessageId,
             })
@@ -49,6 +59,8 @@ export class WhatsAppDispatcherJob {
           if (isFatalWhatsAppSendError(result)) {
             await this.whatsApp.markFailedTerminal({
               id: message.id,
+              orgId: message.orgId,
+              workerId,
               provider: result.provider,
               errorCode: result.errorCode,
               errorMessage: result.errorMessage,
@@ -58,23 +70,36 @@ export class WhatsAppDispatcherJob {
 
           await this.whatsApp.markFailedAndRequeue({
             id: message.id,
+            orgId: message.orgId,
+            workerId,
             provider: result.provider,
             errorCode: result.errorCode,
             errorMessage: result.errorMessage,
           })
+
+          // Não permite que o mesmo cron recapture imediatamente
+          // a mensagem que acabou de voltar para QUEUED.
+          return
         } catch (error: any) {
           await this.whatsApp.markFailedAndRequeue({
             id: message.id,
+            orgId: message.orgId,
+            workerId,
             provider: 'internal',
             errorCode: 'UNEXPECTED',
             errorMessage: error?.message ?? 'unexpected error',
           })
+
+          // Evita loop de retry imediato dentro da mesma execução.
+          return
         }
+      } catch (error: any) {
+        this.logger.warn(
+          `dispatchQueued failed worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
+        )
+        return
       }
-    } catch (error: any) {
-      this.logger.warn(
-        `dispatchQueued failed worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
-      )
     }
   }
+
 }

@@ -213,22 +213,6 @@ export class WhatsAppService {
       content,
     })
 
-    await this.timeline.log({
-      orgId,
-      action: 'WHATSAPP_MESSAGE_SENT',
-      customerId: queued.message?.customerId ?? input.customerId ?? null,
-      metadata: {
-        actorUserId: userId,
-        messageId: queued.message?.id ?? null,
-        conversationId: queued.message?.conversationId ?? null,
-        entityType: input.entityType ?? 'CUSTOMER',
-        entityId: input.entityId ?? input.customerId,
-        provider: null,
-        status: queued.message?.status ?? 'QUEUED',
-        messageType: input.messageType ?? 'MANUAL',
-      },
-    }).catch(() => null)
-
     return queued
   }
 
@@ -735,6 +719,54 @@ export class WhatsAppService {
     })
   }
 
+  async claimMessageForDispatch(params: {
+    id: string
+    orgId: string
+    workerId: string
+  }) {
+    const id = String(params.id ?? '').trim()
+    const orgId = String(params.orgId ?? '').trim()
+    const workerId = String(params.workerId ?? '').trim()
+
+    if (!id) throw new BadRequestException('id é obrigatório para claim de WhatsApp')
+    if (!orgId) throw new BadRequestException('orgId é obrigatório para claim de WhatsApp')
+    if (!workerId) throw new BadRequestException('workerId é obrigatório para claim de WhatsApp')
+
+    const lockTimeoutMinutes = Number.isFinite(WHATSAPP_MESSAGE_LOCK_TIMEOUT_MINUTES)
+      ? Math.max(1, Math.floor(WHATSAPP_MESSAGE_LOCK_TIMEOUT_MINUTES))
+      : 5
+
+    const claimed = await this.prisma.$queryRaw<
+      Prisma.WhatsAppMessageGetPayload<{}>[]
+    >(Prisma.sql`
+      UPDATE "WhatsAppMessage"
+      SET
+        status = 'SENDING'::"WhatsAppMessageStatus",
+        "lockedAt" = NOW(),
+        "lockedBy" = ${workerId},
+        "updatedAt" = NOW(),
+        "failedAt" = NULL
+      WHERE id = ${id}
+        AND "orgId" = ${orgId}
+        AND (
+          (
+            status = 'QUEUED'::"WhatsAppMessageStatus"
+            AND (
+              "lockedAt" IS NULL
+              OR "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
+            )
+          )
+          OR (
+            status = 'SENDING'::"WhatsAppMessageStatus"
+            AND "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
+          )
+        )
+      RETURNING *
+    `)
+
+    return claimed[0] ?? null
+  }
+
   async claimQueued(params: { limit?: number; workerId: string }) {
     const limit = Math.min(Math.max(Number(params.limit ?? 50), 1), 100)
     const workerId = params.workerId.trim()
@@ -778,25 +810,43 @@ export class WhatsAppService {
     `)
   }
 
-  async markSent(params: { id: string; provider: string; providerMessageId: string }) {
-    const updated = await this.prisma.whatsAppMessage.update({
-      where: { id: params.id },
-      data: {
-        status: 'SENT',
-        provider: params.provider,
-        providerMessageId: params.providerMessageId,
-        sentAt: new Date(),
-        lockedAt: null,
-        lockedBy: null,
-        errorCode: null,
-        errorMessage: null,
-      },
-    })
+  async markSent(params: {
+    id: string
+    orgId: string
+    workerId: string
+    provider: string
+    providerMessageId: string
+  }) {
+    const updatedRows = await this.prisma.$queryRaw<
+      Prisma.WhatsAppMessageGetPayload<{}>[]
+    >(Prisma.sql`
+      UPDATE "WhatsAppMessage"
+      SET
+        status = 'SENT'::"WhatsAppMessageStatus",
+        provider = ${params.provider},
+        "providerMessageId" = ${params.providerMessageId},
+        "sentAt" = NOW(),
+        "lockedAt" = NULL,
+        "lockedBy" = NULL,
+        "errorCode" = NULL,
+        "errorMessage" = NULL,
+        "updatedAt" = NOW()
+      WHERE id = ${params.id}
+        AND "orgId" = ${params.orgId}
+        AND status = 'SENDING'::"WhatsAppMessageStatus"
+        AND "lockedBy" = ${params.workerId}
+      RETURNING *
+    `)
+
+    const updated = updatedRows[0] ?? null
+    if (!updated) return null
+
     await this.logMessageTimelineEventOnce({
       orgId: updated.orgId,
       messageId: updated.id,
       action: 'MESSAGE_SENT',
     })
+
     const byTypeAction = this.getMessageTypeTimelineAction(updated.messageType)
     if (byTypeAction) {
       await this.logMessageTimelineEventOnce({
@@ -805,24 +855,80 @@ export class WhatsAppService {
         action: byTypeAction,
       })
     }
+
     return updated
   }
 
-  async markFailedTerminal(params: { id: string; provider: string; errorCode: string; errorMessage: string }) {
-    const updated = await this.prisma.whatsAppMessage.update({ where: { id: params.id }, data: { status: 'FAILED', provider: params.provider, errorCode: params.errorCode, errorMessage: params.errorMessage, failedAt: new Date(), lockedAt: null, lockedBy: null } })
+  async markFailedTerminal(params: {
+    id: string
+    orgId: string
+    workerId: string
+    provider: string
+    errorCode: string
+    errorMessage: string
+  }) {
+    const updatedRows = await this.prisma.$queryRaw<
+      Prisma.WhatsAppMessageGetPayload<{}>[]
+    >(Prisma.sql`
+      UPDATE "WhatsAppMessage"
+      SET
+        status = 'FAILED'::"WhatsAppMessageStatus",
+        provider = ${params.provider},
+        "errorCode" = ${params.errorCode},
+        "errorMessage" = ${params.errorMessage},
+        "failedAt" = NOW(),
+        "lockedAt" = NULL,
+        "lockedBy" = NULL,
+        "updatedAt" = NOW()
+      WHERE id = ${params.id}
+        AND "orgId" = ${params.orgId}
+        AND status = 'SENDING'::"WhatsAppMessageStatus"
+        AND "lockedBy" = ${params.workerId}
+      RETURNING *
+    `)
+
+    const updated = updatedRows[0] ?? null
+    if (!updated) return null
+
     await this.logMessageTimelineEventOnce({
       orgId: updated.orgId,
       messageId: updated.id,
       action: 'MESSAGE_FAILED',
       errorMessage: updated.errorMessage ?? params.errorMessage,
     })
+
     return updated
   }
 
-  async markFailedAndRequeue(params: { id: string; provider: string; errorCode: string; errorMessage: string }) {
-    return this.prisma.whatsAppMessage.update({ where: { id: params.id }, data: { status: 'QUEUED', provider: params.provider, errorCode: params.errorCode, errorMessage: params.errorMessage, lockedAt: null, lockedBy: null } })
-  }
+  async markFailedAndRequeue(params: {
+    id: string
+    orgId: string
+    workerId: string
+    provider: string
+    errorCode: string
+    errorMessage: string
+  }) {
+    const updatedRows = await this.prisma.$queryRaw<
+      Prisma.WhatsAppMessageGetPayload<{}>[]
+    >(Prisma.sql`
+      UPDATE "WhatsAppMessage"
+      SET
+        status = 'QUEUED'::"WhatsAppMessageStatus",
+        provider = ${params.provider},
+        "errorCode" = ${params.errorCode},
+        "errorMessage" = ${params.errorMessage},
+        "lockedAt" = NULL,
+        "lockedBy" = NULL,
+        "updatedAt" = NOW()
+      WHERE id = ${params.id}
+        AND "orgId" = ${params.orgId}
+        AND status = 'SENDING'::"WhatsAppMessageStatus"
+        AND "lockedBy" = ${params.workerId}
+      RETURNING *
+    `)
 
+    return updatedRows[0] ?? null
+  }
 
   async listWebhookEvents(orgId: string, filters: {
     provider?: string
