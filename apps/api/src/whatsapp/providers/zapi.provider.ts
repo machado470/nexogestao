@@ -88,6 +88,7 @@ export class ZApiWhatsAppProvider implements WhatsAppProvider {
         provider: this.providerName,
         errorCode: timeout ? 'TIMEOUT' : 'NETWORK_ERROR',
         errorMessage: timeout ? `Timeout de ${ZAPI_TIMEOUT_MS}ms` : String(err?.message ?? 'Erro de rede'),
+        ambiguous: true,
       }
     }
   }

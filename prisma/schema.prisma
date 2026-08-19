@@ -1187,6 +1187,7 @@ enum WhatsAppWebhookStatus {
 enum WhatsAppMessageStatus {
   QUEUED
   SENDING
+  UNCERTAIN
   SENT
   DELIVERED
   READ

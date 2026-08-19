@@ -11,6 +11,7 @@ describe('WhatsApp dispatch fencing', () => {
 
       // Fluxo legado atual: altera apenas por id e ignora ownership.
       whatsAppMessage: {
+        count: jest.fn().mockResolvedValue(0),
         findFirst: jest.fn().mockResolvedValue({
           id: 'm1',
           orgId: 'org1',
@@ -113,6 +114,64 @@ describe('WhatsApp dispatch fencing', () => {
 
     expect(prisma.$queryRaw).toHaveBeenCalled()
     expect(prisma.whatsAppMessage.update).not.toHaveBeenCalled()
+  })
+
+  it('worker que perdeu ownership não pode marcar entrega como UNCERTAIN', async () => {
+    const { service, prisma, timeline } = makeService([])
+
+    const result = await (service.markDeliveryUncertain as any)({
+      id: 'm1',
+      orgId: 'org1',
+      workerId: 'worker-antigo',
+      provider: 'meta_cloud',
+      errorCode: 'NETWORK_ERROR',
+      errorMessage: 'connection reset',
+    })
+
+    expect(result).toBeNull()
+    expect(prisma.$queryRaw).toHaveBeenCalled()
+    expect(prisma.whatsAppMessage.update).not.toHaveBeenCalled()
+    expect(timeline.log).not.toHaveBeenCalled()
+  })
+
+  it('worker que possui ownership consegue marcar UNCERTAIN e registrar a Timeline', async () => {
+    const uncertain = {
+      id: 'm1',
+      orgId: 'org1',
+      status: 'UNCERTAIN',
+      messageType: 'MANUAL',
+      provider: 'meta_cloud',
+      providerMessageId: null,
+      errorCode: 'NETWORK_ERROR',
+      errorMessage: 'connection reset',
+      lockedAt: null,
+      lockedBy: null,
+    }
+
+    const { service, prisma, timeline } = makeService([uncertain])
+
+    // Permite que logMessageTimelineEventOnce crie o novo evento.
+    prisma.timelineEvent.findFirst.mockResolvedValue(null)
+
+    const result = await (service.markDeliveryUncertain as any)({
+      id: 'm1',
+      orgId: 'org1',
+      workerId: 'worker-atual',
+      provider: 'meta_cloud',
+      errorCode: 'NETWORK_ERROR',
+      errorMessage: 'connection reset',
+    })
+
+    expect(result).toEqual(uncertain)
+    expect(prisma.$queryRaw).toHaveBeenCalled()
+
+    expect(timeline.log).toHaveBeenCalledTimes(1)
+    expect(timeline.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org1',
+        action: 'MESSAGE_SEND_UNCERTAIN',
+      }),
+    )
   })
 
   it('worker que ainda possui ownership consegue finalizar SENT', async () => {

@@ -192,7 +192,27 @@ export class WhatsAppProcessor implements OnModuleInit, OnModuleDestroy {
       return
     }
 
-    if (isFatalWhatsAppSendError(result)) {
+    if (result.ambiguous) {
+        await this.whatsApp.markDeliveryUncertain({
+          id: message.id,
+          orgId,
+          workerId,
+          provider: result.provider,
+          errorCode: result.errorCode,
+          errorMessage: result.errorMessage,
+        })
+
+        await this.queueService.updateJobStatus({
+          queue: QUEUE_NAMES.WHATSAPP,
+          jobId: job.id?.toString() ?? '',
+          status: 'COMPLETED',
+          completed: true,
+        })
+
+        return
+      }
+
+      if (isFatalWhatsAppSendError(result)) {
       await this.whatsApp.markFailedTerminal({
         id: message.id,
           orgId,

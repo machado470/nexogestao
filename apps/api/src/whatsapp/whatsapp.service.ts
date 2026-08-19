@@ -748,19 +748,11 @@ export class WhatsAppService {
         "failedAt" = NULL
       WHERE id = ${id}
         AND "orgId" = ${orgId}
-        AND (
-          (
-            status = 'QUEUED'::"WhatsAppMessageStatus"
-            AND (
-              "lockedAt" IS NULL
-              OR "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
-            )
+          AND status = 'QUEUED'::"WhatsAppMessageStatus"
+          AND (
+            "lockedAt" IS NULL
+            OR "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
           )
-          OR (
-            status = 'SENDING'::"WhatsAppMessageStatus"
-            AND "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
-          )
-        )
       RETURNING *
     `)
 
@@ -783,16 +775,11 @@ export class WhatsAppService {
       WITH picked AS (
         SELECT id
         FROM "WhatsAppMessage"
-        WHERE (
-          status = 'QUEUED'::"WhatsAppMessageStatus"
-          AND (
-            "lockedAt" IS NULL
-            OR "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
-          )
-        ) OR (
-          status = 'SENDING'::"WhatsAppMessageStatus"
-          AND "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
-        )
+          WHERE status = 'QUEUED'::"WhatsAppMessageStatus"
+            AND (
+              "lockedAt" IS NULL
+              OR "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
+            )
         ORDER BY "createdAt" ASC
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
@@ -894,6 +881,47 @@ export class WhatsAppService {
       orgId: updated.orgId,
       messageId: updated.id,
       action: 'MESSAGE_FAILED',
+      errorMessage: updated.errorMessage ?? params.errorMessage,
+    })
+
+    return updated
+  }
+
+  async markDeliveryUncertain(params: {
+    id: string
+    orgId: string
+    workerId: string
+    provider: string
+    errorCode: string
+    errorMessage: string
+  }) {
+    const updatedRows = await this.prisma.$queryRaw<
+      Prisma.WhatsAppMessageGetPayload<{}>[]
+    >(Prisma.sql`
+      UPDATE "WhatsAppMessage"
+      SET
+        status = 'UNCERTAIN'::"WhatsAppMessageStatus",
+        provider = ${params.provider},
+        "errorCode" = ${params.errorCode},
+        "errorMessage" = ${params.errorMessage},
+        "failedAt" = NULL,
+        "lockedAt" = NULL,
+        "lockedBy" = NULL,
+        "updatedAt" = NOW()
+      WHERE id = ${params.id}
+        AND "orgId" = ${params.orgId}
+        AND status = 'SENDING'::"WhatsAppMessageStatus"
+        AND "lockedBy" = ${params.workerId}
+      RETURNING *
+    `)
+
+    const updated = updatedRows[0] ?? null
+    if (!updated) return null
+
+    await this.logMessageTimelineEventOnce({
+      orgId: updated.orgId,
+      messageId: updated.id,
+      action: 'MESSAGE_SEND_UNCERTAIN',
       errorMessage: updated.errorMessage ?? params.errorMessage,
     })
 

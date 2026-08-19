@@ -42,7 +42,7 @@ export class MetaCloudWhatsAppProvider implements WhatsAppProvider {
       }
       return { ok: true, provider: this.providerName, providerMessageId: String(body?.messages?.[0]?.id ?? body?.message_id ?? `meta_${Date.now()}`) }
     } catch (err: any) {
-      return { ok: false, provider: this.providerName, errorCode: 'NETWORK_ERROR', errorMessage: String(err?.message ?? 'network error') }
+      return { ok: false, provider: this.providerName, errorCode: 'NETWORK_ERROR', errorMessage: String(err?.message ?? 'network error'), ambiguous: true }
     }
   }
   async sendText(input: WhatsAppSendTextInput): Promise<WhatsAppSendResult> { return this.sendMessage(input) }

@@ -26,49 +26,68 @@ export class WhatsAppDispatcherJob {
     for (let processed = 0; processed < maxMessagesPerRun; processed += 1) {
       const workerId = `cron-${process.pid}-${randomUUID()}`
 
+      let message: any
+
       try {
         const claimed = await this.whatsApp.claimQueued({
           limit: 1,
           workerId,
         })
 
-        const message = claimed[0]
+        message = claimed[0]
         if (!message) return
-
-        this.logger.log(
-          `dispatching whatsapp message=${message.id} worker=${workerId}`,
+      } catch (error: any) {
+        this.logger.warn(
+          `whatsapp claim failed worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
         )
+        return
+      }
 
+      this.logger.log(
+        `dispatching whatsapp message=${message.id} worker=${workerId}`,
+      )
+
+      let result
+
+      try {
+        result = await this.provider.sendText({
+          toPhone: message.toPhone,
+          text: message.content ?? message.renderedText,
+        })
+      } catch (error: any) {
+        // A chamada externa chegou a ser iniciada.
+        // Não sabemos se o provider aceitou a mensagem.
+        // Nunca devolver automaticamente para QUEUED.
+        this.logger.error(
+          `whatsapp provider result uncertain message=${message.id} worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
+        )
+        return
+      }
+
+      if (!isWhatsAppSendError(result)) {
         try {
-          const result = await this.provider.sendText({
-            toPhone: message.toPhone,
-            text: message.content ?? message.renderedText,
+          await this.whatsApp.markSent({
+            id: message.id,
+            orgId: message.orgId,
+            workerId,
+            provider: result.provider,
+            providerMessageId: result.providerMessageId,
           })
+        } catch (error: any) {
+          // O provider confirmou o envio, mas a persistência falhou.
+          // Requeue aqui poderia duplicar a mensagem externamente.
+          this.logger.error(
+            `whatsapp sent persistence failed message=${message.id} worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
+          )
+          return
+        }
 
-          if (!isWhatsAppSendError(result)) {
-            await this.whatsApp.markSent({
-              id: message.id,
-              orgId: message.orgId,
-              workerId,
-              provider: result.provider,
-              providerMessageId: result.providerMessageId,
-            })
-            continue
-          }
+        continue
+      }
 
-          if (isFatalWhatsAppSendError(result)) {
-            await this.whatsApp.markFailedTerminal({
-              id: message.id,
-              orgId: message.orgId,
-              workerId,
-              provider: result.provider,
-              errorCode: result.errorCode,
-              errorMessage: result.errorMessage,
-            })
-            continue
-          }
-
-          await this.whatsApp.markFailedAndRequeue({
+      if (result.ambiguous) {
+        try {
+          await this.whatsApp.markDeliveryUncertain({
             id: message.id,
             orgId: message.orgId,
             workerId,
@@ -76,29 +95,57 @@ export class WhatsAppDispatcherJob {
             errorCode: result.errorCode,
             errorMessage: result.errorMessage,
           })
-
-          // Não permite que o mesmo cron recapture imediatamente
-          // a mensagem que acabou de voltar para QUEUED.
-          return
         } catch (error: any) {
-          await this.whatsApp.markFailedAndRequeue({
+          // Resultado externo incerto + falha de persistência:
+          // manter SENDING para reconciliação posterior.
+          this.logger.error(
+            `whatsapp uncertain persistence failed message=${message.id} worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
+          )
+          return
+        }
+
+        continue
+      }
+
+      if (isFatalWhatsAppSendError(result)) {
+        try {
+          await this.whatsApp.markFailedTerminal({
             id: message.id,
             orgId: message.orgId,
             workerId,
-            provider: 'internal',
-            errorCode: 'UNEXPECTED',
-            errorMessage: error?.message ?? 'unexpected error',
+            provider: result.provider,
+            errorCode: result.errorCode,
+            errorMessage: result.errorMessage,
           })
-
-          // Evita loop de retry imediato dentro da mesma execução.
+        } catch (error: any) {
+          this.logger.error(
+            `whatsapp terminal failure persistence failed message=${message.id} worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
+          )
           return
         }
+
+        continue
+      }
+
+      // Somente erro explicitamente retornado pelo provider como
+      // não fatal e não ambíguo pode voltar para QUEUED.
+      try {
+        await this.whatsApp.markFailedAndRequeue({
+          id: message.id,
+          orgId: message.orgId,
+          workerId,
+          provider: result.provider,
+          errorCode: result.errorCode,
+          errorMessage: result.errorMessage,
+        })
       } catch (error: any) {
         this.logger.warn(
-          `dispatchQueued failed worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
+          `whatsapp retryable failure persistence failed message=${message.id} worker=${workerId} err=${error?.code ?? ''} msg=${error?.message ?? error}`,
         )
-        return
       }
+
+      // Evita recapturar imediatamente a mesma mensagem nesta execução.
+      return
     }
   }
 
