@@ -6,8 +6,13 @@ export type CommunicationFailureSignal = {
   lastFailedAt: string | null
 }
 
+type CommunicationFailureSignalPrisma = Pick<
+  PrismaService,
+  'whatsAppMessage'
+>
+
 export async function buildCommunicationFailureSignal(
-  prisma: PrismaService,
+  prisma: CommunicationFailureSignalPrisma,
   input: { orgId: string; customerId?: string | null },
 ): Promise<CommunicationFailureSignal> {
   const where = {

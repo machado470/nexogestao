@@ -881,6 +881,7 @@ model WhatsAppMessage {
   @@index([orgId, entityType, entityId, createdAt])
   @@index([orgId, messageType, createdAt])
   @@index([orgId, status, lockedAt, createdAt])
+  @@index([status, lockedAt])
 }
 
 model WhatsAppWebhookEvent {

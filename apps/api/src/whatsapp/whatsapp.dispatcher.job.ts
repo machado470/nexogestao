@@ -17,6 +17,27 @@ export class WhatsAppDispatcherJob {
 
   constructor(private readonly whatsApp: WhatsAppService) {}
 
+  @Cron(CronExpression.EVERY_MINUTE)
+  async reconcileStaleSendingMessages() {
+    if (process.env.DISABLE_WHATSAPP_SCHEDULE === '1') return
+
+    try {
+      const reconciled = await this.whatsApp.reconcileStaleSending({
+        limit: 50,
+      })
+
+      if (reconciled.length > 0) {
+        this.logger.warn(
+          `whatsapp stale SENDING reconciled count=${reconciled.length}`,
+        )
+      }
+    } catch (error: any) {
+      this.logger.error(
+        `whatsapp stale SENDING reconciliation failed err=${error?.code ?? ''} msg=${error?.message ?? error}`,
+      )
+    }
+  }
+
   @Cron(CronExpression.EVERY_10_SECONDS)
   async dispatchQueued() {
     if (process.env.DISABLE_WHATSAPP_SCHEDULE === '1') return

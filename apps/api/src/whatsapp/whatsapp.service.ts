@@ -797,6 +797,81 @@ export class WhatsAppService {
     `)
   }
 
+  async reconcileStaleSending(params: { limit?: number } = {}) {
+    const limit = Math.min(Math.max(Number(params.limit ?? 50), 1), 100)
+
+    const lockTimeoutMinutes = Number.isFinite(
+      WHATSAPP_MESSAGE_LOCK_TIMEOUT_MINUTES,
+    )
+      ? Math.max(1, Math.floor(WHATSAPP_MESSAGE_LOCK_TIMEOUT_MINUTES))
+      : 5
+
+    const errorCode = 'STALE_SENDING_TIMEOUT'
+    const errorMessage =
+      'Envio permaneceu em SENDING além do tempo de ownership; resultado externo incerto'
+
+    return this.prisma.$transaction(async tx => {
+      const updatedRows = await tx.$queryRaw<
+        Prisma.WhatsAppMessageGetPayload<{}>[]
+      >(Prisma.sql`
+        WITH stale AS (
+          SELECT id
+          FROM "WhatsAppMessage"
+          WHERE status = 'SENDING'::"WhatsAppMessageStatus"
+            AND "lockedAt" IS NOT NULL
+            AND "lockedAt" < NOW() - (${lockTimeoutMinutes}::int * INTERVAL '1 minute')
+          ORDER BY "lockedAt" ASC
+          LIMIT ${limit}
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE "WhatsAppMessage" AS m
+        SET
+          status = 'UNCERTAIN'::"WhatsAppMessageStatus",
+          "errorCode" = ${errorCode},
+          "errorMessage" = ${errorMessage},
+          "failedAt" = NULL,
+          "lockedAt" = NULL,
+          "lockedBy" = NULL,
+          "updatedAt" = NOW()
+        FROM stale
+        WHERE m.id = stale.id
+          AND m.status = 'SENDING'::"WhatsAppMessageStatus"
+        RETURNING m.*
+      `)
+
+      for (const updated of updatedRows) {
+        const governanceSignal = await buildCommunicationFailureSignal(tx, {
+          orgId: updated.orgId,
+          customerId: updated.customerId ?? null,
+        })
+
+        await this.timeline.logInTransaction(
+          {
+            orgId: updated.orgId,
+            action: 'MESSAGE_SEND_UNCERTAIN',
+            customerId: updated.customerId ?? null,
+            metadata: {
+              messageId: updated.id,
+              providerMessageId: updated.providerMessageId ?? null,
+              messageType: updated.messageType ?? null,
+              errorMessage: updated.errorMessage ?? errorMessage,
+              entityType: updated.entityType ?? null,
+              entityId: updated.entityId ?? null,
+              customerId: updated.customerId ?? null,
+              governanceSignal,
+              conversationId: updated.conversationId ?? null,
+              direction: updated.direction ?? null,
+              status: updated.status ?? null,
+            },
+          },
+          tx,
+        )
+      }
+
+      return updatedRows
+    })
+  }
+
   async markSent(params: {
     id: string
     orgId: string
