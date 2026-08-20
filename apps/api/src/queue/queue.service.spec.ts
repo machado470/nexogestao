@@ -27,3 +27,74 @@ describe('QueueService tracing metadata', () => {
     expect(payload.meta.correlationId).toBe('corr-ext')
   })
 })
+
+describe('QueueService degraded-mode safety', () => {
+  function createService() {
+    return new QueueService(
+      { status: 'end' } as any,
+      {} as any,
+      {
+        increment: jest.fn(),
+        setGauge: jest.fn(),
+        observeDuration: jest.fn(),
+      } as any,
+      {
+        requestId: null,
+        correlationId: null,
+      } as any,
+    ) as any
+  }
+
+  it('volta a tentar habilitar Redis depois de uma falha anterior', async () => {
+    const service = createService()
+
+    service.redisEnabled = false
+    service.ensureRedisReady = jest.fn().mockResolvedValue(undefined)
+    service.registerQueuesOnce = jest.fn()
+
+    await expect(service.ensureEnabled()).resolves.toBe(true)
+
+    expect(service.ensureRedisReady).toHaveBeenCalledTimes(1)
+    expect(service.registerQueuesOnce).toHaveBeenCalledTimes(1)
+    expect(service.redisEnabled).toBe(true)
+  })
+
+  it('não devolve job simulado quando Redis está indisponível', async () => {
+    const service = createService()
+
+    service.redisEnabled = false
+    service.ensureEnabled = jest.fn().mockResolvedValue(false)
+
+    await expect(
+      service.addJob(
+        'notifications' as any,
+        'create-notification',
+        { eventKey: 'evt-1' },
+      ),
+    ).rejects.toThrow()
+
+    expect(service.ensureEnabled).toHaveBeenCalledTimes(1)
+  })
+
+  it('libera a promise de conexão depois de uma tentativa concluída', async () => {
+    const service = createService()
+
+    service.redisEnabled = true
+    service.ensureRedisReadyInternal = jest.fn().mockResolvedValue(undefined)
+    service.registerQueuesOnce = jest.fn()
+
+    await expect(service.ensureEnabled()).resolves.toBe(true)
+
+    expect(service.connectionInitPromise).toBeUndefined()
+
+    service.ensureRedisReadyInternal.mockRejectedValueOnce(
+      new Error('redis unavailable'),
+    )
+
+    await expect(service.ensureEnabled()).resolves.toBe(false)
+
+    expect(service.ensureRedisReadyInternal).toHaveBeenCalledTimes(2)
+    expect(service.redisEnabled).toBe(false)
+  })
+
+})

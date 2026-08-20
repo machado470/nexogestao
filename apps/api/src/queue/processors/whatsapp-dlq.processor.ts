@@ -15,11 +15,6 @@ export class WhatsAppDlqProcessor implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    if (!(await this.queueService.ensureEnabled())) {
-      this.logger.warn('WhatsApp DLQ worker não iniciado: Redis/fila em modo degradado')
-      return
-    }
-
     try {
       this.worker = new Worker(
         QUEUE_NAMES.WHATSAPP_DLQ,

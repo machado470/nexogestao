@@ -59,7 +59,8 @@ function parseRedisConfig() {
           lazyConnect: true,
           enableReadyCheck: true,
           connectTimeout: 10000,
-          retryStrategy: () => null,
+          retryStrategy: (times) =>
+            Math.min(Math.max(1, times) * 500, 5_000),
         })
       },
     },

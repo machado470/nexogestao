@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common'
 import { Job, JobsOptions, JobScheduler, Queue, QueueOptions, QueueEvents } from 'bullmq'
 import IORedis from 'ioredis'
 import { PrismaService } from '../prisma/prisma.service'
@@ -55,8 +62,6 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   async ensureEnabled() {
-    if (!this.redisEnabled) return false
-
     try {
       await this.ensureRedisReady()
       this.registerQueuesOnce()
@@ -70,7 +75,9 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       const msg = error instanceof Error ? error.message : String(error)
       this.redisEnabled = false
       this.logger.error(`Redis indisponível no bootstrap da fila: ${msg}`)
-      this.logger.warn('Fila em modo degradado (sem Redis): jobs serão ignorados em ambiente local.')
+      this.logger.warn(
+        'Fila em modo degradado: novos enqueues falharão até o Redis se recuperar.',
+      )
       this.queueMetrics.increment('queue.degraded.total')
       return false
     }
@@ -81,13 +88,15 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       return this.connectionInitPromise
     }
 
-    this.connectionInitPromise = this.ensureRedisReadyInternal()
+    const connectionInitPromise = this.ensureRedisReadyInternal()
+    this.connectionInitPromise = connectionInitPromise
 
     try {
-      await this.connectionInitPromise
-    } catch (error) {
-      this.connectionInitPromise = undefined
-      throw error
+      await connectionInitPromise
+    } finally {
+      if (this.connectionInitPromise === connectionInitPromise) {
+        this.connectionInitPromise = undefined
+      }
     }
   }
 
@@ -203,21 +212,14 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     payload: T,
     options?: JobsOptions,
   ): Promise<Job<T>> {
-    if (!this.redisEnabled) {
-      this.logger.warn(
-        `Redis indisponível: job descartado (${queueName}:${name}). Retornando job simulado.`,
-      )
+    if (!(await this.ensureEnabled())) {
+      const message =
+        `Fila indisponível: Redis não conectado (${queueName}:${name})`
 
-      const simulatedId = `simulated-${Date.now()}-${Math.random().toString(16).slice(2)}`
-      return {
-        id: simulatedId,
-        name,
-        data: payload,
-        opts: {
-          ...QUEUE_DEFAULT_JOB_OPTIONS,
-          ...options,
-        },
-      } as unknown as Job<T>
+      this.logger.error(message)
+      this.queueMetrics.increment(`queue.job.enqueue.failed.${queueName}`)
+
+      throw new ServiceUnavailableException(message)
     }
 
     const queue = this.getQueue(queueName)
