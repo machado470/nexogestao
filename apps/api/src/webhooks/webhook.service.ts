@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateWebhookDto } from './dto/create-webhook.dto'
 import { UpdateWebhookDto } from './dto/update-webhook.dto'
@@ -279,6 +279,13 @@ export class WebhookService {
       throw new BadRequestException(`Webhook delivery com status=${delivery.status} não permite replay`)
     }
 
+    const queueEnabled = await this.queueService.ensureEnabled()
+    if (!queueEnabled) {
+      throw new ServiceUnavailableException(
+        'Fila de webhooks indisponível para replay',
+      )
+    }
+
     const jobId = `webhook:dispatch:${delivery.id}`
     const queue = this.queueService.getQueue(QUEUE_NAMES.WEBHOOKS)
     const existingJob = await queue.getJob(jobId)
@@ -289,16 +296,28 @@ export class WebhookService {
 
     await this.markDeliveryAttempt({ deliveryId: delivery.id, attempts: delivery.attempts, status: 'PENDING' })
 
-    await this.queueService.addJob(
-      QUEUE_NAMES.WEBHOOKS,
-      WEBHOOK_QUEUE_JOB_NAMES.DISPATCH,
-      { deliveryId: delivery.id },
-      {
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 1_000, jitter: 0.3 },
-        jobId,
-      },
-    )
+    try {
+      await this.queueService.addJob(
+        QUEUE_NAMES.WEBHOOKS,
+        WEBHOOK_QUEUE_JOB_NAMES.DISPATCH,
+        { deliveryId: delivery.id },
+        {
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000, jitter: 0.3 },
+          jobId,
+        },
+      )
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        await this.markDeliveryAttempt({
+          deliveryId: delivery.id,
+          attempts: delivery.attempts,
+          status: 'FAILED',
+        })
+      }
+
+      throw error
+    }
 
     this.logger.log(JSON.stringify({
       ...buildOperationalLogContext({

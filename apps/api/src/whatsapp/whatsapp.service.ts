@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import {
   Prisma,
   WhatsAppContextType,
@@ -1198,12 +1198,32 @@ export class WhatsAppService {
       receivedAt: receivedAt.toISOString(),
     }
 
-    const job = await this.queueService.addJob(
-      QUEUE_NAMES.WHATSAPP,
-      WHATSAPP_QUEUE_JOB_NAMES.INBOUND_WEBHOOK,
-      payload,
-      { jobId: input.replayAttemptId ? `whatsapp:inbound-webhook:${input.webhookEventId}:${input.replayAttemptId}` : `whatsapp:inbound-webhook:${input.webhookEventId}` },
-    )
+    let job: any
+
+    try {
+      job = await this.queueService.addJob(
+        QUEUE_NAMES.WHATSAPP,
+        WHATSAPP_QUEUE_JOB_NAMES.INBOUND_WEBHOOK,
+        payload,
+        { jobId: input.replayAttemptId ? `whatsapp:inbound-webhook:${input.webhookEventId}:${input.replayAttemptId}` : `whatsapp:inbound-webhook:${input.webhookEventId}` },
+      )
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        await this.prisma.whatsAppWebhookEvent.updateMany({
+          where: {
+            id: input.webhookEventId,
+            orgId: input.orgId,
+            status: 'RECEIVED',
+          },
+          data: {
+            status: 'FAILED',
+            errorMessage: error.message,
+          },
+        })
+      }
+
+      throw error
+    }
 
     this.waMetrics.incInboundWebhookQueued()
     this.logger.log(JSON.stringify({

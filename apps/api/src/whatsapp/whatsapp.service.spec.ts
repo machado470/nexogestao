@@ -564,4 +564,106 @@ describe('WhatsAppService queued dispatch claim', () => {
     expect(sql).toContain("status = 'SENDING'")
     expect(sql).toContain('"lockedBy" =')
   })
+
+  it('marca RECEIVED como FAILED quando o handoff para BullMQ é comprovadamente impossível', async () => {
+    const { ServiceUnavailableException } = await import('@nestjs/common')
+
+    const queueError = new ServiceUnavailableException(
+      'Fila indisponível: Redis não conectado (whatsapp:inbound-webhook)',
+    )
+
+    const prisma: any = {
+      whatsAppWebhookEvent: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+
+    const queueService = {
+      addJob: jest.fn().mockRejectedValue(queueError),
+    }
+
+    const metrics = {
+      incInboundWebhookQueued: jest.fn(),
+    }
+
+    const svc = new WhatsAppService(
+      prisma,
+      queueService as any,
+      metrics as any,
+      { log: jest.fn() } as any,
+      {
+        orgId: 'org1',
+        userId: 'u1',
+        requestId: 'req-1',
+      } as any,
+      { increment: jest.fn() } as any,
+      { enforceMeter: jest.fn() } as any,
+    )
+
+    await expect(
+      svc.enqueueInboundWebhook({
+        webhookEventId: 'wh1',
+        orgId: 'org1',
+        provider: 'meta_cloud',
+        traceId: 'trace-1',
+        receivedAt: new Date('2026-05-06T00:00:00Z'),
+      }),
+    ).rejects.toBe(queueError)
+
+    expect(prisma.whatsAppWebhookEvent.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'wh1',
+        orgId: 'org1',
+        status: 'RECEIVED',
+      },
+      data: {
+        status: 'FAILED',
+        errorMessage: expect.stringContaining('Fila indisponível'),
+      },
+    })
+
+    expect(metrics.incInboundWebhookQueued).not.toHaveBeenCalled()
+  })
+
+
+  it('não marca RECEIVED como FAILED quando o erro de enqueue é ambíguo', async () => {
+    const queueError = new Error('connection reset after command write')
+
+    const prisma: any = {
+      whatsAppWebhookEvent: {
+        updateMany: jest.fn(),
+      },
+    }
+
+    const queueService = {
+      addJob: jest.fn().mockRejectedValue(queueError),
+    }
+
+    const svc = new WhatsAppService(
+      prisma,
+      queueService as any,
+      { incInboundWebhookQueued: jest.fn() } as any,
+      { log: jest.fn() } as any,
+      {
+        orgId: 'org1',
+        userId: 'u1',
+        requestId: 'req-1',
+      } as any,
+      { increment: jest.fn() } as any,
+      { enforceMeter: jest.fn() } as any,
+    )
+
+    await expect(
+      svc.enqueueInboundWebhook({
+        webhookEventId: 'wh1',
+        orgId: 'org1',
+        provider: 'meta_cloud',
+        traceId: 'trace-1',
+        receivedAt: new Date('2026-05-06T00:00:00Z'),
+      }),
+    ).rejects.toBe(queueError)
+
+    expect(prisma.whatsAppWebhookEvent.updateMany).not.toHaveBeenCalled()
+  })
+
 })
