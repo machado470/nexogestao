@@ -17,11 +17,6 @@ export class AutomationProcessor implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    if (!(await this.queueService.ensureEnabled())) {
-      this.logger.warn('Automation worker não iniciado: Redis/fila em modo degradado')
-      return
-    }
-
     try {
       this.worker = new Worker(
         QUEUE_NAMES.AUTOMATION,

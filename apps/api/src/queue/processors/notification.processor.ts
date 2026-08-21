@@ -17,11 +17,6 @@ export class NotificationProcessor implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    if (!(await this.queueService.ensureEnabled())) {
-      this.logger.warn('Notification worker não iniciado: Redis/fila em modo degradado')
-      return
-    }
-
     try {
       this.worker = new Worker(
         QUEUE_NAMES.NOTIFICATIONS,

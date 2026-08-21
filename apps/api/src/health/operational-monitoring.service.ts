@@ -13,6 +13,20 @@ export class OperationalMonitoringService {
 
   async queues(): Promise<OperationalQueueStatus[]> {
     const raw = await this.queueService.getQueueStatus() as Record<string, any>
+
+    if (raw?.ok === false) {
+      return [{
+        queue: 'queue-service',
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        degraded: true,
+        degradedReasons: ['queue_service_unavailable'],
+      }]
+    }
+
     const queues = raw.queues ?? raw
     return Object.entries(queues).map(([queue, counts]) => {
       const c = counts as Record<string, number>

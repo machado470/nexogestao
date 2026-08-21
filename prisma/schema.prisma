@@ -881,6 +881,7 @@ model WhatsAppMessage {
   @@index([orgId, entityType, entityId, createdAt])
   @@index([orgId, messageType, createdAt])
   @@index([orgId, status, lockedAt, createdAt])
+  @@index([status, lockedAt])
 }
 
 model WhatsAppWebhookEvent {
@@ -1187,6 +1188,7 @@ enum WhatsAppWebhookStatus {
 enum WhatsAppMessageStatus {
   QUEUED
   SENDING
+  UNCERTAIN
   SENT
   DELIVERED
   READ

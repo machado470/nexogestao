@@ -41,6 +41,7 @@ export type WhatsAppSendErrorResult = {
   errorCode: string
   errorMessage: string
   fatal?: boolean
+  ambiguous?: boolean
 }
 
 export type WhatsAppSendResult = WhatsAppSendSuccessResult | WhatsAppSendErrorResult
