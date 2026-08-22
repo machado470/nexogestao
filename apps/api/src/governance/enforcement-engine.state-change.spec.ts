@@ -1,6 +1,8 @@
 import { EnforcementEngineService } from './enforcement-engine.service'
 import { EnforcementPolicyService } from './enforcement-policy.service'
 
+const INITIAL_UPDATED_AT = new Date('2026-08-22T12:00:00.000Z')
+
 type State =
   | 'NORMAL'
   | 'WARNING'
@@ -41,6 +43,7 @@ function buildService(params: {
           orgId: 'org-a',
           operationalState: params.initialState,
           operationalRiskScore: params.initialScore,
+          operationalStateUpdatedAt: INITIAL_UPDATED_AT,
         },
       ]),
 
@@ -85,6 +88,7 @@ function buildService(params: {
     prisma,
     new EnforcementPolicyService(),
     timeline as any,
+    { getLastState: jest.fn().mockResolvedValue(null) } as any,
   )
 
   return {
@@ -136,11 +140,16 @@ describe(
         expect(prisma.person.updateMany).toHaveBeenCalledWith({
           where: {
             id: 'person-a',
+            orgId: 'org-a',
+            active: true,
             operationalState: 'NORMAL',
             operationalRiskScore: 60,
+            operationalStateUpdatedAt: INITIAL_UPDATED_AT,
           },
           data: {
             operationalState: 'WARNING',
+            operationalRiskScore: 60,
+            operationalStateUpdatedAt: expect.any(Date),
           },
         })
 
@@ -201,11 +210,16 @@ describe(
         ).toHaveBeenCalledWith({
           where: {
             id: 'person-a',
+            orgId: 'org-a',
+            active: true,
             operationalState: 'NORMAL',
             operationalRiskScore: 60,
+            operationalStateUpdatedAt: INITIAL_UPDATED_AT,
           },
           data: {
             operationalState: 'WARNING',
+            operationalRiskScore: 60,
+            operationalStateUpdatedAt: expect.any(Date),
           },
         })
 
@@ -235,6 +249,7 @@ describe(
                 orgId: 'org-a',
                 operationalState: 'NORMAL',
                 operationalRiskScore: 60,
+                operationalStateUpdatedAt: INITIAL_UPDATED_AT,
               },
             ]),
 
@@ -299,12 +314,14 @@ describe(
           prisma,
           new EnforcementPolicyService(),
           timeline as any,
+          { getLastState: jest.fn().mockResolvedValue(null) } as any,
         )
 
         const second = new EnforcementEngineService(
           prisma,
           new EnforcementPolicyService(),
           timeline as any,
+          { getLastState: jest.fn().mockResolvedValue(null) } as any,
         )
 
         await Promise.all([
@@ -341,6 +358,7 @@ describe(
                 orgId: 'org-a',
                 operationalState: 'NORMAL',
                 operationalRiskScore: 60,
+                operationalStateUpdatedAt: INITIAL_UPDATED_AT,
               },
             ]),
 
@@ -394,6 +412,7 @@ describe(
           prisma,
           new EnforcementPolicyService(),
           timeline as any,
+          { getLastState: jest.fn().mockResolvedValue(null) } as any,
         )
 
         await service.runForOrg('org-a')
@@ -445,6 +464,7 @@ describe(
                 orgId: 'org-a',
                 operationalState: 'NORMAL',
                 operationalRiskScore: 60,
+                operationalStateUpdatedAt: INITIAL_UPDATED_AT,
               },
             ]),
 
@@ -520,6 +540,7 @@ describe(
           prisma,
           new EnforcementPolicyService(),
           timeline as any,
+          { getLastState: jest.fn().mockResolvedValue(null) } as any,
         )
 
         await expect(
