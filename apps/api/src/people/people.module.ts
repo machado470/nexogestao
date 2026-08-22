@@ -6,6 +6,9 @@ import { RiskModule } from '../risk/risk.module'
 import {
   OperationalStateModule,
 } from './operational-state.module'
+import { OperationalStateController } from './operational-state.controller'
+import { ForceNormalService } from './force-normal.service'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 
 import { PeopleService } from './people.service'
 import { PeopleController } from './people.controller'
@@ -28,9 +31,12 @@ import {
     PeopleService,
     PeopleOperationalSummaryService,
     PersonAvailabilityExceptionsService,
+    ForceNormalService,
+    ActiveUserGuard,
   ],
   controllers: [
     PeopleController,
+    OperationalStateController,
   ],
   exports: [
     PeopleService,
