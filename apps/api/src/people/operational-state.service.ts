@@ -3,8 +3,12 @@ import {
   TemporalRiskService,
   TemporalRiskResult,
 } from '../risk/temporal-risk.service'
+import { PrismaService } from '../prisma/prisma.service'
 import { OperationalStateRepository } from './operational-state.repository'
 import { TimelineService } from '../timeline/timeline.service'
+import {
+  persistOperationalStateTransition,
+} from './operational-state.transition'
 
 export type OperationalStateValue =
   | 'NORMAL'
@@ -17,10 +21,13 @@ export type OperationalState = {
   riskScore: number
 }
 
-export type OperationalStateDetailed = OperationalState & {
-  contributors: TemporalRiskResult['contributors']
-  factors: TemporalRiskResult['factors']
-}
+export type OperationalStateDetailed =
+  OperationalState & {
+    contributors:
+      TemporalRiskResult['contributors']
+    factors:
+      TemporalRiskResult['factors']
+  }
 
 export type OperationalStateSyncResult = {
   status: OperationalState
@@ -32,31 +39,55 @@ export type OperationalStateSyncResult = {
 @Injectable()
 export class OperationalStateService {
   constructor(
-    private readonly temporalRisk: TemporalRiskService,
-    private readonly repository: OperationalStateRepository,
-    private readonly timeline: TimelineService,
+    private readonly temporalRisk:
+      TemporalRiskService,
+    private readonly repository:
+      OperationalStateRepository,
+    private readonly timeline:
+      TimelineService,
+    private readonly prisma:
+      PrismaService,
   ) {}
 
-  private toState(riskScore: number): OperationalStateValue {
+  private toState(
+    riskScore: number,
+  ): OperationalStateValue {
     if (riskScore >= 90) return 'SUSPENDED'
     if (riskScore >= 70) return 'RESTRICTED'
     if (riskScore >= 50) return 'WARNING'
     return 'NORMAL'
   }
 
-  async getStatus(personId: string): Promise<OperationalState> {
-    const riskScore = await this.temporalRisk.calculate(personId)
-    return { state: this.toState(riskScore), riskScore }
-  }
-
-  async getStatusDetailed(personId: string): Promise<OperationalStateDetailed> {
-    const detailed = await this.temporalRisk.calculateDetailed(personId)
+  async getStatus(
+    personId: string,
+  ): Promise<OperationalState> {
+    const riskScore =
+      await this.temporalRisk.calculate(
+        personId,
+      )
 
     return {
-      state: this.toState(detailed.score),
+      state: this.toState(riskScore),
+      riskScore,
+    }
+  }
+
+  async getStatusDetailed(
+    personId: string,
+  ): Promise<OperationalStateDetailed> {
+    const detailed =
+      await this.temporalRisk
+        .calculateDetailed(personId)
+
+    return {
+      state: this.toState(
+        detailed.score,
+      ),
       riskScore: detailed.score,
-      contributors: detailed.contributors,
-      factors: detailed.factors,
+      contributors:
+        detailed.contributors,
+      factors:
+        detailed.factors,
     }
   }
 
@@ -64,28 +95,74 @@ export class OperationalStateService {
     orgId: string,
     personId: string,
   ): Promise<OperationalStateSyncResult> {
-    const status = await this.getStatus(personId)
-    const last = await this.repository.getLastState({ orgId, personId })
+    const status =
+      await this.getStatus(personId)
 
-    const to = status.state
-    const changed = last !== to
+    /*
+     * O snapshot da pessoa passa a participar
+     * do ownership da transição.
+     *
+     * Antes, o Service decidia somente pela
+     * Timeline e podia registrar decisão stale.
+     */
+    const snapshot =
+      await this.prisma.person.findFirst({
+        where: {
+          id: personId,
+          orgId,
+          active: true,
+        },
+        select: {
+          id: true,
+          orgId: true,
+          operationalState: true,
+          operationalRiskScore: true,
+          operationalStateUpdatedAt: true,
+        },
+      })
 
-    if (!changed) {
-      return { status, changed: false, from: last, to }
+    if (!snapshot) {
+      const last =
+        await this.repository.getLastState({
+          orgId,
+          personId,
+        })
+
+      return {
+        status,
+        changed: false,
+        from: last,
+        to: status.state,
+      }
     }
 
-    await this.timeline.log({
-      orgId,
-      action: 'OPERATIONAL_STATE_CHANGED',
-      personId,
-      description: `Estado operacional: ${last ?? 'N/A'} → ${to}`,
-      metadata: {
-        from: last,
-        to,
+    const transition =
+      await persistOperationalStateTransition({
+        prisma: this.prisma,
+        repository: this.repository,
+        timeline: this.timeline,
+        snapshot: {
+          id: snapshot.id,
+          orgId: snapshot.orgId,
+          operationalState: snapshot.operationalState as OperationalStateValue,
+          operationalRiskScore:
+            snapshot.operationalRiskScore,
+          operationalStateUpdatedAt:
+            snapshot.operationalStateUpdatedAt,
+        },
+        nextState: status.state,
         riskScore: status.riskScore,
-      },
-    })
+        source:
+          'OPERATIONAL_STATE_SERVICE',
+        reason:
+          'Sincronização operacional solicitada após mudança de domínio',
+      })
 
-    return { status, changed: true, from: last, to }
+    return {
+      status,
+      changed: transition.changed,
+      from: transition.from,
+      to: transition.to,
+    }
   }
 }

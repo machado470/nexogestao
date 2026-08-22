@@ -1,9 +1,17 @@
-import { Injectable, Inject } from '@nestjs/common'
+import {
+  Injectable,
+  Inject,
+} from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { TimelineService } from '../timeline/timeline.service'
 import { RiskService } from '../risk/risk.service'
 import { OperationalStateRepository } from './operational-state.repository'
-import type { OperationalStateValue } from './operational-state.service'
+import type {
+  OperationalStateValue,
+} from './operational-state.service'
+import {
+  persistOperationalStateTransition,
+} from './operational-state.transition'
 
 function deriveState(
   riskScore: number,
@@ -18,187 +26,88 @@ function deriveState(
 export class OperationalStateJob {
   constructor(
     @Inject(PrismaService)
-    private readonly prisma: PrismaService,
+    private readonly prisma:
+      PrismaService,
 
     @Inject(TimelineService)
-    private readonly timeline: TimelineService,
+    private readonly timeline:
+      TimelineService,
 
     @Inject(RiskService)
-    private readonly risk: RiskService,
+    private readonly risk:
+      RiskService,
 
     @Inject(OperationalStateRepository)
-    private readonly repo: OperationalStateRepository,
+    private readonly repo:
+      OperationalStateRepository,
   ) {}
 
   async run() {
-    const persons = await this.prisma.person.findMany({
-      where: { active: true },
-      select: {
-        id: true,
-        orgId: true,
-        operationalState: true,
-        operationalRiskScore: true,
-        operationalStateUpdatedAt: true,
-      },
-    })
+    const persons =
+      await this.prisma.person.findMany({
+        where: {
+          active: true,
+        },
+        select: {
+          id: true,
+          orgId: true,
+          operationalState: true,
+          operationalRiskScore: true,
+          operationalStateUpdatedAt: true,
+        },
+      })
 
     let evaluated = 0
     let changed = 0
+
     const now = new Date()
 
     for (const p of persons) {
       evaluated++
 
-      // calculate-only: sem RiskSnapshot, sem spam na Timeline
-      const riskScore =
-        await this.risk.calculatePersonRisk(p.id)
-
-      const nextState = deriveState(riskScore)
-
       /*
-       * Fast-path.
-       *
-       * Não é a barreira de concorrência: a decisão
-       * autoritativa ocorre novamente dentro da transação.
+       * Calculate-only:
+       * sem RiskSnapshot e sem Timeline lateral.
        */
-      const lastState = await this.repo.getLastState({
-        orgId: p.orgId,
-        personId: p.id,
-      })
+      const riskScore =
+        await this.risk
+          .calculatePersonRisk(p.id)
 
-      const snapshotOk =
-        p.operationalState === nextState
-        && p.operationalRiskScore === riskScore
-        && p.operationalStateUpdatedAt !== null
-
-      if (
-        lastState
-        && lastState === nextState
-        && snapshotOk
-      ) {
-        continue
-      }
+      const nextState =
+        deriveState(riskScore)
 
       const transition =
-        await this.prisma.$transaction(
-          async (tx) => {
-            /*
-             * Compare-and-set sobre o snapshot lido.
-             *
-             * Duas instâncias podem chegar até aqui,
-             * mas somente uma consegue atualizar a mesma
-             * versão lógica da pessoa.
-             */
-            const claim =
-              await tx.person.updateMany({
-                where: {
-                  id: p.id,
-                  orgId: p.orgId,
-                  active: true,
-                  operationalState:
-                    p.operationalState,
-                  operationalRiskScore:
-                    p.operationalRiskScore,
-                  operationalStateUpdatedAt:
-                    p.operationalStateUpdatedAt,
-                },
-                data: {
-                  operationalState: nextState,
-                  operationalRiskScore: riskScore,
-                  operationalStateUpdatedAt: now,
-                },
-              })
-
-            if (claim.count !== 1) {
-              return {
-                claimed: false as const,
-              }
-            }
-
-            /*
-             * Revalidação autoritativa depois do claim.
-             * Isso também permite reparar Timeline ausente
-             * sem duplicar uma transição já commitada.
-             */
-            const authoritativeLastState =
-              await this.repo.getLastState(
-                {
-                  orgId: p.orgId,
-                  personId: p.id,
-                },
-                tx,
-              )
-
-            if (
-              authoritativeLastState === nextState
-            ) {
-              return {
-                claimed: true as const,
-                dispatch: null,
-              }
-            }
-
-            const timelineInput = {
-              orgId: p.orgId,
-              action:
-                'OPERATIONAL_STATE_CHANGED',
-              personId: p.id,
-              description:
-                `Estado operacional: `
-                + `${authoritativeLastState ?? 'UNKNOWN'}`
-                + ` → ${nextState}`,
-              metadata: {
-                from:
-                  authoritativeLastState
-                  ?? 'UNKNOWN',
-                to: nextState,
-                riskScore,
-                source:
-                  'OPERATIONAL_STATE_JOB',
-                reason:
-                  'Risco operacional calculado para pessoa ativa',
-                evaluatedRecords: 1,
-                evaluatedAt:
-                  now.toISOString(),
-              },
-            }
-
-            /*
-             * Snapshot + evidência tornam-se visíveis
-             * atomicamente no mesmo commit.
-             */
-            const event =
-              await this.timeline.logInTransaction(
-                timelineInput,
-                tx,
-              )
-
-            return {
-              claimed: true as const,
-              dispatch: {
-                input: timelineInput,
-                timelineEventId: event.id,
-              },
-            }
+        await persistOperationalStateTransition({
+          prisma: this.prisma,
+          repository: this.repo,
+          timeline: this.timeline,
+          snapshot: {
+            id: p.id,
+            orgId: p.orgId,
+            operationalState: p.operationalState as OperationalStateValue,
+            operationalRiskScore:
+              p.operationalRiskScore,
+            operationalStateUpdatedAt:
+              p.operationalStateUpdatedAt,
           },
-        )
-
-      if (!transition.claimed) {
-        continue
-      }
-
-      changed++
+          nextState,
+          riskScore,
+          source:
+            'OPERATIONAL_STATE_JOB',
+          reason:
+            'Risco operacional calculado para pessoa ativa',
+          evaluatedRecords: 1,
+          evaluatedAt: now,
+        })
 
       /*
-       * Webhook somente depois de a transação ter
-       * commitado a evidência autoritativa.
+       * Mantém a semântica histórica do Job:
+       * snapshot reparado/atualizado conta como
+       * mudança processada mesmo se a Timeline
+       * já continha o estado autoritativo.
        */
-      if (transition.dispatch) {
-        await this.timeline
-          .dispatchPersistedEventWebhook(
-            transition.dispatch.input,
-            transition.dispatch.timelineEventId,
-          )
+      if (transition.claimed) {
+        changed++
       }
     }
 

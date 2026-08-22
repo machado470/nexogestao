@@ -3,34 +3,46 @@ import { PrismaModule } from '../prisma/prisma.module'
 import { TimelineModule } from '../timeline/timeline.module'
 import { AuditModule } from '../audit/audit.module'
 import { RiskModule } from '../risk/risk.module'
+import {
+  OperationalStateModule,
+} from './operational-state.module'
 
 import { PeopleService } from './people.service'
 import { PeopleController } from './people.controller'
-import { OperationalStateService } from './operational-state.service'
-import { OperationalStateRepository } from './operational-state.repository'
-import { PeopleOperationalSummaryService } from './people-operational-summary.service'
-import { PersonAvailabilityExceptionsService } from './person-availability-exceptions.service'
+import {
+  PeopleOperationalSummaryService,
+} from './people-operational-summary.service'
+import {
+  PersonAvailabilityExceptionsService,
+} from './person-availability-exceptions.service'
 
 @Module({
   imports: [
     PrismaModule,
     TimelineModule,
     AuditModule,
-    RiskModule
+    RiskModule,
+    OperationalStateModule,
   ],
   providers: [
     PeopleService,
-    OperationalStateService,
-    OperationalStateRepository,
     PeopleOperationalSummaryService,
-    PersonAvailabilityExceptionsService
+    PersonAvailabilityExceptionsService,
   ],
   controllers: [
-    PeopleController
+    PeopleController,
   ],
   exports: [
     PeopleService,
-    OperationalStateService
-  ]
+
+    /*
+     * Reexporta a autoridade única.
+     *
+     * ServiceOrders continua importando
+     * PeopleModule, mas recebe exatamente
+     * o provider do OperationalStateModule.
+     */
+    OperationalStateModule,
+  ],
 })
 export class PeopleModule {}
