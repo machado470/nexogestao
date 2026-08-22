@@ -328,6 +328,31 @@ export class TimelineService {
     })
   }
 
+  async dispatchPersistedEventWebhook(
+    input: TimelineLogInput,
+    timelineEventId: string,
+  ) {
+    try {
+      await this.webhookDispatcher.dispatchTimelineEvent({
+        orgId: input.orgId,
+        action: input.action,
+        timelineEventId,
+        data: {
+          personId: input.personId ?? null,
+          description: input.description ?? null,
+          metadata: input.metadata ?? null,
+        },
+      })
+    } catch (error) {
+      console.warn(
+        '[Timeline] Falha ao despachar webhook. action=%s orgId=%s error=%s',
+        input.action,
+        input.orgId,
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  }
+
   async listByOrg(orgId: string, query?: TimelineQueryDto) {
     const take =
       query?.limit && Number(query.limit) > 0

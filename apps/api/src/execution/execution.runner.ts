@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { randomUUID } from 'crypto'
-import { WhatsAppMessageType } from '@prisma/client'
+import { Prisma, WhatsAppMessageType } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { FinanceService } from '../finance/finance.service'
 import { ExecutionConfigService } from './execution.config'
@@ -10,6 +10,7 @@ import { buildExecutionKey } from './execution.idempotency'
 import type {
   ExecutionActionCandidate,
   ExecutionContext,
+  ExecutionEventPayload,
   ExecutionPriority,
   ExecutionResult,
 } from './execution.types'
@@ -183,6 +184,150 @@ export class ExecutionRunner {
         ? 'blocked'
         : status
     this.metrics.increment(`executionActionStatus:${mapped}`)
+  }
+
+  private async reserveExecutionStart(params: {
+    candidate: ExecutionActionCandidate
+    executionKey: string
+    mode: 'manual' | 'semi_automatic' | 'automatic'
+    executionContext: ExecutionContext
+    throttleWindowMs: number
+    policySnapshot: unknown
+    customerId?: string
+  }) {
+    const lockKey =
+      `execution.runner.v5:${params.candidate.orgId}:${params.executionKey}`
+
+    const startedPayload: ExecutionEventPayload = {
+      eventType: 'EXECUTION_STARTED',
+      entityType: params.candidate.entityType,
+      entityId: params.candidate.entityId,
+      actionId: params.candidate.actionId,
+      decisionId: params.candidate.decisionId,
+      executionKey: params.executionKey,
+      mode: params.mode,
+      status: 'pending',
+      intent: params.executionContext.intent,
+      priority: params.executionContext.priority,
+      correlationId:
+        params.executionContext.correlationId,
+      reasonCode: 'runner_execution_requested',
+      result: { outcome: 'success' },
+      timestamp: new Date().toISOString(),
+      customerId: params.customerId,
+      metadata: {
+        policySnapshot: params.policySnapshot,
+        trigger: params.candidate.metadata ?? {},
+      },
+      reasonDetail:
+        'candidate aprovado para execução automática',
+      explanation: {
+        ruleId: params.candidate.decisionId,
+        eligibility: 'eligible',
+        trigger: params.candidate.metadata ?? {},
+      },
+    }
+
+    const reservation =
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`
+            SELECT 1::int AS "locked"
+            FROM pg_advisory_xact_lock(
+              hashtextextended(${lockKey}, 0)
+            )
+          `,
+        )
+
+        const recent =
+          await tx.timelineEvent.findFirst({
+            where: {
+              orgId: params.candidate.orgId,
+              action: 'EXECUTION_EVENT',
+              createdAt: {
+                gte: new Date(
+                  Date.now()
+                    - params.throttleWindowMs,
+                ),
+              },
+              metadata: {
+                path: ['executionKey'],
+                equals: params.executionKey,
+              },
+              OR: [
+                {
+                  metadata: {
+                    path: ['status'],
+                    equals: 'executed',
+                  },
+                },
+                {
+                  metadata: {
+                    path: ['eventType'],
+                    equals: 'EXECUTION_STARTED',
+                  },
+                },
+              ],
+            },
+            select: { id: true },
+          })
+
+        if (recent?.id) {
+          return {
+            status: 'recent' as const,
+          }
+        }
+
+        /*
+         * Somente quem possui ownership consome
+         * o bucket local de execução.
+         */
+        const tenantLimit =
+          this.tenantOps.enforceLimit({
+            orgId: params.candidate.orgId,
+            scope: 'execution:auto-actions',
+            limit: 180,
+            windowMs: 60_000,
+            blockedReason:
+              'tenant_execution_rate_limit_reached',
+          })
+
+        if (!tenantLimit.allowed) {
+          return {
+            status: 'throttled' as const,
+            tenantLimit,
+          }
+        }
+
+        /*
+         * STARTED é evidência autoritativa e entra
+         * na mesma transação do advisory lock.
+         */
+        const event =
+          await this.events.recordEventInTransaction(
+            params.candidate.orgId,
+            startedPayload,
+            tx,
+          )
+
+        return {
+          status: 'reserved' as const,
+          timelineEventId: event.id,
+        }
+      })
+
+    /*
+     * Integração externa só após COMMIT.
+     */
+    if (reservation.status === 'reserved') {
+      await this.events.dispatchRecordedEventWebhook(
+        params.candidate.orgId,
+        startedPayload,
+        reservation.timelineEventId,
+      )
+    }
+
+    return reservation
   }
 
   private extractCustomerId(metadata: Record<string, unknown> | null | undefined): string | null {
@@ -956,62 +1101,80 @@ export class ExecutionRunner {
       return 'blocked'
     }
 
-    const tenantLimit = this.tenantOps.enforceLimit({
-      orgId: candidate.orgId,
-      scope: 'execution:auto-actions',
-      limit: 180,
-      windowMs: 60_000,
-      blockedReason: 'tenant_execution_rate_limit_reached',
-    })
+      const reservation =
+      await this.reserveExecutionStart({
+        candidate,
+        executionKey,
+        mode,
+        executionContext,
+        throttleWindowMs: policy.throttleWindowMs,
+        policySnapshot: policy,
+        customerId:
+          contextValidation.customerId ?? undefined,
+      })
 
-    if (!tenantLimit.allowed) {
+      if (reservation.status === 'recent') {
+      const cooldownMs =
+        this.config.getBlockedRecentCooldownMs()
+      const blockedUntil = Date.now() + cooldownMs
+
+      this.markCandidateRecentCooldown(
+        candidate,
+        blockedUntil,
+      )
+
       await recordBlockedWithContext(
         executionKey,
         mode,
-        tenantLimit.reason ?? 'tenant_execution_rate_limit_reached',
+        'blocked_recent_execution',
+        'blocked',
+        {
+          ruleId: candidate.decisionId,
+          ruleReason: 'idempotency',
+          cooldownUntil:
+            new Date(blockedUntil).toISOString(),
+        },
+      )
+
+      this.countOperationalStatus('blocked')
+      return 'blocked_recent_execution'
+      }
+
+      if (reservation.status === 'throttled') {
+      const tenantLimit = reservation.tenantLimit
+
+      await recordBlockedWithContext(
+        executionKey,
+        mode,
+        tenantLimit.reason
+          ?? 'tenant_execution_rate_limit_reached',
         'throttled',
         {
           ruleId: candidate.decisionId,
-          ruleReason: 'tenant fairness limit reached',
+          ruleReason:
+            'tenant fairness limit reached',
         },
       )
-      this.countOperationalStatus('throttled')
-      this.tenantOps.increment(candidate.orgId, 'automation_throttled')
-      this.tenantOps.recordCriticalEvent(candidate.orgId, 'execution_throttled', {
-        actionId: candidate.actionId,
-        used: tenantLimit.used,
-        limit: tenantLimit.limit,
-      })
-      return 'throttled'
-    }
 
-    await this.events.recordEvent(candidate.orgId, {
-      eventType: 'EXECUTION_STARTED',
-      entityType: candidate.entityType,
-      entityId: candidate.entityId,
-      actionId: candidate.actionId,
-      decisionId: candidate.decisionId,
-      executionKey,
-      mode,
-      status: 'pending',
-      intent: executionContext.intent,
-      priority: executionContext.priority,
-      correlationId: executionContext.correlationId,
-      reasonCode: 'runner_execution_requested',
-      result: { outcome: 'success' },
-      timestamp: new Date().toISOString(),
-      customerId: contextValidation.customerId ?? undefined,
-      metadata: {
-        policySnapshot: policy,
-        trigger: candidate.metadata ?? {},
-      },
-      reasonDetail: 'candidate aprovado para execução automática',
-      explanation: {
-        ruleId: candidate.decisionId,
-        eligibility: 'eligible',
-        trigger: candidate.metadata ?? {},
-      },
-    })
+      this.countOperationalStatus('throttled')
+
+      this.tenantOps.increment(
+        candidate.orgId,
+        'automation_throttled',
+      )
+
+      this.tenantOps.recordCriticalEvent(
+        candidate.orgId,
+        'execution_throttled',
+        {
+          actionId: candidate.actionId,
+          used: tenantLimit.used,
+          limit: tenantLimit.limit,
+        },
+      )
+
+      return 'throttled'
+      }
 
     try {
       const executionResult = await this.executeCandidate(candidate, executionContext)

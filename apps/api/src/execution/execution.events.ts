@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { TimelineService } from '../timeline/timeline.service'
 import type {
@@ -16,20 +17,58 @@ export class ExecutionEventsService {
     private readonly timeline: TimelineService,
   ) {}
 
-  async recordEvent(orgId: string, payload: ExecutionEventPayload) {
-    await this.timeline.log({
+  private buildTimelineInput(
+    orgId: string,
+    payload: ExecutionEventPayload,
+  ) {
+    return {
       orgId,
       action: EXECUTION_EVENT_ACTION,
-      description: `${payload.eventType} | ${payload.actionId} => ${payload.status}`,
+      description:
+        `${payload.eventType} | ${payload.actionId} => ${payload.status}`,
       customerId: payload.customerId,
       metadata: {
         ...payload,
         orgId,
         entityId: payload.entityId,
         reasonCode: payload.reasonCode ?? null,
-        cooldownUntil: payload.cooldownUntil ?? payload.explanation?.cooldownUntil ?? null,
+        cooldownUntil:
+          payload.cooldownUntil
+          ?? payload.explanation?.cooldownUntil
+          ?? null,
       },
-    })
+    }
+  }
+
+  async recordEvent(
+    orgId: string,
+    payload: ExecutionEventPayload,
+  ) {
+    await this.timeline.log(
+      this.buildTimelineInput(orgId, payload),
+    )
+  }
+
+  async recordEventInTransaction(
+    orgId: string,
+    payload: ExecutionEventPayload,
+    tx: Prisma.TransactionClient,
+  ) {
+    return this.timeline.logInTransaction(
+      this.buildTimelineInput(orgId, payload),
+      tx,
+    )
+  }
+
+  async dispatchRecordedEventWebhook(
+    orgId: string,
+    payload: ExecutionEventPayload,
+    timelineEventId: string,
+  ) {
+    await this.timeline.dispatchPersistedEventWebhook(
+      this.buildTimelineInput(orgId, payload),
+      timelineEventId,
+    )
   }
 
   async hasRecentExecution(params: {
