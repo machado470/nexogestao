@@ -95,17 +95,12 @@ export class EnforcementEngineService {
           metadata: warningMetadata,
         })
 
-        // aplica estado/score se mudou
-        await this.setPersonStateIfChanged({
-          personId: p.id,
-          nextState: decision.nextState as any,
-          riskScore,
-        })
-
-        await this.timeline.log({
+        await this.persistPersonStateTransition({
           orgId: p.orgId,
-          action: 'OPERATIONAL_STATE_CHANGED',
           personId: p.id,
+          expectedState: p.operationalState ?? null,
+          expectedRiskScore: riskScore,
+          nextState: decision.nextState as any,
           description: decision.reason,
           metadata: warningMetadata,
         })
@@ -136,17 +131,12 @@ export class EnforcementEngineService {
           correctiveCreated: created,
         }
 
-        // aplica estado/score se mudou (independente de já ter corrective aberto)
-        await this.setPersonStateIfChanged({
-          personId: p.id,
-          nextState: decision.nextState as any,
-          riskScore,
-        })
-
-        await this.timeline.log({
+        await this.persistPersonStateTransition({
           orgId: p.orgId,
-          action: 'OPERATIONAL_STATE_CHANGED',
           personId: p.id,
+          expectedState: p.operationalState ?? null,
+          expectedRiskScore: riskScore,
+          nextState: decision.nextState as any,
           description: decision.reason,
           metadata: enforcedMetadata,
         })
@@ -164,30 +154,84 @@ export class EnforcementEngineService {
     return result
   }
 
-  private async setPersonStateIfChanged(params: {
+  private async persistPersonStateTransition(params: {
+    orgId: string
     personId: string
+    expectedState: OperationalStateValue | null
+    expectedRiskScore: number
     nextState: OperationalStateValue
-    riskScore: number
-  }) {
-    const current = await this.prisma.person.findUnique({
-      where: { id: params.personId },
-      select: { operationalState: true, operationalRiskScore: true },
-    })
+    description: string
+    metadata: Record<string, unknown>
+  }): Promise<boolean> {
+    if (params.expectedState === params.nextState) {
+      return false
+    }
 
-    if (!current) return
+    const timelineInput = {
+      orgId: params.orgId,
+      action: 'OPERATIONAL_STATE_CHANGED',
+      personId: params.personId,
+      description: params.description,
+      metadata: params.metadata,
+    }
 
-    const stateChanged = (current.operationalState ?? null) !== params.nextState
-    const scoreChanged = Number(current.operationalRiskScore ?? 0) !== params.riskScore
+    const event = await this.prisma.$transaction(
+      async (tx) => {
+        /*
+         * CAS contra o snapshot que originou a decisão.
+         *
+         * Se outro fluxo alterou estado ou score antes deste
+         * ponto, a decisão ficou obsoleta e perde ownership.
+         */
+        const claim = await tx.person.updateMany({
+          where: {
+            id: params.personId,
+            operationalState: params.expectedState,
+            operationalRiskScore: params.expectedRiskScore,
+          },
+          data: {
+            operationalState: params.nextState as any,
+          },
+        })
 
-    if (!stateChanged && !scoreChanged) return
+        if (claim.count !== 1) {
+          return null
+        }
 
-    await this.prisma.person.update({
-      where: { id: params.personId },
-      data: {
-        operationalState: params.nextState as any,
-        operationalRiskScore: params.riskScore,
+        /*
+         * Estado e evidência oficial pertencem à mesma
+         * transação. Falha da Timeline deve provocar rollback
+         * da mudança de estado.
+         */
+        const persistedEvent =
+          await this.timeline.logInTransaction(
+            timelineInput,
+            tx,
+          )
+
+        if (!persistedEvent?.id) {
+          throw new Error(
+            'OPERATIONAL_STATE_CHANGED não foi persistido',
+          )
+        }
+
+        return persistedEvent
       },
-    })
+    )
+
+    if (!event) {
+      return false
+    }
+
+    /*
+     * Integração externa somente após commit.
+     */
+    await this.timeline.dispatchPersistedEventWebhook(
+      timelineInput,
+      event.id,
+    )
+
+    return true
   }
 
   private async hasActiveException(personId: string): Promise<boolean> {
