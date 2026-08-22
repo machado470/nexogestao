@@ -17,6 +17,7 @@ import { GovernanceReadController } from './governance-read.controller'
 import { GovernanceReadService } from './governance-read.service'
 import { GovernanceActionController } from './governance-action.controller'
 import { GovernanceActionService } from './governance-action.service'
+import { OperationalStateRepository } from '../people/operational-state.repository'
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { GovernanceActionService } from './governance-action.service'
 
     GovernanceReadService,
     GovernanceActionService,
+    OperationalStateRepository,
   ],
   exports: [
     GovernanceRunService,

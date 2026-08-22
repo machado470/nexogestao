@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service'
 import { TimelineService } from '../timeline/timeline.service'
 import { EnforcementPolicyService } from './enforcement-policy.service'
 import { OperationalStateValue } from '@prisma/client'
+import { OperationalStateRepository } from '../people/operational-state.repository'
+import { persistOperationalStateTransition } from '../people/operational-state.transition'
 
 export type EnforcementRunResult = {
   evaluated: number
@@ -23,6 +25,9 @@ export class EnforcementEngineService {
 
     @Inject(TimelineService)
     private readonly timeline: TimelineService,
+
+    @Inject(OperationalStateRepository)
+    private readonly operationalStateRepository: OperationalStateRepository,
   ) {}
 
   /**
@@ -45,6 +50,7 @@ export class EnforcementEngineService {
         orgId: true,
         operationalState: true,
         operationalRiskScore: true,
+        operationalStateUpdatedAt: true,
       },
     })
 
@@ -100,6 +106,7 @@ export class EnforcementEngineService {
           personId: p.id,
           expectedState: p.operationalState ?? null,
           expectedRiskScore: riskScore,
+          expectedUpdatedAt: p.operationalStateUpdatedAt,
           nextState: decision.nextState as any,
           description: decision.reason,
           metadata: warningMetadata,
@@ -136,6 +143,7 @@ export class EnforcementEngineService {
           personId: p.id,
           expectedState: p.operationalState ?? null,
           expectedRiskScore: riskScore,
+          expectedUpdatedAt: p.operationalStateUpdatedAt,
           nextState: decision.nextState as any,
           description: decision.reason,
           metadata: enforcedMetadata,
@@ -159,6 +167,7 @@ export class EnforcementEngineService {
     personId: string
     expectedState: OperationalStateValue | null
     expectedRiskScore: number
+    expectedUpdatedAt: Date | null
     nextState: OperationalStateValue
     description: string
     metadata: Record<string, unknown>
@@ -167,71 +176,26 @@ export class EnforcementEngineService {
       return false
     }
 
-    const timelineInput = {
-      orgId: params.orgId,
-      action: 'OPERATIONAL_STATE_CHANGED',
-      personId: params.personId,
-      description: params.description,
-      metadata: params.metadata,
-    }
-
-    const event = await this.prisma.$transaction(
-      async (tx) => {
-        /*
-         * CAS contra o snapshot que originou a decisão.
-         *
-         * Se outro fluxo alterou estado ou score antes deste
-         * ponto, a decisão ficou obsoleta e perde ownership.
-         */
-        const claim = await tx.person.updateMany({
-          where: {
-            id: params.personId,
-            operationalState: params.expectedState,
-            operationalRiskScore: params.expectedRiskScore,
-          },
-          data: {
-            operationalState: params.nextState as any,
-          },
-        })
-
-        if (claim.count !== 1) {
-          return null
-        }
-
-        /*
-         * Estado e evidência oficial pertencem à mesma
-         * transação. Falha da Timeline deve provocar rollback
-         * da mudança de estado.
-         */
-        const persistedEvent =
-          await this.timeline.logInTransaction(
-            timelineInput,
-            tx,
-          )
-
-        if (!persistedEvent?.id) {
-          throw new Error(
-            'OPERATIONAL_STATE_CHANGED não foi persistido',
-          )
-        }
-
-        return persistedEvent
+    const result = await persistOperationalStateTransition({
+      prisma: this.prisma,
+      repository: this.operationalStateRepository,
+      timeline: this.timeline,
+      snapshot: {
+        id: params.personId,
+        orgId: params.orgId,
+        operationalState: params.expectedState
+          ?? OperationalStateValue.NORMAL,
+        operationalRiskScore: params.expectedRiskScore,
+        operationalStateUpdatedAt: params.expectedUpdatedAt,
       },
-    )
+      nextState: params.nextState,
+      riskScore: params.expectedRiskScore,
+      source: 'ENFORCEMENT_ENGINE',
+      reason: params.description,
+      metadata: params.metadata,
+    })
 
-    if (!event) {
-      return false
-    }
-
-    /*
-     * Integração externa somente após commit.
-     */
-    await this.timeline.dispatchPersistedEventWebhook(
-      timelineInput,
-      event.id,
-    )
-
-    return true
+    return result.changed
   }
 
   private async hasActiveException(personId: string): Promise<boolean> {
