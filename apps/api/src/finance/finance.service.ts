@@ -1271,46 +1271,64 @@ export class FinanceService {
       )
     }
 
-      const result = await this.prisma.charge.updateMany({
+    const overdueCandidates = await this.prisma.charge.findMany({
       where: {
         orgId,
         status: 'PENDING',
         dueDate: { lt: todayStart },
       },
-      data: { status: 'OVERDUE' },
     })
 
-    const overdue = await this.prisma.charge.findMany({
-      where: {
-        orgId,
-        status: 'OVERDUE',
-      },
-    })
+    let updated = 0
 
-    for (const charge of overdue) {
-      await this.safeTimelineLog({
-        orgId,
-        action: 'CHARGE_OVERDUE',
-        description: `Cobrança ${charge.id} vencida`,
-        customerId: charge.customerId,
-        serviceOrderId: charge.serviceOrderId,
-        chargeId: charge.id,
-        metadata: {
-          chargeId: charge.id,
-          customerId: charge.customerId,
-          serviceOrderId: charge.serviceOrderId,
-          amountCents: charge.amountCents,
-          dueDate: charge.dueDate.toISOString(),
-          previousStatus: 'PENDING',
-          nextStatus: 'OVERDUE',
-        },
+    for (const charge of overdueCandidates) {
+      const transitioned = await this.prisma.$transaction(async (tx) => {
+        const result = await tx.charge.updateMany({
+          where: {
+            id: charge.id,
+            orgId,
+            status: 'PENDING',
+            dueDate: { lt: todayStart },
+          },
+          data: { status: 'OVERDUE' },
+        })
+
+        if (result.count !== 1) return false
+
+        await this.timeline.logInTransaction(
+          {
+            orgId,
+            action: 'CHARGE_OVERDUE',
+            description: `Cobrança ${charge.id} vencida`,
+            customerId: charge.customerId,
+            serviceOrderId: charge.serviceOrderId,
+            chargeId: charge.id,
+            metadata: {
+              chargeId: charge.id,
+              customerId: charge.customerId,
+              serviceOrderId: charge.serviceOrderId,
+              amountCents: charge.amountCents,
+              dueDate: charge.dueDate.toISOString(),
+              previousStatus: 'PENDING',
+              nextStatus: 'OVERDUE',
+            },
+          },
+          tx,
+        )
+
+        return true
       })
+
+      if (!transitioned) continue
+
+      updated += 1
+
       await this.sendPaymentReminderWhatsApp(charge.id).catch((err) =>
         this.logger.error(`Erro overdue WhatsApp: ${err.message}`),
       )
     }
 
-    return { ok: true, updated: result.count }
+    return { ok: true, updated }
   }
 
   // =========================

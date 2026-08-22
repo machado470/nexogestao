@@ -462,6 +462,90 @@ describe('FinanceService hardening', () => {
     expect(service.sendPaymentReminderWhatsApp).toHaveBeenCalledWith('ch-1')
   })
 
+  it('não reemite CHARGE_OVERDUE para cobrança que já estava vencida antes do ciclo', async () => {
+    const { service, prisma, timeline } = buildService()
+
+    prisma.charge.findMany = jest.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'ch-overdue',
+          orgId: 'org-1',
+          customerId: 'c-1',
+          serviceOrderId: null,
+          amountCents: 1000,
+          status: 'OVERDUE',
+          dueDate: new Date('2026-08-20T12:00:00.000Z'),
+        },
+      ])
+
+    prisma.charge.updateMany = jest.fn().mockResolvedValue({ count: 0 })
+
+    jest
+      .spyOn(service, 'sendPaymentReminderWhatsApp')
+      .mockResolvedValue({} as any)
+
+    const result = await service.automateOverdueLifecycle('org-1')
+
+    expect(result).toEqual({ ok: true, updated: 0 })
+    expect(timeline.logInTransaction).not.toHaveBeenCalled()
+    expect(service.sendPaymentReminderWhatsApp).not.toHaveBeenCalled()
+  })
+
+  it('emite CHARGE_OVERDUE somente quando vence a transição atômica PENDING para OVERDUE', async () => {
+    const { service, prisma, timeline } = buildService()
+
+    prisma.charge.findMany = jest.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'ch-new-overdue',
+          orgId: 'org-1',
+          customerId: 'c-1',
+          serviceOrderId: 'so-1',
+          amountCents: 2500,
+          status: 'PENDING',
+          dueDate: new Date('2026-08-20T12:00:00.000Z'),
+        },
+      ])
+
+    prisma.charge.updateMany = jest.fn().mockResolvedValue({ count: 1 })
+
+    jest
+      .spyOn(service, 'sendPaymentReminderWhatsApp')
+      .mockResolvedValue({} as any)
+
+    const result = await service.automateOverdueLifecycle('org-1')
+
+    expect(result).toEqual({ ok: true, updated: 1 })
+    expect(prisma.charge.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'ch-new-overdue',
+        orgId: 'org-1',
+        status: 'PENDING',
+        dueDate: { lt: expect.any(Date) },
+      },
+      data: { status: 'OVERDUE' },
+    })
+    expect(timeline.logInTransaction).toHaveBeenCalledTimes(1)
+    expect(timeline.logInTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org-1',
+        action: 'CHARGE_OVERDUE',
+        chargeId: 'ch-new-overdue',
+        metadata: expect.objectContaining({
+          previousStatus: 'PENDING',
+          nextStatus: 'OVERDUE',
+        }),
+      }),
+      prisma,
+    )
+    expect(service.sendPaymentReminderWhatsApp).toHaveBeenCalledTimes(1)
+    expect(service.sendPaymentReminderWhatsApp).toHaveBeenCalledWith(
+      'ch-new-overdue',
+    )
+  })
+
   it('emite CHARGE_CREATED e mantém SERVICE_ORDER_CHARGE_CREATED ao vincular cobrança com O.S.', async () => {
     const { service, prisma, idempotency } = buildService()
     idempotency.begin.mockResolvedValue({ mode: 'execute', recordId: 'idem-1' })
