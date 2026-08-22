@@ -9,6 +9,7 @@ export type OperationalStateSnapshot = {
   operationalState: OperationalStateValue
   operationalRiskScore: number
   operationalStateUpdatedAt: Date | null
+  legacyRiskScore?: number | null
 }
 
 export type OperationalStateTransitionResult = {
@@ -26,6 +27,7 @@ export async function persistOperationalStateTransition(
     snapshot: OperationalStateSnapshot
     nextState: OperationalStateValue
     riskScore: number
+    nextLegacyRiskScore?: number
     source: string
     reason: string
     evaluatedAt?: Date
@@ -48,6 +50,15 @@ export async function persistOperationalStateTransition(
       personId: params.snapshot.id,
     })
 
+  const legacyRiskScoreOk =
+    params.nextLegacyRiskScore === undefined
+    || (
+      params.snapshot.legacyRiskScore
+        !== undefined
+      && params.snapshot.legacyRiskScore
+        === params.nextLegacyRiskScore
+    )
+
   const snapshotOk =
     params.snapshot.operationalState
       === params.nextState
@@ -55,7 +66,7 @@ export async function persistOperationalStateTransition(
       === params.riskScore
     && params.snapshot.operationalStateUpdatedAt
       !== null
-
+    && legacyRiskScoreOk
   if (
     observedLastState
     && observedLastState === params.nextState
@@ -94,6 +105,18 @@ export async function persistOperationalStateTransition(
               operationalStateUpdatedAt:
                 params.snapshot
                   .operationalStateUpdatedAt,
+              ...(
+                params.nextLegacyRiskScore
+                  !== undefined
+                && params.snapshot.legacyRiskScore
+                  !== undefined
+                  ? {
+                      riskScore:
+                        params.snapshot
+                          .legacyRiskScore,
+                    }
+                  : {}
+              ),
             },
             data: {
               operationalState:
@@ -102,6 +125,15 @@ export async function persistOperationalStateTransition(
                 params.riskScore,
               operationalStateUpdatedAt:
                 evaluatedAt,
+              ...(
+                params.nextLegacyRiskScore
+                  !== undefined
+                  ? {
+                      riskScore:
+                        params.nextLegacyRiskScore,
+                    }
+                  : {}
+              ),
             },
           })
 
