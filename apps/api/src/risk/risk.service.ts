@@ -7,6 +7,12 @@ import {
   timelineEventFilterValues,
 } from '../timeline/timeline-events'
 import { TemporalRiskService } from './temporal-risk.service'
+import {
+  OperationalStateRepository,
+} from '../people/operational-state.repository'
+import {
+  persistOperationalStateTransition,
+} from '../people/operational-state.transition'
 
 type CustomerRiskContributor =
   | 'OVERDUE_CHARGES'
@@ -88,8 +94,11 @@ export class RiskService {
    * 🔹 Recalcula + persiste
    */
   async recalculatePersonRisk(personId: string, reason?: string, orgId?: string) {
-    const detailed = await this.temporalRisk.calculateDetailed(personId, orgId)
-
+    /*
+     * Capturamos o snapshot antes do cálculo.
+     * Esse é o estado que originou a decisão
+     * e precisa ser o mesmo usado no CAS.
+     */
     const person = await this.prisma.person.findFirst({
       where: { id: personId, ...(orgId ? { orgId } : {}) },
       select: {
@@ -98,6 +107,7 @@ export class RiskService {
         riskScore: true,
         operationalRiskScore: true,
         operationalState: true,
+        operationalStateUpdatedAt: true,
       },
     })
 
@@ -105,29 +115,160 @@ export class RiskService {
       throw new Error('Pessoa não encontrada')
     }
 
-    const previousScore = Number(person.operationalRiskScore ?? person.riskScore ?? 0)
-    const previousState = person.operationalState ?? 'NORMAL'
-    const riskChanged = previousScore !== detailed.score || previousState !== detailed.state
+    const detailed =
+      await this.temporalRisk.calculateDetailed(
+        personId,
+        orgId,
+      )
 
-    await this.prisma.person.update({
-      where: { id: personId },
-      data: {
-        riskScore: detailed.score,
-        operationalRiskScore: detailed.score,
-        operationalState: detailed.state,
-        operationalStateUpdatedAt: riskChanged ? new Date() : undefined,
-      },
-    })
+    const previousScore = Number(
+      person.operationalRiskScore
+        ?? person.riskScore
+        ?? 0,
+    )
 
-    await this.snapshot(personId, detailed.score, reason, person.orgId, {
-      previousScore,
-      previousState,
-      nextState: detailed.state,
-      emitRiskUpdated: riskChanged,
-      detailed,
-    })
+    const previousState =
+      person.operationalState ?? 'NORMAL'
 
-    return detailed
+    const riskChanged =
+      previousScore !== detailed.score
+      || previousState !== detailed.state
+
+    const legacyRiskChanged =
+      person.riskScore !== detailed.score
+
+    const finalReason =
+      reason?.trim()
+        ? reason.trim()
+        : 'Reavaliação automática'
+
+    /*
+     * O repository depende somente do Prisma.
+     * Assim o RiskModule não precisa importar
+     * OperationalStateModule e não cria ciclo.
+     */
+    const repository =
+      new OperationalStateRepository(
+        this.prisma,
+      )
+
+    const transition =
+      await persistOperationalStateTransition({
+        prisma: this.prisma,
+        repository,
+        timeline: this.timeline,
+        snapshot: {
+          id: person.id,
+          orgId: person.orgId,
+          operationalState:
+            person.operationalState,
+          operationalRiskScore:
+            Number(
+              person.operationalRiskScore
+                ?? person.riskScore
+                ?? 0,
+            ),
+          operationalStateUpdatedAt:
+            person.operationalStateUpdatedAt,
+          legacyRiskScore:
+            person.riskScore,
+        },
+        nextState:
+          detailed.state,
+        riskScore:
+          detailed.score,
+        nextLegacyRiskScore:
+          detailed.score,
+        source:
+          'RISK_SERVICE',
+        reason:
+          finalReason,
+        metadata: {
+          previousRisk:
+            previousScore,
+          nextRisk:
+            detailed.score,
+          previousState,
+          nextState:
+            detailed.state,
+        },
+      })
+
+    /*
+     * Se havia mudança e perdemos o CAS,
+     * a decisão ficou stale.
+     *
+     * Não emitimos snapshot/RISK_UPDATED
+     * baseado em uma decisão derrotada.
+     */
+    const decisionAlreadyCurrent =
+      !riskChanged
+      && !legacyRiskChanged
+
+    if (
+      transition.claimed
+      || decisionAlreadyCurrent
+    ) {
+      await this.snapshot(
+        personId,
+        detailed.score,
+        finalReason,
+        person.orgId,
+        {
+          previousScore,
+          previousState,
+          nextState:
+            detailed.state,
+          emitRiskUpdated:
+            riskChanged,
+          detailed,
+        },
+      )
+
+      return detailed
+    }
+
+    /*
+     * Se perdemos o CAS, a decisão calculada
+     * ficou stale.
+     *
+     * O caller não pode receber WARNING/60
+     * enquanto o estado autoritativo já é,
+     * por exemplo, RESTRICTED/80.
+     */
+    const authoritativePerson =
+      await this.prisma.person.findFirst({
+        where: {
+          id: personId,
+          orgId: person.orgId,
+        },
+        select: {
+          riskScore: true,
+          operationalRiskScore: true,
+          operationalState: true,
+        },
+      })
+
+    if (!authoritativePerson) {
+      throw new Error(
+        'Pessoa não encontrada após disputa de estado operacional',
+      )
+    }
+
+    return {
+      ...detailed,
+      score: Number(
+        authoritativePerson
+          .operationalRiskScore
+          ?? authoritativePerson
+            .riskScore
+          ?? detailed.score,
+      ),
+      state:
+        authoritativePerson
+          .operationalState
+        ?? detailed.state,
+    }
   }
 
   /**
