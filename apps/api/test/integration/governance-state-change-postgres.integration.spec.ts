@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { EnforcementEngineService } from '../../src/governance/enforcement-engine.service'
 import { EnforcementPolicyService } from '../../src/governance/enforcement-policy.service'
+import { OperationalStateRepository } from '../../src/people/operational-state.repository'
 
 const runReal =
   process.env.RUN_REAL_GOVERNANCE_STATE_INTEGRATION === 'true'
@@ -209,6 +210,9 @@ describeReal(
             ) as any,
             new EnforcementPolicyService(),
             timelineA as any,
+            new OperationalStateRepository(
+              prismaA as any,
+            ),
           )
 
         const serviceB =
@@ -219,6 +223,9 @@ describeReal(
             ) as any,
             new EnforcementPolicyService(),
             timelineB as any,
+            new OperationalStateRepository(
+              prismaB as any,
+            ),
           )
 
         await Promise.all([
@@ -300,6 +307,9 @@ describeReal(
             ) as any,
             new EnforcementPolicyService(),
             timeline as any,
+            new OperationalStateRepository(
+              prismaA as any,
+            ),
           )
 
         await expect(
