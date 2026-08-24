@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { OperationalStateValue } from '@prisma/client'
+import {
+  deriveOperationalStateFromRiskScore,
+} from '../common/domain/operational-state-policy'
 import { PrismaService } from '../prisma/prisma.service'
 import {
   normalizeTimelineEventType,
@@ -531,11 +534,12 @@ export class TemporalRiskService {
     }
   }
 
-  deriveOperationalState(score: number): OperationalStateValue {
-    if (score >= 90) return 'SUSPENDED'
-    if (score >= 70) return 'RESTRICTED'
-    if (score >= 50) return 'WARNING'
-    return 'NORMAL'
+  deriveOperationalState(
+    score: number,
+  ): OperationalStateValue {
+    return deriveOperationalStateFromRiskScore(
+      score,
+    )
   }
 
   private buildExplanation(params: {

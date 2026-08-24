@@ -12,15 +12,9 @@ import type {
 import {
   persistOperationalStateTransition,
 } from './operational-state.transition'
-
-function deriveState(
-  riskScore: number,
-): OperationalStateValue {
-  if (riskScore >= 90) return 'SUSPENDED'
-  if (riskScore >= 70) return 'RESTRICTED'
-  if (riskScore >= 50) return 'WARNING'
-  return 'NORMAL'
-}
+import {
+  deriveOperationalStateFromRiskScore,
+} from '../common/domain/operational-state-policy'
 
 @Injectable()
 export class OperationalStateJob {
@@ -74,7 +68,9 @@ export class OperationalStateJob {
           .calculatePersonRisk(p.id)
 
       const nextState =
-        deriveState(riskScore)
+        deriveOperationalStateFromRiskScore(
+          riskScore,
+        )
 
       const transition =
         await persistOperationalStateTransition({

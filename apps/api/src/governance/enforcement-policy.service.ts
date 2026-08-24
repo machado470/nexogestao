@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common'
 import { OperationalStateValue } from '@prisma/client'
+import {
+  deriveOperationalStateFromRiskScore,
+  OPERATIONAL_RISK_THRESHOLDS,
+} from '../common/domain/operational-state-policy'
 
 export type EnforcementAction =
   | 'NONE'
@@ -40,12 +44,6 @@ export type DecideInput = {
 
 @Injectable()
 export class EnforcementPolicyService {
-  private readonly thresholds = {
-    warning: 50,
-    restricted: 70,
-    suspended: 90,
-  }
-
   decide(input: DecideInput): EnforcementDecision {
     const currentState = this.normalizeState(input.status)
 
@@ -81,7 +79,7 @@ export class EnforcementPolicyService {
     if (nextState === 'WARNING') {
       return {
         action: 'RAISE_WARNING',
-        reason: `WARNING: risco=${input.riskScore} >= ${this.thresholds.warning}.`,
+        reason: `WARNING: risco=${input.riskScore} >= ${OPERATIONAL_RISK_THRESHOLDS.warning}.`,
         nextState,
         shouldBlockActions,
         shouldRaiseWarning,
@@ -92,7 +90,7 @@ export class EnforcementPolicyService {
     if (nextState === 'RESTRICTED') {
       return {
         action: 'CREATE_CORRECTIVE_ACTION',
-        reason: `RESTRICTED: risco=${input.riskScore} >= ${this.thresholds.restricted}.`,
+        reason: `RESTRICTED: risco=${input.riskScore} >= ${OPERATIONAL_RISK_THRESHOLDS.restricted}.`,
         nextState,
         shouldBlockActions,
         shouldRaiseWarning,
@@ -102,7 +100,7 @@ export class EnforcementPolicyService {
 
     return {
       action: 'CREATE_CORRECTIVE_ACTION',
-      reason: `SUSPENDED: risco=${input.riskScore} >= ${this.thresholds.suspended}.`,
+      reason: `SUSPENDED: risco=${input.riskScore} >= ${OPERATIONAL_RISK_THRESHOLDS.suspended}.`,
       nextState,
       shouldBlockActions,
       shouldRaiseWarning,
@@ -122,11 +120,12 @@ export class EnforcementPolicyService {
     return 'NORMAL'
   }
 
-  deriveOperationalState(riskScore: number): OperationalStateValue {
-    if (riskScore >= this.thresholds.suspended) return 'SUSPENDED'
-    if (riskScore >= this.thresholds.restricted) return 'RESTRICTED'
-    if (riskScore >= this.thresholds.warning) return 'WARNING'
-    return 'NORMAL'
+  deriveOperationalState(
+    riskScore: number,
+  ): OperationalStateValue {
+    return deriveOperationalStateFromRiskScore(
+      riskScore,
+    )
   }
 
   shouldBlockActions(state: OperationalStateValue): boolean {

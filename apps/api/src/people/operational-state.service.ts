@@ -9,6 +9,9 @@ import { TimelineService } from '../timeline/timeline.service'
 import {
   persistOperationalStateTransition,
 } from './operational-state.transition'
+import {
+  deriveOperationalStateFromRiskScore,
+} from '../common/domain/operational-state-policy'
 
 export type OperationalStateValue =
   | 'NORMAL'
@@ -49,15 +52,6 @@ export class OperationalStateService {
       PrismaService,
   ) {}
 
-  private toState(
-    riskScore: number,
-  ): OperationalStateValue {
-    if (riskScore >= 90) return 'SUSPENDED'
-    if (riskScore >= 70) return 'RESTRICTED'
-    if (riskScore >= 50) return 'WARNING'
-    return 'NORMAL'
-  }
-
   async getStatus(
     personId: string,
   ): Promise<OperationalState> {
@@ -67,7 +61,10 @@ export class OperationalStateService {
       )
 
     return {
-      state: this.toState(riskScore),
+      state:
+        deriveOperationalStateFromRiskScore(
+          riskScore,
+        ),
       riskScore,
     }
   }
@@ -80,9 +77,10 @@ export class OperationalStateService {
         .calculateDetailed(personId)
 
     return {
-      state: this.toState(
-        detailed.score,
-      ),
+      state:
+        deriveOperationalStateFromRiskScore(
+          detailed.score,
+        ),
       riskScore: detailed.score,
       contributors:
         detailed.contributors,
