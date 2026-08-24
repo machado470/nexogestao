@@ -85,6 +85,27 @@ jobs:
       - name: Real PostgreSQL Outbox integration
         run: bash scripts/run-outbox-integration.sh
 
+      # Bootstrap first-admin requires a pristine database to prove
+      # cross-instance serialization before any user exists.
+      - name: Real PostgreSQL Bootstrap integration
+        env:
+          BOOTSTRAP_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bootstrap_test?schema=public
+        run: |
+          postgres_container="$(docker ps --filter ancestor=postgres:15 --format '{{.ID}}' | head -n 1)"
+          test -n "$postgres_container"
+          docker exec "$postgres_container" createdb -U postgres bootstrap_test
+
+          DATABASE_URL="$BOOTSTRAP_TEST_DATABASE_URL" \
+            pnpm --filter ./apps/api exec prisma migrate deploy \
+              --schema ../../prisma/schema.prisma
+
+          DATABASE_URL="$BOOTSTRAP_TEST_DATABASE_URL" \
+          RUN_REAL_BOOTSTRAP_INTEGRATION=true \
+            pnpm --filter ./apps/api exec jest \
+              --config jest.config.js \
+              --runInBand \
+              test/integration/bootstrap-first-admin-postgres.integration.spec.ts
+
       # The API command covers every API test except the real integration suites already run above;
       # the web command covers the complete Vitest suite, avoiding duplicate integration execution.
       - name: Complete test suites
