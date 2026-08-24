@@ -676,6 +676,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       return;
     }
+
+    if (authState === "degraded") {
+      // eslint-disable-next-line no-console
+      console.warn("[AUTH] resolved", {
+        state: "degraded",
+        pathname,
+      });
+      return;
+    }
+
     // eslint-disable-next-line no-console
     console.error("[BOOT ERROR] auth bootstrap", meBootstrapError);
   }, [

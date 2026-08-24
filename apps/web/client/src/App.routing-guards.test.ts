@@ -38,6 +38,7 @@ describe("App routing/auth guard helpers", () => {
   it("define branch explícito para RootRoute sem render vazio", () => {
     expect(resolveRootRouteBranch("validating")).toBe("initializing_landing");
     expect(resolveRootRouteBranch("error")).toBe("bootstrap_error_landing");
+    expect(resolveRootRouteBranch("degraded")).toBe("degraded_landing");
     expect(resolveRootRouteBranch("unauthenticated")).toBe("unauthenticated_landing");
     expect(resolveRootRouteBranch("authenticated")).toBe("authenticated_redirect");
     expect(resolveRootRouteBranch("qualquer-coisa")).toBe("unknown_state_fallback");
@@ -50,6 +51,20 @@ describe("App routing/auth guard helpers", () => {
         isPublicBootstrapPath: false,
       })
     ).toBe("blocking_error");
+
+    expect(
+      resolveAppBootstrapGuardBranch({
+        state: "degraded",
+        isPublicBootstrapPath: false,
+      })
+    ).toBe("blocking_degraded");
+
+    expect(
+      resolveAppBootstrapGuardBranch({
+        state: "degraded",
+        isPublicBootstrapPath: true,
+      })
+    ).toBe("pass_through");
 
     expect(
       resolveAppBootstrapGuardBranch({

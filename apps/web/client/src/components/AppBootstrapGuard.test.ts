@@ -11,6 +11,7 @@ describe("AppBootstrapGuard", () => {
       "validating",
       "unauthenticated",
       "authenticated",
+      "degraded",
       "error",
     ];
 
@@ -18,6 +19,7 @@ describe("AppBootstrapGuard", () => {
       "validating",
       "unauthenticated",
       "authenticated",
+      "degraded",
       "error",
     ]);
   });
@@ -36,12 +38,26 @@ describe("AppBootstrapGuard", () => {
     });
   });
 
-  it("bloqueia apenas erro em rota privada", () => {
+  it("bloqueia erro e degradação em rota privada", () => {
     expect(
       resolveAppBootstrapGuardBranch({
         state: "error",
         isPublicBootstrapPath: false,
       })
     ).toBe("blocking_error");
+
+    expect(
+      resolveAppBootstrapGuardBranch({
+        state: "degraded",
+        isPublicBootstrapPath: false,
+      })
+    ).toBe("blocking_degraded");
+
+    expect(
+      resolveAppBootstrapGuardBranch({
+        state: "degraded",
+        isPublicBootstrapPath: true,
+      })
+    ).toBe("pass_through");
   });
 });

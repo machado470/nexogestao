@@ -1,24 +1,24 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { AppPageErrorState, AppPageShell } from "@/components/internal-page-system";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, type AuthBootstrapState } from "@/contexts/AuthContext";
 import { extractPathname, isPublicOrAuthPath } from "@/lib/routeAccess";
 import { pushAuditEvent, setAuditField } from "@/lib/renderAudit";
 
-export type AppBootstrapState =
-  | "validating"
-  | "unauthenticated"
-  | "authenticated"
-  | "error";
+export type AppBootstrapState = AuthBootstrapState;
 
-
-export type AppBootstrapGuardBranch = "blocking_error" | "pass_through";
+export type AppBootstrapGuardBranch =
+  | "blocking_error"
+  | "blocking_degraded"
+  | "pass_through";
 
 export function resolveAppBootstrapGuardBranch(params: {
   state: AppBootstrapState | "unknown";
   isPublicBootstrapPath: boolean;
 }): AppBootstrapGuardBranch {
-  if (params.state === "error" && !params.isPublicBootstrapPath) return "blocking_error";
+  if (params.isPublicBootstrapPath) return "pass_through";
+  if (params.state === "error") return "blocking_error";
+  if (params.state === "degraded") return "blocking_degraded";
   return "pass_through";
 }
 
@@ -89,7 +89,21 @@ export function AppBootstrapGuard({
     );
   }
 
-  if (state === "error" && !isPublicBootstrapPath) {
+  if (guardBranch === "blocking_degraded") {
+    setAuditField("errorType", "bootstrap_degraded");
+    return (
+      <AppPageShell>
+        <AppPageErrorState
+          title="Sessão temporariamente indisponível"
+          description="Não foi possível validar sua sessão agora. Tente novamente em alguns instantes."
+          actionLabel="Tentar novamente"
+          onAction={onReload}
+        />
+      </AppPageShell>
+    );
+  }
+
+  if (guardBranch === "blocking_error") {
     setAuditField("errorType", "bootstrap");
     return (
       <AppPageShell>
@@ -103,7 +117,13 @@ export function AppBootstrapGuard({
     );
   }
 
-  if (state !== "validating" && state !== "error" && state !== "authenticated" && state !== "unauthenticated") {
+  if (
+    state !== "validating" &&
+    state !== "degraded" &&
+    state !== "error" &&
+    state !== "authenticated" &&
+    state !== "unauthenticated"
+  ) {
     setAuditField("errorType", "bootstrap");
     return (
       <div className="nexo-app-shell flex min-h-screen items-center justify-center px-6">
