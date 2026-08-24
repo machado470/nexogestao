@@ -759,6 +759,7 @@ function Router() {
 export type RootRouteBranch =
   | "initializing_landing"
   | "bootstrap_error_landing"
+  | "degraded_landing"
   | "unauthenticated_landing"
   | "authenticated_redirect"
   | "unknown_state_fallback";
@@ -766,6 +767,7 @@ export type RootRouteBranch =
 export function resolveRootRouteBranch(authState: unknown): RootRouteBranch {
   if (authState === "validating") return "initializing_landing";
   if (authState === "error") return "bootstrap_error_landing";
+  if (authState === "degraded") return "degraded_landing";
   if (authState === "unauthenticated") return "unauthenticated_landing";
   if (authState === "authenticated") return "authenticated_redirect";
   return "unknown_state_fallback";
@@ -814,6 +816,10 @@ function RootRoute() {
       bootError("[BOOT ERROR] auth bootstrap", bootstrapError);
       return;
     }
+    if (rootBranch === "degraded_landing") {
+      bootLog("[AUTH] session bootstrap degraded");
+      return;
+    }
     if (rootBranch === "unauthenticated_landing") return;
     if (rootBranch === "unknown_state_fallback") {
       bootError("[ROOT] unexpected auth state", { authState, pathname });
@@ -856,6 +862,20 @@ function RootRoute() {
     return (
       <>
         <RenderAuditMarker label="ROOT BRANCH: bootstrap_error_landing" />
+        <MarketingRoute component={Landing} />
+      </>
+    );
+  }
+
+  if (rootBranch === "degraded_landing") {
+    bootLog("[ROUTER] root_render", {
+      route: pathname,
+      branch: "degraded_landing",
+      landingRendered: true,
+    });
+    return (
+      <>
+        <RenderAuditMarker label="ROOT BRANCH: degraded_landing" />
         <MarketingRoute component={Landing} />
       </>
     );
@@ -991,14 +1011,17 @@ function App() {
     return new URLSearchParams(window.location.search).get("bootProbe")?.trim() || null;
   }, []);
 
-  const markReady = useCallback((nextState: "authenticated" | "unauthenticated") => {
+  const markReady = useCallback(
+    (nextState: "authenticated" | "unauthenticated" | "degraded") => {
     setBootstrapState(prev => {
       if (prev === nextState) return prev;
       bootLog("[BOOT] providers ready");
       setAuditField("bootstrapBranch", `ready:${nextState}`);
       return nextState;
-    });
-  }, []);
+      });
+    },
+    []
+  );
 
   const markFailed = useCallback((reason: string) => {
     setBootstrapReason(reason);
@@ -1091,7 +1114,7 @@ function AuthBootstrapStatus({
   onReady,
   onFailed,
 }: {
-  onReady: (state: "authenticated" | "unauthenticated") => void;
+  onReady: (state: "authenticated" | "unauthenticated" | "degraded") => void;
   onFailed: (reason: string) => void;
 }) {
   const { authState, bootstrapError } = useAuth();
@@ -1105,6 +1128,13 @@ function AuthBootstrapStatus({
       console.info("[BOOTSTRAP] state", { authState });
     }
     if (authState === "validating") return;
+
+    if (authState === "degraded") {
+      setBootPhase("AUTH_DEGRADED");
+      onReady("degraded");
+      return;
+    }
+
     if (authState === "error") {
       if (isPublicRoute) {
         setBootPhase("AUTH_UNAUTHENTICATED");
