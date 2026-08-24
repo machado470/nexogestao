@@ -5,8 +5,12 @@ import {
   Injectable,
 } from '@nestjs/common'
 import * as bcrypt from 'bcrypt'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { SubscriptionsService } from '../subscriptions/subscriptions.service'
+
+const BOOTSTRAP_FIRST_ADMIN_LOCK_KEY =
+  'nexogestao:bootstrap:first-admin'
 
 @Injectable()
 export class BootstrapService {
@@ -27,12 +31,15 @@ export class BootstrapService {
     return normalized || 'org'
   }
 
-  private async uniqueOrgSlug(base: string) {
+  private async uniqueOrgSlug(
+    tx: Prisma.TransactionClient,
+    base: string,
+  ) {
     let slug = base
     let i = 0
 
     while (true) {
-      const exists = await this.prisma.organization.findUnique({
+      const exists = await tx.organization.findUnique({
         where: { slug },
         select: { id: true },
       })
@@ -44,16 +51,25 @@ export class BootstrapService {
     }
   }
 
-  private async validateBootstrapAuthorization(secretFromHeader?: string) {
-    const usersCount = await this.prisma.user.count()
-    if (usersCount === 0) {
+  private async validateBootstrapAuthorization(
+    tx: Prisma.TransactionClient,
+    secretFromHeader?: string,
+  ) {
+    const usersCount = await tx.user.count()
+    const configuredSecret =
+      process.env.BOOTSTRAP_SECRET?.trim()
+    const isProduction =
+      (process.env.NODE_ENV ?? '')
+        .trim()
+        .toLowerCase() === 'production'
+
+    if (usersCount === 0 && !isProduction) {
       return
     }
 
-    const configuredSecret = process.env.BOOTSTRAP_SECRET?.trim()
     if (!configuredSecret) {
       throw new ForbiddenException(
-        'Bootstrap bloqueado após inicialização. Configure BOOTSTRAP_SECRET para uso administrativo.',
+        'Bootstrap protegido. Configure BOOTSTRAP_SECRET para uso administrativo.',
       )
     }
 
@@ -72,8 +88,6 @@ export class BootstrapService {
     },
     bootstrapSecret?: string,
   ) {
-    await this.validateBootstrapAuthorization(bootstrapSecret)
-
     const orgName = (params.orgName ?? '').trim()
     const adminName = (params.adminName ?? '').trim()
     const email = (params.email ?? '').trim().toLowerCase()
@@ -88,33 +102,38 @@ export class BootstrapService {
 
     if (!adminName) throw new BadRequestException('adminName obrigatório')
     if (!email) throw new BadRequestException('email obrigatório')
-    if (!password || password.length < 4) {
-      throw new BadRequestException('password inválida')
-    }
-
-    if (organizationId) {
-      const orgAdmin = await this.prisma.user.findFirst({
-        where: { role: 'ADMIN', orgId: organizationId },
-        select: { id: true },
-      })
-
-      if (orgAdmin) {
-        throw new ConflictException('Organização já possui ADMIN')
-      }
-    }
-
-    const emailInUse = await this.prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    })
-
-    if (emailInUse) {
-      throw new ConflictException('Email já cadastrado')
+    if (!password || password.length < 8) {
+      throw new BadRequestException(
+        'A senha precisa ter ao menos 8 caracteres',
+      )
     }
 
     const passwordHash = await bcrypt.hash(password, 10)
 
     const created = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`
+          SELECT 1::int AS "locked"
+          FROM pg_advisory_xact_lock(
+            hashtextextended(${BOOTSTRAP_FIRST_ADMIN_LOCK_KEY}, 0)
+          )
+        `,
+      )
+
+      await this.validateBootstrapAuthorization(
+        tx,
+        bootstrapSecret,
+      )
+
+      const emailInUse = await tx.user.findUnique({
+        where: { email },
+        select: { id: true },
+      })
+
+      if (emailInUse) {
+        throw new ConflictException('Email já cadastrado')
+      }
+
       let org = null as Awaited<ReturnType<typeof tx.organization.findUnique>>
 
       if (organizationId) {
@@ -135,7 +154,7 @@ export class BootstrapService {
           })
         } else {
           const baseSlug = this.slugify(orgName)
-          const slug = await this.uniqueOrgSlug(baseSlug)
+          const slug = await this.uniqueOrgSlug(tx, baseSlug)
 
           org = await tx.organization.create({
             data: {
@@ -164,6 +183,7 @@ export class BootstrapService {
           password: passwordHash,
           role: 'ADMIN',
           active: true,
+          emailVerifiedAt: new Date(),
           orgId: org.id,
         },
       })
