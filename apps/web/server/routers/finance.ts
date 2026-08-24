@@ -199,14 +199,6 @@ export const financeRouter = router({
         return unwrapData(raw);
       }),
 
-    revenueByMonth: protectedProcedure.query(async ({ ctx }) => {
-      const raw = await nexoFetch<unknown>(ctx, `/finance/charges/revenue-by-month`, {
-        method: "GET",
-      });
-
-      return unwrapData(raw) ?? [];
-    }),
-
     pay: protectedProcedure
       .input(
         z.object({
