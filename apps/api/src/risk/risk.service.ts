@@ -13,6 +13,9 @@ import {
 import {
   persistOperationalStateTransition,
 } from '../people/operational-state.transition'
+import {
+  deriveOperationalStateFromRiskScore,
+} from '../common/domain/operational-state-policy'
 
 type CustomerRiskContributor =
   | 'OVERDUE_CHARGES'
@@ -555,7 +558,10 @@ export class RiskService {
     }
 
     const finalScore = Math.min(100, Math.max(0, Math.round(score)))
-    const state = this.deriveOperationalState(finalScore)
+    const state =
+      deriveOperationalStateFromRiskScore(
+        finalScore,
+      )
     const factors = {
       overdueCharges,
       overdueAmountCents,
@@ -657,13 +663,6 @@ export class RiskService {
     }
 
     return result
-  }
-
-  private deriveOperationalState(score: number): OperationalStateValue {
-    if (score >= 90) return 'SUSPENDED'
-    if (score >= 70) return 'RESTRICTED'
-    if (score >= 50) return 'WARNING'
-    return 'NORMAL'
   }
 
   private extractPreviousScore(metadata: unknown): number | null {
