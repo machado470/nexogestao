@@ -23,7 +23,6 @@ export async function invalidateOperationalGraph(
       : Promise.resolve(),
     utils.finance.charges.list.invalidate(),
     utils.finance.charges.stats.invalidate(),
-    utils.finance.charges.revenueByMonth.invalidate(),
     utils.nexo.timeline.listByOrg.invalidate(),
     utils.dashboard.kpis.invalidate(),
     utils.dashboard.alerts.invalidate(),

@@ -9,12 +9,9 @@ import { peopleRouter } from "./routers/people";
 import { governanceRouter } from "./routers/governance";
 import { dashboardRouter } from "./routers/dashboard";
 import { expensesRouter } from "./routers/expenses";
-import { invoicesRouter } from "./routers/invoices";
 import { launchesRouter } from "./routers/launches";
 import { referralsRouter } from "./routers/referrals";
 import { aiRouter } from "./routers/ai";
-import { financeAdvancedRouter } from "./routers/finance-advanced";
-import { paymentsRouter } from "./routers/payments";
 import { billingRouter } from "./routers/billing";
 import { analyticsRouter } from "./routers/analytics";
 import { integrationsRouter } from "./routers/integrations";
@@ -31,12 +28,9 @@ export const appRouter = router({
   governance: governanceRouter,
   dashboard: dashboardRouter,
   expenses: expensesRouter,
-  invoices: invoicesRouter,
   launches: launchesRouter,
   referrals: referralsRouter,
   ai: aiRouter,
-  financeAdvanced: financeAdvancedRouter,
-  payments: paymentsRouter,
   billing: billingRouter,
   analytics: analyticsRouter,
   integrations: integrationsRouter,
