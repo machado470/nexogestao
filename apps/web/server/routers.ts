@@ -8,7 +8,6 @@ import { financeRouter } from "./routers/finance";
 import { peopleRouter } from "./routers/people";
 import { governanceRouter } from "./routers/governance";
 import { dashboardRouter } from "./routers/dashboard";
-import { contactRouter } from "./routers/contact";
 import { expensesRouter } from "./routers/expenses";
 import { invoicesRouter } from "./routers/invoices";
 import { launchesRouter } from "./routers/launches";
@@ -31,7 +30,6 @@ export const appRouter = router({
   people: peopleRouter,
   governance: governanceRouter,
   dashboard: dashboardRouter,
-  contact: contactRouter,
   expenses: expensesRouter,
   invoices: invoicesRouter,
   launches: launchesRouter,
