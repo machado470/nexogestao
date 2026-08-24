@@ -113,9 +113,6 @@ export function useChargeActions(options?: UseChargeActionsOptions) {
         utils.finance.charges.stats.invalidate(),
         utils.dashboard.alerts.invalidate(),
         utils.dashboard.kpis.invalidate(),
-        utils.dashboard.revenueTrend.invalidate(),
-        utils.dashboard.chargeDistribution.invalidate(),
-        utils.dashboard.serviceOrdersStatus.invalidate()
       ]);
 
       await Promise.all([

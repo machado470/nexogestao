@@ -179,7 +179,7 @@ describe("dashboard BFF error semantics", () => {
   it("propagates metrics and alerts failures instead of returning fake empty success", () => {
     const dashboardReadSection = routerSource.slice(
       routerSource.indexOf("kpis:"),
-      routerSource.indexOf("revenueTrend:")
+      routerSource.indexOf("operationalState:")
     );
     expect(dashboardReadSection).not.toContain("catch");
     expect(dashboardReadSection).not.toContain(

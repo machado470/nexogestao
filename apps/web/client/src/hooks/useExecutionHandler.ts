@@ -81,9 +81,6 @@ export function useExecutionHandler() {
       apiClient.finance.charges.stats.invalidate(),
       apiClient.dashboard.alerts.invalidate(),
       apiClient.dashboard.kpis.invalidate(),
-      apiClient.dashboard.revenueTrend.invalidate(),
-      apiClient.dashboard.chargeDistribution.invalidate(),
-      apiClient.dashboard.serviceOrdersStatus.invalidate(),
       apiClient.nexo.timeline.listByOrg.invalidate(),
       apiClient.governance.summary.invalidate(),
     ]);
