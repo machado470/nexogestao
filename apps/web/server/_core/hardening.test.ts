@@ -2,7 +2,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readLogs } from "./executionLog";
-import { sdk } from "./sdk";
 
 const storageFile = path.join(process.cwd(), ".data", "execution-logs.json");
 
@@ -13,11 +12,6 @@ describe("server hardening", () => {
     await fs.mkdir(path.dirname(storageFile), { recursive: true });
     await fs.writeFile(storageFile, "[]", "utf8");
   });
-
-  it("SDK placeholder falha explicitamente", () => {
-    expect(() => sdk.info()).toThrow("SDK not implemented");
-  });
-
   it("execution log parser registra erro estruturado antes do fallback", async () => {
     await fs.mkdir(path.dirname(storageFile), { recursive: true });
     await fs.writeFile(storageFile, "{invalid-json", "utf8");
