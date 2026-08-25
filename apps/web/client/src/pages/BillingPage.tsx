@@ -16,7 +16,6 @@ import {
   OperationalPriorityItem,
   OperationalTimelineItem,
 } from "@/components/operational";
-import { PageWrapper } from "@/components/operating-system/Wrappers";
 import { trpc } from "@/lib/trpc";
 
 type PlanName = "FREE" | "STARTER" | "PRO" | "BUSINESS";
@@ -405,11 +404,7 @@ export default function BillingPage() {
     : null;
 
   return (
-    <PageWrapper
-      title="Billing"
-      subtitle="Empresa → plano → assinatura → renovação → acesso."
-    >
-      <AppPageShell className="gap-3">
+    <AppPageShell className="gap-3">
         <OperationalPanel
           title="Controle da assinatura do Nexo"
           subtitle="Qual plano eu tenho, quanto pago, quando renova e o que acontece se houver problema?"
@@ -937,7 +932,6 @@ export default function BillingPage() {
             </div>
           ) : null}
         </BaseModal>
-      </AppPageShell>
-    </PageWrapper>
+    </AppPageShell>
   );
 }
