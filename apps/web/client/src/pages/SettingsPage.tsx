@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { PageWrapper } from "@/components/operating-system/Wrappers";
 import {
   AppDataTable,
   AppOperationalHeader,
@@ -372,11 +371,7 @@ export default function SettingsPage() {
         : `${members.length} membro(s) retornado(s) pela fonte administrativa.`;
 
   return (
-    <PageWrapper
-      title="Configurações"
-      subtitle="Controle de empresa, operação, permissões e integrações."
-    >
-      <AppPageShell>
+    <AppPageShell>
         <AppOperationalHeader
           title="Configurações"
           description="Centro de Controle do Nexo: veja o que está configurado, o que precisa de atenção e onde ajustar o comportamento do sistema."
@@ -614,7 +609,6 @@ export default function SettingsPage() {
             </Button>
           </div>
         </OperationalPanel>
-      </AppPageShell>
-    </PageWrapper>
+    </AppPageShell>
   );
 }

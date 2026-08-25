@@ -21,6 +21,14 @@ describe("SettingsPage organization settings contract", () => {
   });
 });
 
+describe("SettingsPage internal page architecture contract", () => {
+  it("usa o shell canônico sem PageWrapper legado", () => {
+    expect(settingsPageSource).toContain("<AppPageShell>");
+    expect(settingsPageSource).toContain("<AppOperationalHeader");
+    expect(settingsPageSource).not.toContain("PageWrapper");
+  });
+});
+
 describe("SettingsPage operational control center contract", () => {
   it("usa componentes operacionais para o centro de controle", () => {
     expect(settingsPageSource).toContain("Centro de controle do sistema");
