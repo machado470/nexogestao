@@ -6,6 +6,14 @@ const source = readFileSync(
   "utf8"
 );
 
+describe("ProfilePage internal page architecture contract", () => {
+  it("usa o shell canônico sem PageWrapper legado", () => {
+    expect(source).toContain("<AppPageShell>");
+    expect(source).toContain("<AppOperationalHeader");
+    expect(source).not.toContain("PageWrapper");
+  });
+});
+
 describe("ProfilePage operational identity contract", () => {
   it("posiciona o perfil como identidade operacional do usuário", () => {
     expect(source).toContain("Identidade operacional");

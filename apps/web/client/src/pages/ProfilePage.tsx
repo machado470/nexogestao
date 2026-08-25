@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { PageWrapper } from "@/components/operating-system/Wrappers";
 import {
   AppDataTable,
   AppFiltersBar,
@@ -427,11 +426,7 @@ export default function ProfilePage() {
     );
 
   return (
-    <PageWrapper
-      title="Meu Trabalho"
-      subtitle="Central individual simples para fila, histórico, preferências e permissões."
-    >
-      <AppPageShell>
+    <AppPageShell>
         <AppOperationalHeader
           title={name}
           description={`${role} em ${organization}. Status: ${availability}. Última atividade: ${formatDateTime(lastActivity)}.`}
@@ -918,7 +913,6 @@ export default function ProfilePage() {
             </tbody>
           </AppDataTable>
         </AppSectionBlock>
-      </AppPageShell>
-    </PageWrapper>
+    </AppPageShell>
   );
 }
