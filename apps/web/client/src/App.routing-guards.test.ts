@@ -3,6 +3,7 @@ import {
   buildLoginRedirectPath,
   getRequiresOnboarding,
   readSafeRedirectFromPath,
+  resolveProtectedRouteAuthBranch,
   resolveRootRouteBranch,
 } from "./App";
 import { resolveAppBootstrapGuardBranch } from "./components/AppBootstrapGuard";
@@ -42,6 +43,24 @@ describe("App routing/auth guard helpers", () => {
     expect(resolveRootRouteBranch("unauthenticated")).toBe("unauthenticated_landing");
     expect(resolveRootRouteBranch("authenticated")).toBe("authenticated_redirect");
     expect(resolveRootRouteBranch("qualquer-coisa")).toBe("unknown_state_fallback");
+  });
+
+  it("ProtectedRoute não converte bootstrap degradado ou com erro em logout", () => {
+    expect(resolveProtectedRouteAuthBranch("validating")).toBe(
+      "pending_bootstrap"
+    );
+    expect(resolveProtectedRouteAuthBranch("degraded")).toBe(
+      "pending_bootstrap"
+    );
+    expect(resolveProtectedRouteAuthBranch("error")).toBe(
+      "pending_bootstrap"
+    );
+    expect(resolveProtectedRouteAuthBranch("unauthenticated")).toBe(
+      "login_redirect"
+    );
+    expect(resolveProtectedRouteAuthBranch("authenticated")).toBe(
+      "authenticated"
+    );
   });
 
   it("AppBootstrapGuard nunca entra em branch silencioso para erro interno", () => {
