@@ -6,6 +6,13 @@ const source = readFileSync(
   "utf8"
 );
 
+describe("BillingPage internal page architecture contract", () => {
+  it("usa o shell canônico sem PageWrapper legado", () => {
+    expect(source).toContain('<AppPageShell className="gap-3">');
+    expect(source).not.toContain("PageWrapper");
+  });
+});
+
 describe("BillingPage operational subscription contract", () => {
   it("usa linguagem operacional premium para assinatura", () => {
     expect(source).toContain("Controle da assinatura do Nexo");
