@@ -7,6 +7,13 @@ const source = readFileSync(
   "utf8"
 );
 
+describe("TimelinePage internal page architecture contract", () => {
+  it("usa AppDataTable canônico sem table crua", () => {
+    expect(source).toContain("<AppDataTable");
+    expect(source).not.toContain("<table");
+  });
+});
+
 describe("Timeline V2 — Centro de Evidências Operacionais", () => {
   it("não posiciona a Timeline como log técnico", () => {
     expect(source).toContain("Centro de Evidências Operacionais");
