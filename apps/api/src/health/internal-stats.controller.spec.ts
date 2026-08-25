@@ -5,13 +5,14 @@ import { InternalStatsController } from './internal-stats.controller'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 import { RolesGuard } from '../auth/guards/roles.guard'
+import { PrismaService } from '../prisma/prisma.service'
 
 class TestJwtGuard implements CanActivate {
   canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest()
     const role = req.headers['x-test-role']
     if (!role) throw new UnauthorizedException()
-    req.user = { sub: 'user-a', role, orgId: req.headers['x-test-org'] ?? 'org-a' }
+    req.user = { sub: req.headers['x-test-active'] === 'false' ? 'inactive-user' : 'user-a', role, orgId: req.headers['x-test-org'] ?? 'org-a' }
     return true
   }
 }
@@ -30,16 +31,17 @@ describe('InternalStatsController authorization', () => {
     getNextBestAction: jest.fn().mockResolvedValue(nextBestAction),
   }
 
+  const prisma = { user: { findFirst: jest.fn(({ where }) => Promise.resolve(where.id === 'inactive-user' ? null : { id: where.id })) } }
+
   beforeAll(async () => {
     const mocks = [queueService, waMetrics, { runForOrg: jest.fn() }, operationalSignals, queueObservability, { exportJson: jest.fn() }]
     let index = 0
     const module = await Test.createTestingModule({
       controllers: [InternalStatsController],
-      providers: [RolesGuard, { provide: ActiveUserGuard, useValue: { canActivate: () => true } }],
+      providers: [RolesGuard, ActiveUserGuard, { provide: PrismaService, useValue: prisma }],
     })
       .useMocker(() => mocks[index++] ?? {})
       .overrideGuard(JwtAuthGuard).useClass(TestJwtGuard)
-      .overrideGuard(ActiveUserGuard).useValue({ canActivate: () => true })
       .compile()
     app = module.createNestApplication()
     await app.init()
@@ -70,20 +72,35 @@ describe('InternalStatsController authorization', () => {
     expect(queueService.getQueueStatus).not.toHaveBeenCalled()
   })
 
-  it('permite ao OPERADOR (STAFF) ler a próxima ação somente do orgId autenticado', async () => {
-    await request(app.getHttpServer())
-      .get('/internal/operational-signals?limit=8&orgId=org-b')
-      .set('x-test-role', 'STAFF')
-      .set('x-test-org', 'org-a')
-      .expect(200)
-    const response = await request(app.getHttpServer())
-      .get('/internal/operational-signals/next-best-action?orgId=org-b')
-      .set('x-test-role', 'STAFF')
-      .set('x-test-org', 'org-a')
-      .expect(200)
-    expect(response.body).toEqual(nextBestAction)
-    expect(operationalSignals.listForOrg).toHaveBeenCalledWith('org-a', 8)
-    expect(operationalSignals.getNextBestAction).toHaveBeenCalledWith('org-a')
-    expect(operationalSignals.getNextBestAction).not.toHaveBeenCalledWith('org-b')
-  })
+  it.each(['/internal/operational-signals', '/internal/operational-signals/next-best-action'])(
+    '%s rejeita visitante, role desconhecida e usuário inativo sem chamar o service',
+    async (path) => {
+      await request(app.getHttpServer()).get(path).expect(401)
+      await request(app.getHttpServer()).get(path).set('x-test-role', 'UNKNOWN').expect(403)
+      await request(app.getHttpServer()).get(path).set('x-test-role', 'ADMIN').set('x-test-active', 'false').expect(403)
+      expect(operationalSignals.listForOrg).not.toHaveBeenCalled()
+      expect(operationalSignals.getNextBestAction).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['ADMIN', 'OPERADOR', 'FINANCEIRO', 'MANAGER', 'STAFF', 'VIEWER'])(
+    'permite %s nas leituras operacionais usando somente o orgId autenticado',
+    async (role) => {
+      await request(app.getHttpServer())
+        .get('/internal/operational-signals?limit=8&orgId=org-b')
+        .set('x-test-role', role)
+        .set('x-test-org', 'org-a')
+        .expect(200)
+      const response = await request(app.getHttpServer())
+        .get('/internal/operational-signals/next-best-action?orgId=org-b')
+        .set('x-test-role', role)
+        .set('x-test-org', 'org-a')
+        .expect(200)
+      expect(response.body).toEqual(nextBestAction)
+      expect(operationalSignals.listForOrg).toHaveBeenCalledWith('org-a', 8)
+      expect(operationalSignals.getNextBestAction).toHaveBeenCalledWith('org-a')
+      expect(operationalSignals.listForOrg).not.toHaveBeenCalledWith('org-b', 8)
+      expect(operationalSignals.getNextBestAction).not.toHaveBeenCalledWith('org-b')
+    },
+  )
 })

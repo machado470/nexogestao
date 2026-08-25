@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { GovernanceReadService } from './governance-read.service'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
+import { RolesGuard } from '../auth/guards/roles.guard'
+import { Roles } from '../auth/decorators/roles.decorator'
 
 @Controller('governance')
 @UseGuards(JwtAuthGuard)
@@ -42,6 +45,8 @@ export class GovernanceReadController {
   }
 
   @Get('operational-state')
+  @UseGuards(ActiveUserGuard, RolesGuard)
+  @Roles('ADMIN', 'OPERADOR', 'FINANCEIRO')
   async operationalState(@Req() req: any) {
     return this.read.getOperationalState(req.user.orgId)
   }
