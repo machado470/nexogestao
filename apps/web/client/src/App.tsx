@@ -256,6 +256,29 @@ function useOperationalStyleGuard() {
   }, []);
 }
 
+export type ProtectedRouteAuthBranch =
+  | "pending_bootstrap"
+  | "login_redirect"
+  | "authenticated";
+
+export function resolveProtectedRouteAuthBranch(
+  authState: AppBootstrapState
+): ProtectedRouteAuthBranch {
+  if (
+    authState === "validating" ||
+    authState === "degraded" ||
+    authState === "error"
+  ) {
+    return "pending_bootstrap";
+  }
+
+  if (authState === "unauthenticated") {
+    return "login_redirect";
+  }
+
+  return "authenticated";
+}
+
 function ProtectedRoute({
   component: Component,
   permissions,
@@ -270,15 +293,16 @@ function ProtectedRoute({
   onboardingOnly?: boolean;
 }) {
   useOperationalStyleGuard();
-  const { authState, isAuthenticated, payload, role } = useAuth();
+  const { authState, payload, role } = useAuth();
   const [location, navigate] = useLocation();
 
   const requiresOnboarding = getRequiresOnboarding(payload);
+  const authBranch = resolveProtectedRouteAuthBranch(authState);
 
   useEffect(() => {
-    if (authState === "validating") return;
+    if (authBranch === "pending_bootstrap") return;
 
-    if (!isAuthenticated) {
+    if (authBranch === "login_redirect") {
       if (location.startsWith("/login")) return;
       // eslint-disable-next-line no-console
       console.info("[ROUTER] protected_route_redirect", { from: location, to: "login" });
@@ -299,8 +323,7 @@ function ProtectedRoute({
       navigate("/executive-dashboard", { replace: true });
     }
   }, [
-    authState,
-    isAuthenticated,
+    authBranch,
     location,
     navigate,
     onboardingOnly,
@@ -308,11 +331,11 @@ function ProtectedRoute({
     requiresOnboarding,
   ]);
 
-  if (authState === "validating") {
+  if (authBranch === "pending_bootstrap") {
     return <FullScreenLoader />;
   }
 
-  if (!isAuthenticated) {
+  if (authBranch === "login_redirect") {
     return (
       <RedirectingScreen message="Sua sessão não está ativa. Você será enviado para o login." />
     );
