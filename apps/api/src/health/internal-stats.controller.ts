@@ -51,7 +51,7 @@ export class InternalStatsController {
   }
 
   @UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
-  @Roles('OPERADOR')
+  @Roles('ADMIN', 'OPERADOR', 'FINANCEIRO')
   @Get('operational-signals')
   async operationalSignals(@Request() req: any, @Query('limit') limit?: string) {
     const parsedLimit = Number(limit ?? 20)
@@ -59,7 +59,7 @@ export class InternalStatsController {
   }
 
   @UseGuards(JwtAuthGuard, ActiveUserGuard, RolesGuard)
-  @Roles('OPERADOR')
+  @Roles('ADMIN', 'OPERADOR', 'FINANCEIRO')
   @Get('operational-signals/next-best-action')
   async nextBestAction(@Request() req: any) {
     return this.operationalSignalsService.getNextBestAction(req.user.orgId)

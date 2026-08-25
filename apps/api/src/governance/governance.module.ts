@@ -18,6 +18,8 @@ import { GovernanceReadService } from './governance-read.service'
 import { GovernanceActionController } from './governance-action.controller'
 import { GovernanceActionService } from './governance-action.service'
 import { OperationalStateRepository } from '../people/operational-state.repository'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
+import { RolesGuard } from '../auth/guards/roles.guard'
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { OperationalStateRepository } from '../people/operational-state.reposito
     GovernanceReadService,
     GovernanceActionService,
     OperationalStateRepository,
+    ActiveUserGuard,
+    RolesGuard,
   ],
   exports: [
     GovernanceRunService,

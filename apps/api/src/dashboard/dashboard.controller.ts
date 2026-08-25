@@ -4,6 +4,7 @@ import { RolesGuard } from '../auth/guards/roles.guard'
 import { Roles } from '../auth/decorators/roles.decorator'
 import { Org } from '../auth/decorators/org.decorator'
 import { DashboardService } from './dashboard.service'
+import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -15,7 +16,8 @@ export class DashboardController {
    * Retorna métricas operacionais gerais
    */
   @Get('metrics')
-  @Roles('ADMIN')
+  @UseGuards(ActiveUserGuard)
+  @Roles('ADMIN', 'OPERADOR', 'FINANCEIRO')
   async getMetrics(@Org() orgId: string) {
     return this.dashboard.getMetrics(orgId)
   }
@@ -25,7 +27,8 @@ export class DashboardController {
    * Retorna alertas operacionais: ordens atrasadas, cobranças vencidas, serviços do dia
    */
   @Get('alerts')
-  @Roles('ADMIN')
+  @UseGuards(ActiveUserGuard)
+  @Roles('ADMIN', 'OPERADOR', 'FINANCEIRO')
   async getAlerts(@Org() orgId: string) {
     return this.dashboard.getAlerts(orgId)
   }
