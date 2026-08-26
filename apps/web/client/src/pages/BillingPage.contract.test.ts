@@ -27,4 +27,20 @@ describe("BillingPage operational subscription contract", () => {
     expect(source).toContain("<OperationalTimelineItem");
     expect(source).toContain("Nenhum histórico fictício foi criado");
   });
+
+  it("consome catálogo comercial canônico sem preços ou quotas locais", () => {
+    expect(source).toContain("trpc.billing.plans.useQuery");
+    expect(source).toContain("normalizePlanCatalog");
+    expect(source).toContain("formatCurrencyCents");
+    expect(source).toContain("formatQuotaCount");
+    expect(source).toContain("Catálogo comercial indisponível");
+
+    expect(source).not.toContain("PLAN_META");
+    expect(source).not.toContain("priceCents: 19900");
+    expect(source).not.toContain("priceCents: 49900");
+    expect(source).not.toContain("priceCents: 99900");
+    expect(source).not.toContain('customers: "500 clientes"');
+    expect(source).not.toContain('customers: "2.000 clientes"');
+    expect(source).not.toContain("Automações essenciais");
+  });
 });

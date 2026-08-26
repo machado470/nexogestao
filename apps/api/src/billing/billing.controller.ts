@@ -111,16 +111,10 @@ export class BillingController {
   ========================================
   */
 
-  @UseGuards(JwtAuthGuard)
+  @Public()
   @Get('plans')
   async getPlans() {
-    const { PLAN_LIMITS } = await import('./billing.service')
-
-    return Object.entries(PLAN_LIMITS).map(([name, limits]) => ({
-      name,
-      label: limits.label,
-      limits,
-    }))
+    return this.billingService.getPlanCatalog()
   }
 
   /*
