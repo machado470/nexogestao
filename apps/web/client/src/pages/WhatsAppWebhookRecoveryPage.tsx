@@ -13,10 +13,12 @@ import {
   AppPageLoadingState,
   AppPageShell,
   AppSectionBlock,
-  AppStatusBadge,
 } from "@/components/internal-page-system";
-import { AppSectionCard, AppStatCard } from "@/components/app-system";
-import { NexoStatusBadge } from "@/components/design-system";
+import {
+  AppSectionCard,
+  AppStatCard,
+  AppStatusBadge as AppToneStatusBadge,
+} from "@/components/app-system";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
@@ -235,7 +237,7 @@ function EventTable({
                     disabled={!canReplayEvent(event)}
                   />
                 </td>
-                <td><NexoStatusBadge label={statusLabel(event.status)} tone={statusTone(event.status)} /></td>
+                <td><AppToneStatusBadge label={statusLabel(event.status)} tone={statusTone(event.status)} /></td>
                 <td>{event.provider ?? "—"}</td>
                 <td className="font-mono text-xs">{event.traceId ?? "—"}</td>
                 <td className="font-mono text-xs">{event.providerMessageId ?? "—"}</td>
@@ -278,7 +280,7 @@ function DetailPanel({ event, detailPayload, isLoading, onReplay }: { event: Web
           <p className="text-sm font-semibold text-[var(--text-primary)]">Evento {event.id}</p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">Detalhe operacional fornecido pelo BFF/backend.</p>
         </div>
-        <NexoStatusBadge label={statusLabel(detail?.status)} tone={statusTone(detail?.status)} />
+        <AppToneStatusBadge label={statusLabel(detail?.status)} tone={statusTone(detail?.status)} />
       </div>
 
       {isLoading ? <p className="text-sm text-[var(--text-muted)]">Carregando detalhe...</p> : null}
@@ -430,7 +432,7 @@ export default function WhatsAppWebhookRecoveryPage() {
         description="Monitore a DLQ, investigue eventos normalizados e reexecute mensagens com confirmação para ações sensíveis."
         primaryAction={<Button type="button" onClick={() => void refresh()}>Atualizar</Button>}
         secondaryActions={<Button type="button" variant="ghost" disabled={!selectedEvents.length} onClick={requestSelectedReplay}>Reprocessar selecionados ({failedSelectedCount || selectedEvents.length})</Button>}
-        contextChips={<><NexoStatusBadge label="Fonte: backend/BFF" tone="info" /><NexoStatusBadge label="Payload bruto oculto" tone="neutral" /></>}
+        contextChips={<><AppToneStatusBadge label="Fonte: backend/BFF" tone="info" /><AppToneStatusBadge label="Payload bruto oculto" tone="neutral" /></>}
       />
 
       {dlqStatsQuery.isLoading ? <AppPageLoadingState title="Carregando DLQ" description="Buscando estatísticas de falhas no backend." /> : null}

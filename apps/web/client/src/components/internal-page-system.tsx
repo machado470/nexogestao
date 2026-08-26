@@ -33,6 +33,7 @@ import {
   AppFiltersBar as BaseFiltersBar,
   AppSectionCard,
   AppSkeleton as BaseSkeleton,
+  AppStatusBadge as BaseAppStatusBadge,
 } from "@/components/app-system";
 import {
   AppCardCTA,
@@ -41,7 +42,6 @@ import {
   AppRowActions,
   AppTrendIndicator,
 } from "@/components/app";
-import { NexoStatusBadge } from "@/components/design-system";
 import { normalizePriorityLabel } from "@/lib/operations";
 
 export function AppPageHeader({
@@ -1037,7 +1037,7 @@ export function AppStatusBadge({ label }: { label: string }) {
       : operationalSeverityLabel("pending");
 
   return (
-    <NexoStatusBadge
+    <BaseAppStatusBadge
       label={safeLabel}
       tone={operationalSeverityTone(label)}
       className="h-6 px-2.5 py-0 text-[10px] font-semibold uppercase tracking-[0.08em]"

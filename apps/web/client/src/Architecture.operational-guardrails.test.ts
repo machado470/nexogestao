@@ -180,4 +180,20 @@ describe("Operational page guardrails", () => {
     );
   });
 
+
+  it("evita NexoStatusBadge legado fora do design-system", () => {
+    const sourceFiles = readdirSync("client/src", {
+      recursive: true,
+    }) as string[];
+
+    for (const file of sourceFiles) {
+      if (!file.endsWith(".tsx")) continue;
+      if (file === "components/design-system.tsx") continue;
+
+      const source = readFileSync(`client/src/${file}`, "utf8");
+
+      expect(source).not.toContain("NexoStatusBadge");
+    }
+  });
+
 });
