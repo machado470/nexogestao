@@ -9,7 +9,7 @@ import {
 } from "@/lib/operations/operations.utils";
 
 import { getServiceOrderNextAction } from "@/lib/operations/operations.selectors";
-import { NexoStatusBadge } from "@/components/design-system";
+import { AppStatusBadge } from "@/components/app-system";
 import { mapFinanceStatus, mapServiceOrderStatus } from "@/lib/status-badge";
 
 interface Props {
@@ -89,9 +89,9 @@ export default function ServiceOrderCard({
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-semibold">{os.title}</h3>
 
-          <NexoStatusBadge {...mapServiceOrderStatus(status)} />
+          <AppStatusBadge {...mapServiceOrderStatus(status)} />
 
-          <NexoStatusBadge
+          <AppStatusBadge
             {...mapFinanceStatus(normalizeFinanceBadgeLabel(chargeBadge.label))}
             label={chargeBadge.label}
           />

@@ -38,7 +38,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  NexoStatusBadge,
   NexoStatCard,
   DataTable,
 } from "@/components/design-system";
@@ -192,7 +191,35 @@ export function AppDataTable({ className, ...props }: ComponentProps<"table">) {
     </div>
   );
 }
-export const AppStatusBadge = NexoStatusBadge;
+export type AppStatusTone =
+  | "success"
+  | "warning"
+  | "danger"
+  | "info"
+  | "neutral"
+  | "accent";
+
+export function AppStatusBadge({
+  label,
+  tone = "neutral",
+  className,
+}: {
+  label: string;
+  tone?: AppStatusTone;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "nexo-badge",
+        `nexo-badge-${tone}`,
+        className
+      )}
+    >
+      {label}
+    </span>
+  );
+}
 
 export type AppOperationalStatus = "NORMAL" | "ATENÇÃO" | "RISCO" | "CRÍTICO";
 
