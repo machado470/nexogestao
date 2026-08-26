@@ -3,64 +3,48 @@ import { Link } from "wouter";
 
 import { MarketingLayout } from "@/components/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { trpc } from "@/lib/trpc";
+import {
+  formatPlanPrice,
+  formatPlanQuota,
+  listEnabledPlanFeatures,
+  normalizeBillingPlanCatalog,
+  type BillingPlanName,
+} from "@/lib/billing-plan-catalog";
 
 import "./landing.css";
 
-const plans = [
+const PLAN_MARKETING: Record<
+  BillingPlanName,
   {
-    name: "Free",
-    price: "R$ 0",
+    subtitle: string;
+    cta: string;
+    href: string;
+    featured?: boolean;
+  }
+> = {
+  FREE: {
     subtitle: "Para testar o fluxo inicial",
-    limits: [
-      "Até 50 clientes",
-      "Até 120 agendamentos/mês",
-      "Até 300 mensagens/mês",
-      "1 usuário",
-    ],
     cta: "Criar conta grátis",
     href: "/register",
   },
-  {
-    name: "Starter",
-    price: "R$ 149",
+  STARTER: {
     subtitle: "Para operação em crescimento",
-    limits: [
-      "Até 300 clientes",
-      "Até 600 agendamentos/mês",
-      "Até 2.500 mensagens/mês",
-      "Até 3 usuários",
-    ],
-    cta: "Começar Starter",
+    cta: "Começar",
     href: "/register",
   },
-  {
-    name: "Pro",
-    price: "R$ 349",
+  PRO: {
     subtitle: "Mais controle e governança",
-    limits: [
-      "Até 1.500 clientes",
-      "Até 2.000 agendamentos/mês",
-      "Até 10.000 mensagens/mês",
-      "Até 10 usuários",
-    ],
-    cta: "Escolher Pro",
+    cta: "Escolher plano",
     href: "/register",
     featured: true,
   },
-  {
-    name: "Business",
-    price: "Sob consulta",
-    subtitle: "Escala operacional multiunidade",
-    limits: [
-      "Clientes ilimitados",
-      "Agendamentos ilimitados",
-      "Mensagens sob volume contratado",
-      "Usuários ilimitados",
-    ],
+  BUSINESS: {
+    subtitle: "Escala operacional avançada",
     cta: "Falar com time comercial",
     href: "/contato",
   },
-];
+};
 
 const faqs = [
   [
@@ -72,15 +56,15 @@ const faqs = [
     "Não há fidelidade para planos mensais. Você evolui no ritmo da sua operação.",
   ],
   [
-    "O que muda no Business?",
-    "No Business, ajustamos limites, onboarding e suporte conforme a complexidade da sua empresa.",
+    "O que muda no plano mais avançado?",
+    "Os limites e recursos habilitados são exibidos diretamente a partir do catálogo comercial vigente.",
   ],
 ];
 
 const billingNotes = [
   "Todos os planos incluem atualizações de produto e melhorias contínuas.",
-  "Volumes servem como referência comercial e podem ser ajustados por contrato.",
-  "Ambientes com necessidade de compliance específico são avaliados no plano Business.",
+  "Preços, limites e recursos exibidos nesta página vêm do catálogo comercial vigente.",
+  "Ambientes com necessidades específicas podem exigir avaliação comercial.",
 ];
 
 export default function PricingPage() {
@@ -89,6 +73,13 @@ export default function PricingPage() {
     description:
       "Compare os planos do NexoGestão e escolha a melhor opção para o estágio operacional da sua empresa.",
   });
+
+  const plansQuery = trpc.billing.plans.useQuery(undefined, {
+    retry: false,
+  });
+
+  const plans = normalizeBillingPlanCatalog(plansQuery.data);
+
   return (
     <MarketingLayout>
       <section className="container py-14 md:py-20">
@@ -107,49 +98,83 @@ export default function PricingPage() {
       </section>
 
       <section className="container pb-16 md:pb-20">
-        <div className="grid gap-5 lg:grid-cols-4">
-          {plans.map(plan => (
-            <article
-              key={plan.name}
-              className={`rounded-3xl border p-6 ${
-                plan.featured
-                  ? "border-orange-300 bg-orange-50/50 shadow-[0_20px_40px_rgba(249,115,22,0.2)]"
-                  : "border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]"
-              }`}
-            >
-              {plan.featured ? (
-                <p className="mb-3 inline-flex rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-white">
-                  Recomendado
-                </p>
-              ) : null}
-              <h2 className="text-2xl font-semibold text-slate-900">
-                {plan.name}
-              </h2>
-              <p className="mt-2 text-3xl font-semibold text-slate-900">
-                {plan.price}
-                <span className="text-base font-medium text-slate-500">
-                  {plan.price.includes("R$") ? "/mês" : ""}
-                </span>
-              </p>
-              <p className="mt-2 text-sm text-slate-600">{plan.subtitle}</p>
+        {plansQuery.isLoading ? (
+          <article className="rounded-3xl border border-slate-200 bg-white p-8 text-center">
+            <p className="text-slate-600">Carregando catálogo comercial...</p>
+          </article>
+        ) : plans.length ? (
+          <div className="grid gap-5 lg:grid-cols-4">
+            {plans.map(plan => {
+              const marketing = PLAN_MARKETING[plan.name];
+              const features = listEnabledPlanFeatures(plan.features);
+              const limits = [
+                `Clientes: ${formatPlanQuota(plan.quotas.customers)}`,
+                `Agendamentos: ${formatPlanQuota(plan.quotas.appointments)}`,
+                `Mensagens: ${formatPlanQuota(plan.quotas.messages)}`,
+                `Usuários: ${formatPlanQuota(plan.quotas.users)}`,
+              ];
 
-              <ul className="mt-6 space-y-3 text-sm text-slate-700">
-                {plan.limits.map(limit => (
-                  <li key={limit} className="flex items-start gap-2">
-                    <Check className="mt-0.5 size-4 text-emerald-500" /> {limit}
-                  </li>
-                ))}
-              </ul>
+              return (
+                <article
+                  key={plan.name}
+                  className={`rounded-3xl border p-6 ${
+                    marketing.featured
+                      ? "border-orange-300 bg-orange-50/50 shadow-[0_20px_40px_rgba(249,115,22,0.2)]"
+                      : "border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]"
+                  }`}
+                >
+                  {marketing.featured ? (
+                    <p className="mb-3 inline-flex rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-white">
+                      Recomendado
+                    </p>
+                  ) : null}
 
-              <Link
-                href={plan.href}
-                className={`mt-6 inline-flex w-full justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition ${plan.featured ? "bg-orange-500 text-white hover:bg-orange-600" : "border border-slate-200 bg-white text-slate-700 hover:bg-[var(--surface-base)]"}`}
-              >
-                {plan.cta}
-              </Link>
-            </article>
-          ))}
-        </div>
+                  <h2 className="text-2xl font-semibold text-slate-900">
+                    {plan.displayName}
+                  </h2>
+
+                  <p className="mt-2 text-3xl font-semibold text-slate-900">
+                    {formatPlanPrice(plan.priceCents)}
+                  </p>
+
+                  <p className="mt-2 text-sm text-slate-600">
+                    {marketing.subtitle}
+                  </p>
+
+                  <ul className="mt-6 space-y-3 text-sm text-slate-700">
+                    {[...limits, ...features].map(item => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check className="mt-0.5 size-4 text-emerald-500" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link
+                    href={marketing.href}
+                    className={`mt-6 inline-flex w-full justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                      marketing.featured
+                        ? "bg-orange-500 text-white hover:bg-orange-600"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-[var(--surface-base)]"
+                    }`}
+                  >
+                    {marketing.cta}
+                  </Link>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <article className="rounded-3xl border border-slate-200 bg-white p-8 text-center">
+            <h2 className="text-xl font-semibold text-slate-900">
+              Catálogo comercial indisponível
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Não exibimos preços ou limites locais como fallback. Tente
+              novamente mais tarde.
+            </p>
+          </article>
+        )}
       </section>
 
       <section className="container pb-16 md:pb-20">

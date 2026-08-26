@@ -28,3 +28,16 @@ describe("BillingPage operational subscription contract", () => {
     expect(source).toContain("Nenhum histórico fictício foi criado");
   });
 });
+
+describe("BillingPage canonical commercial catalog contract", () => {
+  it("consome billing.plans sem preços e limites comerciais locais", () => {
+    expect(source).toContain("trpc.billing.plans.useQuery");
+    expect(source).toContain("normalizeBillingPlanCatalog");
+    expect(source).toContain("Catálogo comercial indisponível");
+    expect(source).not.toContain("PLAN_META");
+    expect(source).not.toContain("49900");
+    expect(source).not.toContain("99900");
+    expect(source).toContain("Valor não informado");
+    expect(source).not.toContain("currentPlanMeta?.priceCents ?? 0");
+  });
+});
