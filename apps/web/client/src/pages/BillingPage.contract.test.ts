@@ -41,3 +41,15 @@ describe("BillingPage canonical commercial catalog contract", () => {
     expect(source).not.toContain("currentPlanMeta?.priceCents ?? 0");
   });
 });
+
+describe("BillingPage checkout boundary contract", () => {
+  it("envia somente o nome canônico do plano ao checkout", () => {
+    expect(source).toContain("planName: plan");
+    expect(source).toContain('if (plan === "FREE")');
+    expect(source).not.toContain("PLAN_PRICE_ID");
+    expect(source).not.toContain("price_starter");
+    expect(source).not.toContain("price_pro");
+    expect(source).not.toContain("price_business");
+    expect(source).not.toContain("priceId");
+  });
+});

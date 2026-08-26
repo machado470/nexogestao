@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, INestApplication, UnauthorizedException } from '@nestjs/common'
+import { CanActivate, ExecutionContext, INestApplication, UnauthorizedException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { BillingController } from './billing.controller'
@@ -48,6 +48,7 @@ describe('BillingController authorization', () => {
       .overrideGuard(ActiveUserGuard).useValue({ canActivate: () => true })
       .compile()
     app = module.createNestApplication()
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
     await app.init()
   })
 
@@ -55,7 +56,7 @@ describe('BillingController authorization', () => {
   afterAll(() => app.close())
 
   it.each([
-    ['/billing/create-checkout-session', { priceId: 'price_pro' }],
+    ['/billing/create-checkout-session', { planName: 'PRO' }],
     ['/billing/cancel', {}],
   ])('nega visitante e usuário comum sem chamar BillingService em %s', async (url, body) => {
     await request(app.getHttpServer()).post(url).send(body).expect(401)
@@ -69,9 +70,25 @@ describe('BillingController authorization', () => {
       .post('/billing/create-checkout-session')
       .set('x-test-role', 'ADMIN')
       .set('x-test-org', 'org-a')
-      .send({ priceId: 'price_pro', orgId: 'org-b' })
+      .send({ planName: 'PRO', orgId: 'org-b' })
       .expect(201)
     expect(billing.createCheckoutSession).toHaveBeenCalledWith('org-a', 'PRO', undefined, undefined)
+  })
+
+  it('rejeita priceId do provedor e plano FREE no contrato público de checkout', async () => {
+    await request(app.getHttpServer())
+      .post('/billing/create-checkout-session')
+      .set('x-test-role', 'ADMIN')
+      .send({ priceId: 'price_pro' })
+      .expect(400)
+
+    await request(app.getHttpServer())
+      .post('/billing/create-checkout-session')
+      .set('x-test-role', 'ADMIN')
+      .send({ planName: 'FREE' })
+      .expect(400)
+
+    expect(billing.createCheckoutSession).not.toHaveBeenCalled()
   })
 
   it('mantém webhook público e delega validação de assinatura ao service', async () => {
