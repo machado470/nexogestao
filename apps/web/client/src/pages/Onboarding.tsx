@@ -14,7 +14,7 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { useDemoEnvironment } from "@/hooks/useDemoEnvironment";
 import { useProductAnalytics } from "@/hooks/useProductAnalytics";
 

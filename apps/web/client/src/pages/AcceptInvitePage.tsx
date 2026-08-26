@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2, LockKeyhole, Mail, UserRound } from "lucide-react";
 
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import {
   CardContent,
   CardDescription,

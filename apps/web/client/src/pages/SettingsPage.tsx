@@ -1,4 +1,3 @@
-// OperationalTopCard lint contract: actions are rendered with AppOperationalHeader in this module.
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";

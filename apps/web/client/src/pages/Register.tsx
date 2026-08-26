@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Building2, Loader2, LockKeyhole, Mail, UserRound } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthMarketingShell } from "@/components/AuthMarketingShell";

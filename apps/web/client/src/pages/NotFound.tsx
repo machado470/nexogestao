@@ -1,4 +1,4 @@
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { CardContent } from "@/components/ui/card";
 import { PublicCard } from "@/components/ui/context-cards";
 import { AlertCircle, Home } from "lucide-react";

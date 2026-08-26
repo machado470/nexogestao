@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const criticalPages = [
@@ -153,4 +153,31 @@ describe("Operational page guardrails", () => {
     expect(serviceOrders).not.toContain('status: "IN_PROGRESS"');
     expect(serviceOrders).not.toContain('status: "DONE"');
   });
+  it("evita Button legado do design-system em páginas", () => {
+    const pageFiles = readdirSync("client/src/pages").filter(file =>
+      file.endsWith(".tsx")
+    );
+
+    const legacyButtonImport =
+      /import\s*\{[^}]*\bButton\b[^}]*\}\s*from\s*["']@\/components\/design-system["']/s;
+
+    for (const file of pageFiles) {
+      const source = readFileSync(
+        `client/src/pages/${file}`,
+        "utf8"
+      );
+
+      expect(source).not.toMatch(legacyButtonImport);
+    }
+
+    const settings = readFileSync(
+      "client/src/pages/SettingsPage.tsx",
+      "utf8"
+    );
+
+    expect(settings).not.toContain(
+      "OperationalTopCard lint contract"
+    );
+  });
+
 });

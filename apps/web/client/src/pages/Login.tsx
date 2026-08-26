@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Loader2, LockKeyhole, Mail } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
