@@ -196,4 +196,28 @@ describe("Operational page guardrails", () => {
     }
   });
 
+
+  it("evita wrappers legados de botão nos componentes ativos", () => {
+    const componentFiles = readdirSync("client/src/components", {
+      recursive: true,
+    }) as string[];
+
+    const legacyButtonImport =
+      /import\s*\{[^}]*(?:\bButton\b|\bSecondaryButton\b|\bGhostButton\b|\bPrimaryButton\b)[^}]*\}\s*from\s*["']@\/components\/design-system["']/s;
+
+    for (const file of componentFiles) {
+      if (!file.endsWith(".tsx")) continue;
+
+      if (file === "design-system.tsx") continue;
+      if (file === "PagePattern.tsx") continue;
+
+      const source = readFileSync(
+        `client/src/components/${file}`,
+        "utf8"
+      );
+
+      expect(source).not.toMatch(legacyButtonImport);
+    }
+  });
+
 });

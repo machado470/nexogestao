@@ -1,10 +1,11 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, PlayCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { getPayloadValue } from "@/lib/query-helpers";
 import { useAuth } from "@/contexts/AuthContext";
 import { can } from "@/lib/rbac";
-import { Button } from "@/components/design-system";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type ExecutionMode = "manual" | "semi_automatic" | "automatic";

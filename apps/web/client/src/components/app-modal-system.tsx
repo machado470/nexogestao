@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 import type { ReactNode, RefObject } from "react";
-import { Button } from "@/components/design-system";
+
 import {
   Dialog,
   DialogContent,

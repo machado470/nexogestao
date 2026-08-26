@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import {
   Area,
@@ -20,7 +21,7 @@ import {
   Sparkles,
   Zap,
 } from "lucide-react";
-import { Button } from "@/components/design-system";
+
 import { AppRowActionsDropdown } from "@/components/app-system";
 import {
   AppChartPanel,

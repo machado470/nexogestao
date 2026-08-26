@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/design-system';
+
 import { ChevronRight, X } from 'lucide-react';
 
 interface OnboardingTooltipProps {

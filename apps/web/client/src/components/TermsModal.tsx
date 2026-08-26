@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
-import { Button } from "@/components/design-system";
+
 import { Dialog, DialogContent } from "./ui/dialog";
 
 interface TermsModalProps {

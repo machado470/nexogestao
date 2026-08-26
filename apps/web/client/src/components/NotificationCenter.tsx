@@ -1,6 +1,7 @@
+import { Button } from "@/components/ui/button";
 import { useNotificationStore, getIcon, getColor } from "@/stores/notificationStore";
 import { X } from "lucide-react";
-import { Button } from "@/components/design-system";
+
 
 export function NotificationCenter() {
   const notifications = useNotificationStore(state => state.notifications);

@@ -1,7 +1,8 @@
+import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import { CheckCircle2, EyeOff, Sparkles } from "lucide-react";
 import { SeverityBadge } from "@/components/operating-system/SeverityBadge";
-import { Button } from "@/components/design-system";
+
 import type { ActionSeverity } from "@/lib/operations/next-action";
 import type { OperationMode } from "@/lib/operations/automation-control";
 import { cn } from "@/lib/utils";

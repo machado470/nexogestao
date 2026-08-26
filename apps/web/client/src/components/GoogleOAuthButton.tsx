@@ -1,4 +1,5 @@
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
+
 import { Chrome, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 

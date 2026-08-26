@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
-import { SecondaryButton } from "@/components/design-system";
+
 
 type NextActionCardProps = {
   title: string;
@@ -109,9 +110,9 @@ export function EmptyActionState({
     <section className="rounded-lg border border-dashed border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-3">
       <p className="text-sm font-semibold text-[var(--text-primary)]">{title}</p>
       <p className="mt-1 text-xs text-[var(--text-secondary)]">{description}</p>
-      <SecondaryButton type="button" className="mt-2 h-8 px-3 text-xs" onClick={onCta}>
+      <Button variant="secondary" type="button" className="mt-2 h-8 px-3 text-xs" onClick={onCta}>
         {ctaLabel}
-      </SecondaryButton>
+      </Button>
     </section>
   );
 }

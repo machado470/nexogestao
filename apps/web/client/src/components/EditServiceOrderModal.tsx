@@ -1,7 +1,8 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Button } from "@/components/design-system";
+
 import {
   Dialog,
   DialogContent,

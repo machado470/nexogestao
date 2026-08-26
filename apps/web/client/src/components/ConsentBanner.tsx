@@ -1,7 +1,8 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import { Button } from "@/components/design-system";
+
 import { saveConsent, type ConsentPreferences } from "./ConsentBanner.logic";
 import { persistLocalConsent, readStoredConsent } from "./ConsentBanner.storage";
 

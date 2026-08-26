@@ -1,7 +1,10 @@
+import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
-import { Loader2, X } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Button, SecondaryButton } from "@/components/design-system";
+import {
+  Loader2,
+  X } from "lucide-react"; import { Dialog,
+  DialogContent,
+  DialogTitle } from "@/components/ui/dialog";
 
 type ModalAction = {
   label: string;
@@ -93,13 +96,13 @@ export function AppOperationalModal({
             </div>
             <div className="flex items-center gap-2">
               {headerActions}
-              <SecondaryButton
+              <Button variant="secondary"
                 type="button"
                 className="h-9 px-3"
                 onClick={() => onOpenChange(false)}
               >
                 <X className="mr-1 h-4 w-4" /> Fechar
-              </SecondaryButton>
+              </Button>
             </div>
           </div>
           {summary.length > 0 ? (
@@ -156,7 +159,7 @@ export function AppOperationalModal({
                 </Button>
               ) : null}
               {secondaryAction ? (
-                <SecondaryButton
+                <Button variant="secondary"
                   type="button"
                   onClick={secondaryAction.onClick}
                   disabled={
@@ -170,10 +173,10 @@ export function AppOperationalModal({
                     <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                   ) : null}
                   {secondaryAction.label}
-                </SecondaryButton>
+                </Button>
               ) : null}
               {quickActions.map(action => (
-                <SecondaryButton
+                <Button variant="secondary"
                   key={action.label}
                   type="button"
                   onClick={action.onClick}
@@ -184,7 +187,7 @@ export function AppOperationalModal({
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   {action.label}
-                </SecondaryButton>
+                </Button>
               ))}
             </div>
             {feedback ? (

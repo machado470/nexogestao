@@ -1,4 +1,5 @@
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
+
 import { AlertCircle, Loader2 } from "lucide-react";
 import { BaseModal } from "@/components/app-modal-system";
 

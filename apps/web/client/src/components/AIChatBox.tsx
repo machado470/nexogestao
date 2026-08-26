@@ -1,4 +1,5 @@
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
+
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";

@@ -1,8 +1,9 @@
+import { Button } from "@/components/ui/button";
 import { useMemo } from "react";
 import { useLocation } from "wouter";
 import { BaseOperationalModal } from "@/components/app-modal-system";
 import { AppNextActionCard, AppSectionBlock, AppStatusBadge } from "@/components/internal-page-system";
-import { Button } from "@/components/design-system";
+
 import { trpc } from "@/lib/trpc";
 import { normalizeArrayPayload, normalizeObjectPayload } from "@/lib/query-helpers";
 import { useOperationalDecisions } from "@/lib/decision-engine/useOperationalDecisions";

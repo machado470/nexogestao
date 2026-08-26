@@ -1,9 +1,10 @@
+import { Button } from "@/components/ui/button";
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AlertTriangle, Plus } from "lucide-react";
 import { AppChartPanel, AppPageEmptyState, AppSectionBlock } from "@/components/internal-page-system";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Button } from "@/components/design-system";
+
 
 interface FinanceReportsProps {
   revenueData: Array<{ label: string; revenue: number }>;
