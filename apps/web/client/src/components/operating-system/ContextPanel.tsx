@@ -8,8 +8,7 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  } from "@/components/ui/sheet"; import { PrimaryActionButton } from "@/components/operating-system/PrimaryActionButton"; import { Textarea } from "@/components/ui/textarea"; import { cn } from "@/lib/utils"; import {   Badge,
-} from "@/components/design-system";
+  } from "@/components/ui/sheet"; import { PrimaryActionButton } from "@/components/operating-system/PrimaryActionButton"; import { Textarea } from "@/components/ui/textarea"; import { cn } from "@/lib/utils"; import { Badge } from "@/components/ui/badge";
 
 type ContextPanelAction = {
   label: string;
@@ -83,7 +82,12 @@ export function ContextPanel({
               ) : null}
               {statusLabel ? (
                 <div className="mt-2">
-                  <Badge>Status: {statusLabel}</Badge>
+                  <Badge
+                    variant="outline"
+                    className="border-[var(--border-soft)] bg-[color-mix(in_srgb,var(--bg-surface)_82%,transparent)] px-2 py-1 text-[10px] text-[var(--text-secondary)]"
+                  >
+                    Status: {statusLabel}
+                  </Badge>
                 </div>
               ) : null}
             </div>
