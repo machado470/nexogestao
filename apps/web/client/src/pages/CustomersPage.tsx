@@ -23,7 +23,7 @@ import {
 import { usePageDiagnostics } from "@/hooks/usePageDiagnostics";
 import { useOperationalMemoryState } from "@/hooks/useOperationalMemory";
 import { presentationStatusLabel } from "@/lib/presentation-status";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import {
   NexoEvidenceTimeline,
   NexoOperationalPipeline,

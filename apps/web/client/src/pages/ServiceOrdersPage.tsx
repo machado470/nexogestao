@@ -10,7 +10,7 @@ import {
 } from "@/lib/query-helpers";
 import { useOperationalMemoryState } from "@/hooks/useOperationalMemory";
 import { usePageDiagnostics } from "@/hooks/usePageDiagnostics";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import {
   AppOperationalStatusBadge,
   AppPageShell,

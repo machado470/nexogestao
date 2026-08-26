@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { AppSectionCard, AppStatCard } from "@/components/app-system";
 import { CreateAppointmentModal } from "@/components/CreateAppointmentModal";
 import {

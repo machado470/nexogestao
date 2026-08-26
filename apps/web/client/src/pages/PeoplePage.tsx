@@ -13,7 +13,7 @@ import {
   type AppOperationalStatus,
   type AppPriorityLevel,
 } from "@/components/app-system";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import {
   OperationalActionPanel,
   OperationalFlow,

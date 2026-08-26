@@ -8,7 +8,7 @@ import {
 } from "@/lib/operational-attention";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { CreateChargeModal } from "@/components/CreateChargeModal";
 import { FormModal } from "@/components/app-modal-system";
 import {
