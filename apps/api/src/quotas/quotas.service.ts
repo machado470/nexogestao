@@ -36,14 +36,6 @@ export const PLAN_LIMITS: Record<string, QuotaLimits> = {
     users: 10,
     storage: 5000,
   },
-  SCALE: {
-    customers: 999999,
-    appointments: 999999,
-    messages: 999999,
-    serviceOrders: 999999,
-    users: 999999,
-    storage: 999999,
-  },
   BUSINESS: {
     customers: 999999,
     appointments: 999999,
@@ -61,7 +53,7 @@ export class QuotasService {
   constructor(private prisma: PrismaService) {}
 
   private normalizePlan(plan: string): string {
-    if (plan === 'BUSINESS') return 'SCALE'
+    if (plan === 'SCALE') return 'BUSINESS'
     return plan
   }
 

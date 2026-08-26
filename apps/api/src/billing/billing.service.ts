@@ -70,12 +70,11 @@ export class BillingService {
       STARTER: starter,
       PRO: pro,
       BUSINESS: business,
-      SCALE: business,
     }
   }
 
   private normalizePlanName(planName: string): string {
-    if (planName === 'BUSINESS') return 'SCALE'
+    if (planName === 'SCALE') return 'BUSINESS'
     return planName
   }
 
