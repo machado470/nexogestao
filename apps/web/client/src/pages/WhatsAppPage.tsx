@@ -41,7 +41,7 @@ import {
   type GovernanceSignal,
   type InboxPriority,
 } from "@/lib/whatsappInboxPriority";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { AppPageShell, AppSkeleton } from "@/components/app-system";
 import {
   DropdownMenu,

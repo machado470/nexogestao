@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Loader2, LockKeyhole } from "lucide-react";
 
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthMarketingShell } from "@/components/AuthMarketingShell";

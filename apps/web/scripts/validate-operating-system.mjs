@@ -166,16 +166,21 @@ for (const page of pages) {
   }
 
   const hasLegacyActionBar = /\bActionBarWrapper\b/.test(source);
+  const hasOperationalHeaderActions =
+    /<AppOperationalHeader\b[\s\S]*?\b(?:primaryAction|secondaryActions)=\{/.test(
+      source
+    );
   const hasNexoActionContract =
     /\bOperationalTopCard\b/.test(source) ||
     /\bNexoActionGroup\b/.test(source) ||
+    hasOperationalHeaderActions ||
     (/\bAppSectionCard\b/.test(source) &&
       /Próxima decisão financeira|Próxima decisão da carteira|Próxima melhor ação/.test(
         source
       ));
   if (!hasLegacyActionBar && !hasNexoActionContract) {
     errors.push(
-      `${page}: contrato de ações ausente (esperado ActionBarWrapper legado, OperationalTopCard/NexoActionGroup ou bloco oficial AppSectionCard do Nexo).`
+      `${page}: contrato de ações ausente (esperado ActionBarWrapper legado, OperationalTopCard/NexoActionGroup, AppOperationalHeader com ações ou bloco oficial AppSectionCard do Nexo).`
     );
   }
 
