@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { PageShell } from "@/components/PagePattern";
 import { DataTable, type DataTableProps } from "@/components/DataTable";
 import { ActionBarWrapper } from "./ActionBar";
 import { OperationalHeader } from "./OperationalHeader";
@@ -22,7 +21,7 @@ export function PageWrapper({
   children,
 }: PageWrapperProps) {
   return (
-    <PageShell>
+    <div className="nexo-page-shell nexo-section-reveal min-w-0 max-w-full space-y-4">
       <div className="space-y-4 md:space-y-5">
         {showOperationalHeader ? (
           <OperationalHeader
@@ -33,7 +32,7 @@ export function PageWrapper({
         ) : null}
         {children}
       </div>
-    </PageShell>
+    </div>
   );
 }
 

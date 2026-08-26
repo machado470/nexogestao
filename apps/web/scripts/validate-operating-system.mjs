@@ -98,12 +98,10 @@ const foundationScopeFiles = [
   "client/src/components/app-modal-system.tsx",
   "client/src/components/internal-page-system.tsx",
   "client/src/components/design-system.tsx",
-  "client/src/components/PagePattern.tsx",
   "client/src/index.css",
 ];
 
 const temporaryLegacyVisualAllowlist = new Set([
-  "client/src/components/PagePattern.tsx",
   "client/src/components/design-system.tsx",
   "client/src/index.css",
 ]);
