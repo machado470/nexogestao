@@ -18,59 +18,6 @@ import {
 import Stripe from 'stripe'
 import { QuotasService } from '../quotas/quotas.service'
 
-export const PLAN_LIMITS: Record<
-  string,
-  {
-    customers: number
-    users: number
-    serviceOrders: number
-    appointments: number
-    messages: number
-    label: string
-  }
-> = {
-  FREE: {
-    customers: 5,
-    users: 2,
-    serviceOrders: 10,
-    appointments: 20,
-    messages: 50,
-    label: 'Free',
-  },
-  STARTER: {
-    customers: 30,
-    users: 5,
-    serviceOrders: 100,
-    appointments: 200,
-    messages: 500,
-    label: 'Starter',
-  },
-  PRO: {
-    customers: 100,
-    users: 10,
-    serviceOrders: 1000,
-    appointments: 2000,
-    messages: 5000,
-    label: 'Pro',
-  },
-  SCALE: {
-    customers: 999999,
-    users: 999999,
-    serviceOrders: 999999,
-    appointments: 999999,
-    messages: 999999,
-    label: 'Scale',
-  },
-  BUSINESS: {
-    customers: 999999,
-    users: 999999,
-    serviceOrders: 999999,
-    appointments: 999999,
-    messages: 999999,
-    label: 'Scale',
-  },
-}
-
 @Injectable()
 export class BillingService {
 
@@ -426,7 +373,7 @@ export class BillingService {
       return {
         status: 'NO_SUBSCRIPTION',
         plan: null,
-        limits: PLAN_LIMITS.FREE,
+        limits: this.quotasService.getQuotaLimits('FREE'),
       }
     }
 
@@ -434,7 +381,7 @@ export class BillingService {
 
     return {
       ...subscription,
-      limits: PLAN_LIMITS[planName] ?? PLAN_LIMITS.FREE,
+      limits: this.quotasService.getQuotaLimits(planName),
     }
 
   }
