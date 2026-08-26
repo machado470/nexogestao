@@ -29,6 +29,7 @@ import {
   AppSkeleton,
 } from "@/components/internal-page-system";
 import {
+  AppDataTable,
   AppPageShell,
   AppSectionCard,
   AppSelect,
@@ -2273,8 +2274,8 @@ export default function TimelinePage() {
             }
           />
         </div>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
-          <table className="w-full text-left text-sm">
+        <div className="mt-4">
+          <AppDataTable className="w-full text-left text-sm">
             <thead className="bg-[var(--surface-secondary)] text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
               <tr>
                 <th className="p-3">Data/hora</th>
@@ -2310,7 +2311,7 @@ export default function TimelinePage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </AppDataTable>
         </div>
         <Button
           type="button"
