@@ -35,12 +35,6 @@ import { trpc } from "@/lib/trpc";
 import { useAutomationRunner } from "@/hooks/useAutomationRunner";
 import { useNotificationStream } from "@/hooks/useNotificationStream";
 import { GlobalSearch } from "@/components/GlobalSearch";
-import {
-  NexoAppShell,
-  NexoMainContainer,
-  NexoSidebar,
-  NexoTopbar,
-} from "@/components/design-system";
 import { BrandSignature } from "@/components/BrandSignature";
 import { AppShell } from "@/components/AppShell";
 import { useOperationalMemoryState } from "@/hooks/useOperationalMemory";
@@ -324,8 +318,8 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <AppShell>
-      <NexoAppShell
-        className={`nexo-app app-root ${theme === "dark" ? "dark" : ""} min-h-screen text-[var(--text-primary)]`}
+      <div
+        className={`nexo-app-shell nexo-app app-root ${theme === "dark" ? "dark" : ""} min-h-screen text-[var(--text-primary)]`}
         data-theme={theme}
       >
         {isMobile && mobileMenuOpen ? (
@@ -346,7 +340,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         ) : null}
 
         <div className="flex min-h-screen w-full">
-          <NexoSidebar
+          <aside
             data-scrollbar="nexo"
             className={`nexo-sidebar z-40 flex shrink-0 flex-col overflow-hidden shadow-lg transition-[width,transform] duration-200 ease-out ${
               isMobile
@@ -489,7 +483,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                 ) : null}
               </button>
             </div>
-          </NexoSidebar>
+          </aside>
 
           <div
             data-sidebar-collapsed={
@@ -505,7 +499,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                 : undefined
             }
           >
-            <NexoTopbar className="z-20 nexo-state-transition">
+            <header className="nexo-topbar z-20 nexo-state-transition">
               <div className="nexo-topbar-grid">
                 <div className="nexo-topbar-content-grid">
                   <div className="flex min-w-0 items-center gap-2 md:gap-2.5">
@@ -639,20 +633,22 @@ export function MainLayout({ children }: MainLayoutProps) {
                   </div>
                 </div>
               </div>
-            </NexoTopbar>
+            </header>
 
-            <NexoMainContainer
+            <main
+              data-scrollbar="nexo"
               className={cn(
+                "nexo-app-content nexo-section-reveal mt-0 min-h-0 flex-1 overflow-auto px-3 pb-4 md:mt-0 md:px-4 md:pb-5",
                 isWhatsAppRoute
                   ? "mt-0 overflow-hidden px-3 pb-0 pt-0 md:mt-0 md:px-4 md:pb-0"
                   : undefined
               )}
             >
               {children}
-            </NexoMainContainer>
+            </main>
           </div>
         </div>
-      </NexoAppShell>
+      </div>
     </AppShell>
   );
 }
