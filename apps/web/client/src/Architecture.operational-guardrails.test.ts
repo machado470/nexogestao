@@ -229,7 +229,6 @@ describe("Operational page guardrails", () => {
     const allowedLegacyImports = new Set([
       "components/MainLayout.tsx",
       "components/PagePattern.tsx",
-      "components/app-system.tsx",
     ]);
 
     for (const file of sourceFiles) {

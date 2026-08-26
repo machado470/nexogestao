@@ -39,10 +39,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  NexoStatCard,
-  DataTable,
-} from "@/components/design-system";
-import {
   AlertTriangle,
   CheckCircle2,
   Lock,
@@ -145,10 +141,42 @@ export function AppSectionCard({
 }
 
 export function AppStatCard({
+  icon,
+  label,
+  value,
+  helper,
+  delta,
   className,
-  ...props
-}: ComponentProps<typeof NexoStatCard>) {
-  return <NexoStatCard className={cn("h-full", className)} {...props} />;
+}: {
+  icon?: ReactNode;
+  label: string;
+  value: ReactNode;
+  helper?: ReactNode;
+  delta?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <article className={cn("nexo-card-kpi h-full", className)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="nexo-overline">{label}</p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+            {value}
+          </p>
+
+          {helper ? (
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              {helper}
+            </p>
+          ) : null}
+        </div>
+
+        {icon ? <div className="nexo-icon-tile">{icon}</div> : null}
+      </div>
+
+      {delta ? <div className="mt-3">{delta}</div> : null}
+    </article>
+  );
 }
 
 export function AppInfoCard({
@@ -188,7 +216,13 @@ export function AppEmptyState({
 export function AppDataTable({ className, ...props }: ComponentProps<"table">) {
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]/85 bg-[var(--surface-primary)] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.45)]">
-      <DataTable className={cn("min-w-full", className)} {...props} />
+      <table
+        className={cn(
+          "w-full min-w-full nexo-data-table text-sm",
+          className
+        )}
+        {...props}
+      />
     </div>
   );
 }
