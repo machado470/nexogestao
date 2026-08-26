@@ -1,7 +1,7 @@
 import { CheckCircle2, PlayCircle, XCircle } from "lucide-react";
 
 import { AppSkeleton } from "@/components/app-system";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type WhatsAppSuggestedAction =

@@ -220,4 +220,32 @@ describe("Operational page guardrails", () => {
     }
   });
 
+
+  it("confina imports do design-system aos adaptadores estruturais legados", () => {
+    const sourceFiles = readdirSync("client/src", {
+      recursive: true,
+    }) as string[];
+
+    const allowedLegacyImports = new Set([
+      "components/MainLayout.tsx",
+      "components/PagePattern.tsx",
+      "components/app-system.tsx",
+    ]);
+
+    for (const file of sourceFiles) {
+      if (!file.endsWith(".tsx")) continue;
+
+      const source = readFileSync(
+        `client/src/${file}`,
+        "utf8"
+      );
+
+      if (!source.includes("@/components/design-system")) {
+        continue;
+      }
+
+      expect(allowedLegacyImports.has(file)).toBe(true);
+    }
+  });
+
 });
