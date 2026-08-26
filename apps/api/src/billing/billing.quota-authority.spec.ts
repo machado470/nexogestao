@@ -67,7 +67,7 @@ describe('BillingService quota authority', () => {
     expect(quotas.getQuotaLimits).toHaveBeenCalledWith('PRO')
   })
 
-  it('preserva o alias BUSINESS para SCALE antes de consultar quotas', async () => {
+  it('preserva BUSINESS como identidade canônica ao consultar quotas', async () => {
     const subscription = {
       id: 'sub-1',
       orgId: 'org-1',
@@ -81,6 +81,33 @@ describe('BillingService quota authority', () => {
 
     await service.getSubscription('org-1')
 
-    expect(quotas.getQuotaLimits).toHaveBeenCalledWith('SCALE')
+    expect(quotas.getQuotaLimits).toHaveBeenCalledWith('BUSINESS')
+  })
+})
+
+describe('BillingService canonical BUSINESS identity', () => {
+  const config = {
+    get: jest.fn(() => ''),
+  } as any
+
+  it('não converte BUSINESS para SCALE ao expor billing status', async () => {
+    const prisma = {
+      subscription: {
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'ACTIVE',
+          currentPeriodEnd: new Date('2026-09-01T00:00:00.000Z'),
+          plan: { name: 'BUSINESS' },
+        }),
+      },
+    } as any
+
+    const service = new BillingService(prisma, config, {} as any)
+
+    await expect(service.getBillingStatus('org-1')).resolves.toEqual({
+      status: 'ACTIVE',
+      plan: 'BUSINESS',
+      isActive: true,
+      currentPeriodEnd: new Date('2026-09-01T00:00:00.000Z'),
+    })
   })
 })
