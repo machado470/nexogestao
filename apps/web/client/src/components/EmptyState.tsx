@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { ReactNode } from 'react';
-import { Button } from '@/components/design-system';
+
 
 interface EmptyStateProps {
   icon: ReactNode;

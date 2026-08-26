@@ -1,6 +1,7 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, type ReactNode } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { Button } from "@/components/design-system";
+
 import { FormModal } from "@/components/app-modal-system";
 
 type Props = {

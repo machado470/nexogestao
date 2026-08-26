@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
-import { Button } from "@/components/design-system";
+
 
 type OperationalStateProps = {
   type: "loading" | "empty" | "error";

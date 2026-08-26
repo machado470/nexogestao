@@ -1,6 +1,7 @@
+import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
-import { Button } from "@/components/design-system";
+
 import { cn } from "@/lib/utils";
 
 type ActionFeedbackState = "idle" | "loading" | "success" | "error";

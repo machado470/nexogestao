@@ -1,18 +1,14 @@
+import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
-import { Bot, Sparkles, User, X } from "lucide-react";
 import {
-  Sheet,
+  Bot,
+  Sparkles,
+  User,
+  X } from "lucide-react"; import {   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { PrimaryActionButton } from "@/components/operating-system/PrimaryActionButton";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import {
-  Badge,
-  GhostButton,
-  SecondaryButton,
+  } from "@/components/ui/sheet"; import { PrimaryActionButton } from "@/components/operating-system/PrimaryActionButton"; import { Textarea } from "@/components/ui/textarea"; import { cn } from "@/lib/utils"; import {   Badge,
 } from "@/components/design-system";
 
 type ContextPanelAction = {
@@ -91,12 +87,12 @@ export function ContextPanel({
                 </div>
               ) : null}
             </div>
-            <GhostButton
+            <Button variant="ghost"
               onClick={() => onOpenChange(false)}
               className="h-9 px-2"
             >
               <X className="h-4 w-4" />
-            </GhostButton>
+            </Button>
           </div>
         </SheetHeader>
 
@@ -211,14 +207,14 @@ export function ContextPanel({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {secondaryActions.map(action => (
-                    <SecondaryButton
+                    <Button variant="secondary"
                       key={action.label}
                       onClick={action.onClick}
                       disabled={action.disabled}
                       className="h-9 px-3 text-xs"
                     >
                       {action.label}
-                    </SecondaryButton>
+                    </Button>
                   ))}
                 </div>
               </section>

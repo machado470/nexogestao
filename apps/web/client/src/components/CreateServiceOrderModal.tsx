@@ -1,7 +1,8 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/design-system";
+
 import { Loader2 } from "lucide-react";
 import { serviceOrderSchema } from "@/lib/validations";
 import { registerActionFlowEvent } from "@/lib/actionFlow";

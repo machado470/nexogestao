@@ -1,9 +1,10 @@
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2, PlusCircle, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Button } from "@/components/design-system";
+
 
 type Props = {
   open: boolean;

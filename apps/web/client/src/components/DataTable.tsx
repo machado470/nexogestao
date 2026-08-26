@@ -1,7 +1,8 @@
+import { Button } from "@/components/ui/button";
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, ChevronUp, Search } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
-import { Button } from "@/components/design-system";
+
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
