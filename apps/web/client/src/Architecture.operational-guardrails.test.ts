@@ -181,14 +181,13 @@ describe("Operational page guardrails", () => {
   });
 
 
-  it("evita NexoStatusBadge legado fora do design-system", () => {
+  it("evita NexoStatusBadge legado", () => {
     const sourceFiles = readdirSync("client/src", {
       recursive: true,
     }) as string[];
 
     for (const file of sourceFiles) {
       if (!file.endsWith(".tsx")) continue;
-      if (file === "components/design-system.tsx") continue;
 
       const source = readFileSync(`client/src/${file}`, "utf8");
 
@@ -208,8 +207,6 @@ describe("Operational page guardrails", () => {
     for (const file of componentFiles) {
       if (!file.endsWith(".tsx")) continue;
 
-      if (file === "design-system.tsx") continue;
-
       const source = readFileSync(
         `client/src/components/${file}`,
         "utf8"
@@ -220,10 +217,14 @@ describe("Operational page guardrails", () => {
   });
 
 
-  it("proíbe imports de runtime do design-system legado", () => {
+  it("proíbe retorno do design-system legado", () => {
     const sourceFiles = readdirSync("client/src", {
       recursive: true,
     }) as string[];
+
+    expect(sourceFiles).not.toContain(
+      "components/design-system.tsx"
+    );
 
     for (const file of sourceFiles) {
       if (!file.endsWith(".tsx")) continue;
