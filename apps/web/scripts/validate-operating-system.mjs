@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = process.cwd();
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const pages = [
   "client/src/pages/CustomersPage.tsx",
   "client/src/pages/AppointmentsPage.tsx",
