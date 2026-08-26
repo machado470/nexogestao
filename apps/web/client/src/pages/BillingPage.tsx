@@ -17,6 +17,11 @@ import {
   OperationalTimelineItem,
 } from "@/components/operational";
 import { trpc } from "@/lib/trpc";
+import {
+  formatPlanQuota,
+  listEnabledPlanFeatures,
+  normalizeBillingPlanCatalog,
+} from "@/lib/billing-plan-catalog";
 
 type PlanName = "FREE" | "STARTER" | "PRO" | "BUSINESS";
 type VisiblePlan = "STARTER" | "PRO" | "BUSINESS";
@@ -36,59 +41,6 @@ const PLAN_PRICE_ID: Record<PlanName, string | null> = {
   STARTER: "price_starter",
   PRO: "price_pro",
   BUSINESS: "price_business",
-};
-
-const PLAN_META: Record<
-  PlanName,
-  {
-    title: string;
-    priceCents: number;
-    periodicity: string;
-    users: string;
-    customers: string;
-    features: string[];
-  }
-> = {
-  FREE: {
-    title: "Essencial",
-    priceCents: 0,
-    periodicity: "mensal",
-    users: "1 usuário",
-    customers: "50 clientes",
-    features: ["Operação inicial", "Histórico básico"],
-  },
-  STARTER: {
-    title: "Starter",
-    priceCents: 19900,
-    periodicity: "mensal",
-    users: "3 usuários",
-    customers: "500 clientes",
-    features: ["Agenda e clientes", "Faturas da plataforma", "Suporte padrão"],
-  },
-  PRO: {
-    title: "Pro",
-    priceCents: 49900,
-    periodicity: "mensal",
-    users: "10 usuários",
-    customers: "2.000 clientes",
-    features: [
-      "Governança operacional",
-      "Timeline oficial",
-      "Automações essenciais",
-    ],
-  },
-  BUSINESS: {
-    title: "Business",
-    priceCents: 99900,
-    periodicity: "mensal",
-    users: "Ilimitados",
-    customers: "Ilimitados",
-    features: [
-      "Limites avançados",
-      "Prioridade operacional",
-      "Controles de acesso",
-    ],
-  },
 };
 
 const VISIBLE_PLANS: VisiblePlan[] = ["STARTER", "PRO", "BUSINESS"];
@@ -210,11 +162,30 @@ function formatDate(value: unknown) {
   });
 }
 
-function invoiceAmount(event: any, fallbackCents: number) {
-  const amount = Number(
-    event?.amountCents ?? event?.amount ?? event?.totalCents ?? fallbackCents
-  );
+function invoiceAmount(
+  event: any,
+  fallbackCents: number | null
+): number | null {
+  const rawAmount =
+    event?.amountCents ??
+    event?.amount ??
+    event?.totalCents ??
+    fallbackCents;
+
+  if (rawAmount === null || rawAmount === undefined || rawAmount === "") {
+    return null;
+  }
+
+  const amount = Number(rawAmount);
   return Number.isFinite(amount) ? amount : fallbackCents;
+}
+
+function formatInvoiceAmount(
+  event: any,
+  fallbackCents: number | null
+): string {
+  const amount = invoiceAmount(event, fallbackCents);
+  return amount === null ? "Valor não informado" : brl(amount);
 }
 
 function hasPaymentFailure(events: any[]) {
@@ -290,6 +261,7 @@ function invoiceTone(
 
 export default function BillingPage() {
   const [selectedPlan, setSelectedPlan] = useState<VisiblePlan | null>(null);
+  const plansQuery = trpc.billing.plans.useQuery(undefined, { retry: false });
   const statusQuery = trpc.billing.status.useQuery(undefined, { retry: false });
   const limitsQuery = trpc.billing.limits.useQuery(undefined, { retry: false });
   const readinessQuery = trpc.integrations.readiness.useQuery(undefined, {
@@ -297,10 +269,26 @@ export default function BillingPage() {
   });
   const utils = trpc.useUtils();
 
+  const planCatalog = useMemo(
+    () => normalizeBillingPlanCatalog(plansQuery.data),
+    [plansQuery.data]
+  );
+  const planByName = useMemo(
+    () => new Map(planCatalog.map(plan => [plan.name, plan])),
+    [planCatalog]
+  );
+  const visiblePlanCatalog = useMemo(
+    () =>
+      planCatalog.filter(plan =>
+        VISIBLE_PLANS.includes(plan.name as VisiblePlan)
+      ),
+    [planCatalog]
+  );
+
   const rawCurrentPlan = statusQuery.data?.plan ?? limitsQuery.data?.plan;
   const currentPlan = safePlanName(rawCurrentPlan);
   const currentVisiblePlan = visibleCurrentPlan(rawCurrentPlan);
-  const meta = PLAN_META[currentPlan];
+  const currentPlanMeta = planByName.get(currentPlan) ?? null;
   const status = accountStatus(
     statusQuery.data?.status ?? limitsQuery.data?.status
   );
@@ -310,11 +298,19 @@ export default function BillingPage() {
   const nextRenewal =
     statusQuery.data?.currentPeriodEnd ?? limitsQuery.data?.trial?.endsAt;
   const nextChargeAt = statusQuery.data?.nextBillingAt ?? nextRenewal;
-  const nextChargeValue = Number(
+  const rawNextChargeValue =
     statusQuery.data?.nextAmountCents ??
-      statusQuery.data?.amountCents ??
-      meta.priceCents
-  );
+    statusQuery.data?.amountCents ??
+    currentPlanMeta?.priceCents ??
+    null;
+
+  const parsedNextChargeValue =
+    rawNextChargeValue === null ? null : Number(rawNextChargeValue);
+
+  const nextChargeValue =
+    parsedNextChargeValue !== null && Number.isFinite(parsedNextChargeValue)
+      ? parsedNextChargeValue
+      : null;
   const rawPaymentMethod =
     statusQuery.data?.paymentMethodBrand ?? statusQuery.data?.paymentMethod;
   const hasPaymentMethod = Boolean(String(rawPaymentMethod ?? "").trim());
@@ -398,7 +394,9 @@ export default function BillingPage() {
   };
 
   const timelineEvents = useMemo(() => events.slice(0, 8), [events]);
-  const selectedPlanMeta = selectedPlan ? PLAN_META[selectedPlan] : null;
+  const selectedPlanMeta = selectedPlan
+    ? planByName.get(selectedPlan) ?? null
+    : null;
   const selectedPlanRelation = selectedPlan
     ? planRelation(selectedPlan, currentVisiblePlan)
     : null;
@@ -432,10 +430,12 @@ export default function BillingPage() {
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-[var(--text-primary)]">
-                  Plano {meta.title}
+                  Plano {currentPlanMeta?.displayName ?? currentPlan}
                 </h2>
                 <p className="text-sm text-[var(--text-secondary)]">
-                  {brl(nextChargeValue)} / {meta.periodicity}
+                  {nextChargeValue === null
+                    ? "Valor não informado"
+                    : brl(nextChargeValue)}
                 </p>
               </div>
             </div>
@@ -713,7 +713,10 @@ export default function BillingPage() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        {brl(invoiceAmount(event, meta.priceCents))}
+                        {formatInvoiceAmount(
+                          event,
+                          currentPlanMeta?.priceCents ?? null
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <AppStatusBadge
@@ -834,54 +837,71 @@ export default function BillingPage() {
               Compare limites e recursos antes de alterar sua assinatura.
             </p>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            {VISIBLE_PLANS.map(plan => {
-              const planMeta = PLAN_META[plan];
-              const relation = planRelation(plan, currentVisiblePlan);
-              return (
-                <AppSectionCard key={plan} className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-                        {planMeta.title}
-                      </h3>
-                      <p className="text-2xl font-semibold text-[var(--text-primary)]">
-                        {brl(planMeta.priceCents)}
-                      </p>
+          {plansQuery.isLoading ? (
+            <p className="text-sm text-[var(--text-secondary)]">
+              Carregando catálogo comercial...
+            </p>
+          ) : visiblePlanCatalog.length ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {visiblePlanCatalog.map(planMeta => {
+                const plan = planMeta.name as VisiblePlan;
+                const relation = planRelation(plan, currentVisiblePlan);
+                const features = listEnabledPlanFeatures(planMeta.features);
+
+                return (
+                  <AppSectionCard key={plan} className="space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                          {planMeta.displayName}
+                        </h3>
+                        <p className="text-2xl font-semibold text-[var(--text-primary)]">
+                          {brl(planMeta.priceCents)}
+                        </p>
+                      </div>
+                      <AppStatusBadge
+                        label={planBadgeLabel(relation)}
+                        tone={planRelationTone(relation)}
+                      />
                     </div>
-                    <AppStatusBadge
-                      label={planBadgeLabel(relation)}
-                      tone={planRelationTone(relation)}
-                    />
-                  </div>
-                  <div className="space-y-2 text-sm text-[var(--text-secondary)]">
-                    <p>
-                      Usuários:{" "}
-                      <strong className="text-[var(--text-primary)]">
-                        {planMeta.users}
-                      </strong>
-                    </p>
-                    <p>
-                      Clientes:{" "}
-                      <strong className="text-[var(--text-primary)]">
-                        {planMeta.customers}
-                      </strong>
-                    </p>
-                    {planMeta.features.map(feature => (
-                      <p key={feature}>• {feature}</p>
-                    ))}
-                  </div>
-                  <Button
-                    className="w-full"
-                    variant={relation === "current" ? "outline" : "default"}
-                    onClick={() => setSelectedPlan(plan)}
-                  >
-                    {planCtaLabel(relation)}
-                  </Button>
-                </AppSectionCard>
-              );
-            })}
-          </div>
+
+                    <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+                      <p>
+                        Usuários:{" "}
+                        <strong className="text-[var(--text-primary)]">
+                          {formatPlanQuota(planMeta.quotas.users)}
+                        </strong>
+                      </p>
+                      <p>
+                        Clientes:{" "}
+                        <strong className="text-[var(--text-primary)]">
+                          {formatPlanQuota(planMeta.quotas.customers)}
+                        </strong>
+                      </p>
+
+                      {features.map(feature => (
+                        <p key={feature}>• {feature}</p>
+                      ))}
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      variant={relation === "current" ? "outline" : "default"}
+                      onClick={() => setSelectedPlan(plan)}
+                    >
+                      {planCtaLabel(relation)}
+                    </Button>
+                  </AppSectionCard>
+                );
+              })}
+            </div>
+          ) : (
+            <OperationalPriorityItem
+              tone="neutral"
+              title="Catálogo comercial indisponível"
+              description="A fonte canônica de planos não retornou opções comerciais. Nenhum preço ou limite local foi usado como fallback."
+            />
+          )}
         </AppSectionCard>
 
         <BaseModal
@@ -911,24 +931,33 @@ export default function BillingPage() {
               />
               <p className="text-base font-semibold text-[var(--text-primary)]">
                 {selectedPlanRelation === "upgrade"
-                  ? `Você está prestes a fazer upgrade para o plano ${selectedPlanMeta.title}.`
+                  ? `Você está prestes a fazer upgrade para o plano ${selectedPlanMeta.displayName}.`
                   : selectedPlanRelation === "downgrade"
-                    ? `Você está prestes a fazer downgrade para o plano ${selectedPlanMeta.title}.`
+                    ? `Você está prestes a fazer downgrade para o plano ${selectedPlanMeta.displayName}.`
                     : selectedPlanRelation === "current"
                       ? "Você está revisando seu plano atual."
-                      : `Você está revisando o plano ${selectedPlanMeta.title}.`}
+                      : `Você está revisando o plano ${selectedPlanMeta.displayName}.`}
               </p>
               <p>
                 Esta ação abre o fluxo administrativo de assinatura. Nenhuma
                 cobrança ou alteração será executada automaticamente nesta tela.
               </p>
               <p className="font-medium text-[var(--text-primary)]">
-                {selectedPlanMeta.title} — {brl(selectedPlanMeta.priceCents)} /{" "}
-                {selectedPlanMeta.periodicity}
+                {selectedPlanMeta.displayName} — {brl(selectedPlanMeta.priceCents)}
               </p>
-              <p>Usuários permitidos: {selectedPlanMeta.users}</p>
-              <p>Clientes permitidos: {selectedPlanMeta.customers}</p>
-              <p>Recursos: {selectedPlanMeta.features.join(", ")}.</p>
+              <p>
+                Usuários permitidos:{" "}
+                {formatPlanQuota(selectedPlanMeta.quotas.users)}
+              </p>
+              <p>
+                Clientes permitidos:{" "}
+                {formatPlanQuota(selectedPlanMeta.quotas.customers)}
+              </p>
+              <p>
+                Recursos:{" "}
+                {listEnabledPlanFeatures(selectedPlanMeta.features).join(", ") ||
+                  "nenhum recurso adicional habilitado"}.
+              </p>
             </div>
           ) : null}
         </BaseModal>
