@@ -23,6 +23,16 @@ describe('BillingController authorization', () => {
     createCheckoutSession: jest.fn().mockResolvedValue({ sessionId: 'session' }),
     cancelSubscription: jest.fn().mockResolvedValue({ status: 'CANCELED' }),
     handleWebhook: jest.fn().mockResolvedValue({ received: true, processed: true }),
+    getPlanCatalog: jest.fn().mockResolvedValue([
+      {
+        name: 'PRO',
+        displayName: 'Pro',
+        priceCents: 19900,
+        quotas: { customers: 100, users: 10 },
+        commercialLimits: {},
+        features: { advanced_automation: true },
+      },
+    ]),
   }
 
   beforeAll(async () => {
@@ -67,5 +77,13 @@ describe('BillingController authorization', () => {
   it('mantém webhook público e delega validação de assinatura ao service', async () => {
     await request(app.getHttpServer()).post('/billing/webhook').set('stripe-signature', 'valid').send({}).expect(200)
     expect(billing.handleWebhook).toHaveBeenCalledWith(expect.any(Buffer), 'valid')
+  })
+
+  it('expõe somente o catálogo comercial público sem contexto de tenant', async () => {
+    await request(app.getHttpServer())
+      .get('/billing/plans')
+      .expect(200)
+
+    expect(billing.getPlanCatalog).toHaveBeenCalledTimes(1)
   })
 })
