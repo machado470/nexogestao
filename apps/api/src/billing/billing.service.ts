@@ -579,6 +579,29 @@ export class BillingService {
   ========================================
   */
 
+  async getPlanCatalog() {
+    const plans = await this.prisma.plan.findMany()
+
+    const planOrder: Record<string, number> = {
+      FREE: 0,
+      STARTER: 1,
+      PRO: 2,
+      BUSINESS: 3,
+    }
+
+    return plans
+      .filter(plan => plan.name in planOrder)
+      .sort((a, b) => planOrder[a.name] - planOrder[b.name])
+      .map(plan => ({
+        name: plan.name,
+        displayName: plan.displayName,
+        priceCents: plan.priceCents,
+        quotas: this.quotasService.getQuotaLimits(plan.name),
+        commercialLimits: plan.limitsJson,
+        features: plan.featuresJson,
+      }))
+  }
+
   async getBillingLimits(orgId: string) {
     return this.quotasService.getQuotaUsage(orgId)
   }

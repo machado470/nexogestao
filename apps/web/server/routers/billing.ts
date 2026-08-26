@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { nexoFetch } from "../_core/nexoClient";
 import { unwrapNexoApiResponse } from "../_core/nexoEnvelope";
 
 export const billingRouter = router({
-  plans: protectedProcedure.query(async ({ ctx }) => {
+  plans: publicProcedure.query(async ({ ctx }) => {
     const raw = await nexoFetch<any>(ctx.req, "/billing/plans", {
       method: "GET",
     });
