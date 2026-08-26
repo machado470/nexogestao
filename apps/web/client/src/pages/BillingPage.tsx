@@ -36,12 +36,6 @@ type InvoiceStatus = "PAID" | "PENDING" | "FAILED" | "REFUNDED";
 type GovernanceStatus = "NORMAL" | "WARNING" | "RESTRICTED" | "SUSPENDED";
 type PlanRelation = "current" | "upgrade" | "downgrade" | "available";
 
-const PLAN_PRICE_ID: Record<PlanName, string | null> = {
-  FREE: null,
-  STARTER: "price_starter",
-  PRO: "price_pro",
-  BUSINESS: "price_business",
-};
 
 const VISIBLE_PLANS: VisiblePlan[] = ["STARTER", "PRO", "BUSINESS"];
 
@@ -380,14 +374,18 @@ export default function BillingPage() {
   });
 
   const startCheckout = (plan: PlanName) => {
+    if (plan === "FREE") {
+      toast.error("Selecione um plano pago para iniciar o checkout.");
+      return;
+    }
+
     if (!stripeConfigured) {
       toast.error("Checkout indisponível sem Stripe configurado.");
       return;
     }
-    const priceId = PLAN_PRICE_ID[plan];
-    if (!priceId) return;
+
     checkoutMutation.mutate({
-      priceId,
+      planName: plan,
       successUrl: `${window.location.origin}/billing`,
       cancelUrl: `${window.location.origin}/billing`,
     });

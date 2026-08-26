@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Controller,
   Post,
   Get,
@@ -19,14 +18,7 @@ import { ActiveUserGuard } from '../auth/guards/active-user.guard'
 import { Roles } from '../auth/decorators/roles.decorator'
 import { Public } from '../auth/decorators/public.decorator'
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto'
-import { PlanName } from '@prisma/client'
 
-const PRICE_PLAN_MAP: Record<string, PlanName> = {
-  price_starter: 'STARTER',
-  price_pro: 'PRO',
-  price_business: 'BUSINESS',
-  price_scale: 'BUSINESS',
-}
 
 @Controller('billing')
 export class BillingController {
@@ -47,15 +39,9 @@ export class BillingController {
   ) {
     const orgId = req.user.orgId
 
-    const planName = PRICE_PLAN_MAP[dto.priceId]
-
-    if (!planName) {
-      throw new BadRequestException(`priceId desconhecido: ${dto.priceId}`)
-    }
-
     return this.billingService.createCheckoutSession(
       orgId,
-      planName,
+      dto.planName,
       dto.successUrl,
       dto.cancelUrl,
     )

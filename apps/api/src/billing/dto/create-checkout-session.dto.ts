@@ -1,8 +1,9 @@
-import { IsString, IsOptional } from 'class-validator'
+import { PlanName } from '@prisma/client'
+import { IsIn, IsOptional, IsString } from 'class-validator'
 
 export class CreateCheckoutSessionDto {
-  @IsString()
-  priceId!: string
+  @IsIn([PlanName.STARTER, PlanName.PRO, PlanName.BUSINESS])
+  planName!: PlanName
 
   @IsOptional()
   @IsString()

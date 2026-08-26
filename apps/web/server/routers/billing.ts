@@ -31,7 +31,7 @@ export const billingRouter = router({
   checkout: protectedProcedure
     .input(
       z.object({
-        priceId: z.string().min(1),
+        planName: z.enum(["STARTER", "PRO", "BUSINESS"]),
         successUrl: z.string().url().optional(),
         cancelUrl: z.string().url().optional(),
       }),
