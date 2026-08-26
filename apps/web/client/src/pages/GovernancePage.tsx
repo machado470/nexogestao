@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import { Activity, Clock3, FileCheck2, ShieldCheck } from "lucide-react";
 import {
   AppPageHeader,

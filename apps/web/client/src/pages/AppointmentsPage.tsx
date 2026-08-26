@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { trpc } from "@/lib/trpc";
 import type { OperationalSeverity } from "@/lib/operations/operational-intelligence";
 import { normalizeArrayPayload } from "@/lib/query-helpers";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import {
   EntityTimelineCard,
   OperationalFlowCard,

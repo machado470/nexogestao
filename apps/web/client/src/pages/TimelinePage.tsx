@@ -38,7 +38,7 @@ import {
   AppTimelineItem,
 } from "@/components/app-system";
 import { OperationalKpiCard, OperationalPanel } from "@/components/operational";
-import { Button } from "@/components/design-system";
+import { Button } from "@/components/ui/button";
 import {
   EntityTimelineCard,
   NextBestActionCard,
