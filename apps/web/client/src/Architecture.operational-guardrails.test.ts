@@ -209,7 +209,6 @@ describe("Operational page guardrails", () => {
       if (!file.endsWith(".tsx")) continue;
 
       if (file === "design-system.tsx") continue;
-      if (file === "PagePattern.tsx") continue;
 
       const source = readFileSync(
         `client/src/components/${file}`,
@@ -221,14 +220,10 @@ describe("Operational page guardrails", () => {
   });
 
 
-  it("confina imports do design-system aos adaptadores estruturais legados", () => {
+  it("proíbe imports de runtime do design-system legado", () => {
     const sourceFiles = readdirSync("client/src", {
       recursive: true,
     }) as string[];
-
-    const allowedLegacyImports = new Set([
-      "components/PagePattern.tsx",
-    ]);
 
     for (const file of sourceFiles) {
       if (!file.endsWith(".tsx")) continue;
@@ -238,11 +233,9 @@ describe("Operational page guardrails", () => {
         "utf8"
       );
 
-      if (!source.includes("@/components/design-system")) {
-        continue;
-      }
-
-      expect(allowedLegacyImports.has(file)).toBe(true);
+      expect(source).not.toContain(
+        "@/components/design-system"
+      );
     }
   });
 
