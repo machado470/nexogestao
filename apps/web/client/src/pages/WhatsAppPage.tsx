@@ -1016,7 +1016,7 @@ const ConversationRow = memo(function ConversationRow({
           className={cn(
             "flex size-10 shrink-0 items-center justify-center rounded-xl text-xs font-semibold uppercase",
             isSelected
-              ? "bg-[var(--accent-primary)] text-white"
+              ? "bg-[var(--accent-primary)] text-[var(--primary-foreground)]"
               : "bg-app-surface text-app-muted"
           )}
         >
