@@ -14,6 +14,7 @@ import {
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { OperationalInnerCard } from "@/components/operational";
 import { trpc } from "@/lib/trpc";
 import { useRenderWatchdog } from "@/hooks/useRenderWatchdog";
 import { presentationStatusLabel } from "@/lib/presentation-status";
@@ -727,7 +728,7 @@ function AttentionRow({
   navigate: (path: string) => void;
 }) {
   return (
-    <article className="grid w-full min-w-0 gap-2 rounded-xl border border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/35 p-2.5 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center">
+    <OperationalInnerCard className="grid w-full min-w-0 gap-2 border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/35 p-2.5 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center">
       <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--danger)]/25 bg-[var(--danger)]/8">
         <ShieldAlert className="h-4 w-4 text-[var(--danger)]" />
       </span>
@@ -762,7 +763,7 @@ function AttentionRow({
       >
         {item.ctaLabel}
       </Button>
-    </article>
+    </OperationalInnerCard>
   );
 }
 
@@ -1295,7 +1296,7 @@ export default function ExecutiveDashboard() {
             subtitle="Primeira dobra decisória: dinheiro parado, gargalo e próxima ação."
           >
             <div className="grid gap-3 md:grid-cols-3">
-              <article className="rounded-xl border border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45 p-3">
+              <OperationalInnerCard className="border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                   DINHEIRO EM RISCO
                 </p>
@@ -1305,8 +1306,8 @@ export default function ExecutiveDashboard() {
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   Valores vencidos ou serviços concluídos ainda sem cobrança.
                 </p>
-              </article>
-              <article className="rounded-xl border border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45 p-3">
+              </OperationalInnerCard>
+              <OperationalInnerCard className="border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                   GARGALO PRINCIPAL
                 </p>
@@ -1318,8 +1319,8 @@ export default function ExecutiveDashboard() {
                     ? "Ponto que trava fluxo e recebimento agora."
                     : "Nenhum bloqueio ativo retornado pela leitura atual."}
                 </p>
-              </article>
-              <article className="rounded-xl border border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45 p-3">
+              </OperationalInnerCard>
+              <OperationalInnerCard className="border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                   AÇÃO PRIORITÁRIA
                 </p>
@@ -1332,7 +1333,7 @@ export default function ExecutiveDashboard() {
                   {recommendedAction?.impact ??
                     "Sem ação prioritária real retornada."}
                 </p>
-              </article>
+              </OperationalInnerCard>
             </div>
           </AppSectionBlock>
 
@@ -1509,9 +1510,9 @@ export default function ExecutiveDashboard() {
                 <div className="max-h-[340px] w-full min-w-0 overflow-auto rounded-xl border border-[var(--border-subtle)]/70 p-2">
                   <div className="grid min-w-0 gap-2 text-xs">
                     {queue.slice(0, 10).map(item => (
-                      <article
+                      <OperationalInnerCard
                         key={`${item.type}-${item.id}`}
-                        className="grid min-w-0 gap-2 rounded-xl border border-[var(--border-subtle)]/60 bg-[var(--surface-primary)]/35 p-2.5 text-[var(--text-secondary)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                        className="grid min-w-0 gap-2 border-[var(--border-subtle)]/60 bg-[var(--surface-primary)]/35 p-2.5 text-[var(--text-secondary)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                       >
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
@@ -1563,7 +1564,7 @@ export default function ExecutiveDashboard() {
                         >
                           {item.ctaLabel}
                         </Button>
-                      </article>
+                      </OperationalInnerCard>
                     ))}
                   </div>
                 </div>
@@ -1596,7 +1597,7 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Leitura consolidada de contato, sem inbox e sem tarefas."
           >
-            <div className="rounded-xl border border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/35 p-3 text-sm text-[var(--text-secondary)]">
+            <OperationalInnerCard className="border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/35 text-sm text-[var(--text-secondary)]">
               <strong className="block text-[var(--text-primary)]">
                 Contato operacional
               </strong>
@@ -1605,7 +1606,7 @@ export default function ExecutiveDashboard() {
                 Orientação: responder somente o que destrava confirmação,
                 aprovação, falha relevante ou cliente sem retorno.
               </p>
-            </div>
+            </OperationalInnerCard>
           </AppSectionBlock>
 
           <AppSectionBlock
