@@ -840,7 +840,7 @@ export function AppSectionBlock({
   return (
     <AppSectionCard
       className={cn(
-        compact ? "min-h-0 rounded-2xl p-4" : "min-h-0 rounded-2xl p-4 md:p-5",
+        compact ? "min-h-0 md:p-4" : "min-h-0",
         className
       )}
     >

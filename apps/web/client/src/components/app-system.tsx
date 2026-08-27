@@ -102,7 +102,7 @@ export function AppToolbar({ className, ...props }: ComponentProps<"div">) {
 export const AppFiltersBar = AppToolbar;
 
 const appSectionCardVariants = cva(
-  "nexo-card-kpi rounded-2xl border p-4 md:p-5",
+  "nexo-card-kpi",
   {
     variants: {
       variant: {
