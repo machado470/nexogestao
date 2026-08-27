@@ -43,6 +43,7 @@ import {
 } from "@/lib/whatsappInboxPriority";
 import { Button } from "@/components/ui/button";
 import { AppPageShell, AppSkeleton } from "@/components/app-system";
+import { OperationalInnerCard } from "@/components/operational";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1848,7 +1849,7 @@ function OperationalContextColumn({
         </div>
       ) : (
         <div className="space-y-1.5 text-xs">
-          <section className="rounded-xl bg-app-card/20 px-3 py-3">
+          <OperationalInnerCard className="border-transparent bg-app-card/20">
             <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[var(--text-muted)]">
               Cliente
             </p>
@@ -1879,7 +1880,7 @@ function OperationalContextColumn({
             >
               Ver cliente
             </Button>
-          </section>
+          </OperationalInnerCard>
 
           <WhatsAppActionExecutionPanel
             pendingApprovals={pendingApprovals}
@@ -1898,7 +1899,7 @@ function OperationalContextColumn({
             isMutating={isExecutionMutating}
           />
 
-          <section className="rounded-xl border border-[var(--app-border)]/30 bg-app-card/20 px-3 py-3">
+          <OperationalInnerCard className="border-[var(--app-border)]/30 bg-app-card/20">
             <p className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
               Próximo agendamento
             </p>
@@ -1934,9 +1935,9 @@ function OperationalContextColumn({
             >
               Ver agendamento
             </Button>
-          </section>
+          </OperationalInnerCard>
 
-          <section className="rounded-xl border border-[var(--app-border)]/30 bg-app-card/20 px-3 py-3">
+          <OperationalInnerCard className="border-[var(--app-border)]/30 bg-app-card/20">
             <p className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
               Ordem de serviço
             </p>
@@ -1972,9 +1973,9 @@ function OperationalContextColumn({
             >
               Ver O.S.
             </Button>
-          </section>
+          </OperationalInnerCard>
 
-          <section className="rounded-xl border border-[var(--app-border)]/30 bg-app-card/20 px-3 py-3">
+          <OperationalInnerCard className="border-[var(--app-border)]/30 bg-app-card/20">
             <p className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
               Financeiro
             </p>
@@ -2014,9 +2015,9 @@ function OperationalContextColumn({
             >
               Ver cobrança
             </Button>
-          </section>
+          </OperationalInnerCard>
 
-          <section className="rounded-xl border border-[var(--app-border)]/30 bg-app-card/20 px-3 py-2.5">
+          <OperationalInnerCard className="border-[var(--app-border)]/30 bg-app-card/20 py-2.5">
             <p className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
               Timeline resumida
             </p>
@@ -2035,9 +2036,9 @@ function OperationalContextColumn({
                 Sem eventos recentes.
               </p>
             )}
-          </section>
+          </OperationalInnerCard>
 
-          <section className="rounded-xl border border-[var(--app-border)]/30 bg-app-card/20 px-3 py-3">
+          <OperationalInnerCard className="border-[var(--app-border)]/30 bg-app-card/20">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
               Próxima melhor ação
             </p>
@@ -2109,7 +2110,7 @@ function OperationalContextColumn({
                 Mais ações
               </Button>
             </div>
-          </section>
+          </OperationalInnerCard>
         </div>
       )}
     </aside>
