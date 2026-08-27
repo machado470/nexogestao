@@ -104,6 +104,26 @@ const temporaryLegacyVisualAllowlist = new Set([
   "client/src/index.css",
 ]);
 
+// Baseline auditado de tokens estruturais legítimos da fundação.
+// Novas ocorrências acima destes limites voltam a gerar warning.
+const foundationVisualTokenBaselines = {
+  "client/src/components/app-system.tsx": {
+    "rounded-2xl": 1,
+    "p-6": 1,
+    "p-8": 1,
+  },
+  "client/src/components/app-modal-system.tsx": {
+    "rounded-2xl": 1,
+  },
+  "client/src/components/internal-page-system.tsx": {
+    "p-8": 1,
+  },
+};
+
+function countTokenOccurrences(source, token) {
+  return source.split(token).length - 1;
+}
+
 const styleScopeFiles = [
   ...pages,
   "client/src/pages/ExecutiveDashboard.tsx",
@@ -291,15 +311,30 @@ for (const file of designSystemScope) {
 
 for (const file of foundationScopeFiles) {
   const source = readFileSync(join(root, file), "utf8");
+
   for (const token of suspiciousVisualTokens) {
-    if (source.includes(token)) {
-      const disposition = temporaryLegacyVisualAllowlist.has(file)
-        ? "legado permitido temporariamente"
-        : "revisar antes de novas telas";
-      warnings.push(
-        `${file}: token visual suspeito (${token}) detectado — ${disposition}.`
-      );
+    const occurrenceCount = countTokenOccurrences(source, token);
+    if (occurrenceCount === 0) continue;
+
+    const baselineCount =
+      foundationVisualTokenBaselines[file]?.[token];
+
+    if (
+      baselineCount !== undefined &&
+      occurrenceCount <= baselineCount
+    ) {
+      continue;
     }
+
+    const disposition = temporaryLegacyVisualAllowlist.has(file)
+      ? "legado permitido temporariamente"
+      : baselineCount !== undefined
+        ? `novo uso além do baseline canônico (${occurrenceCount} > ${baselineCount})`
+        : "revisar antes de novas telas";
+
+    warnings.push(
+      `${file}: token visual suspeito (${token}) detectado — ${disposition}.`
+    );
   }
 }
 
