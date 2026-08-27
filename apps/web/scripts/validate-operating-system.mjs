@@ -252,7 +252,7 @@ for (const file of styleScopeFiles) {
 
   if (
     hasDirectCardClass(source) &&
-    !/AppSectionCard|AppActionCard|OperationalInnerCard|NexoOperationalState/.test(source)
+    !/AppSectionCard|AppActionCard|OperationalInnerCard|NexoOperationalState|FormModal|BaseOperationalModal|ModalFlowShell/.test(source)
   ) {
     warnings.push(
       `${file}: possível card direto em página sem componente operacional oficial.`

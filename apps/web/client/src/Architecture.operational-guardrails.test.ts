@@ -98,12 +98,16 @@ describe("Operational page guardrails", () => {
     const modalFiles = [
       "client/src/components/CreateAppointmentModal.tsx",
       "client/src/components/CustomerWorkspaceModal.tsx",
+      "client/src/components/CreateCustomerModal.tsx",
+      "client/src/components/CreateServiceOrderModal.tsx",
     ];
 
     for (const file of modalFiles) {
       const source = readFileSync(file, "utf8");
       expect(
-        source.includes("FormModal") || source.includes("BaseOperationalModal")
+        source.includes("FormModal") ||
+          source.includes("BaseOperationalModal") ||
+          source.includes("ModalFlowShell")
       ).toBe(true);
     }
   });
