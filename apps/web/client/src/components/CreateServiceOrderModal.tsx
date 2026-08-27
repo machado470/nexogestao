@@ -21,6 +21,7 @@ import {
   AppForm,
   AppInlineHint,
   AppInput,
+  AppSectionCard,
   AppSelect,
   AppTextarea,
 } from "@/components/app-system";
@@ -372,17 +373,17 @@ export default function CreateServiceOrderModal({
       }
     >
       {createdServiceOrder ? (
-        <section className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
-          <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+        <AppSectionCard variant="success" className="space-y-3">
+          <h3 className="text-sm font-semibold text-[var(--modal-section-text)]">
             Ordem de serviço criada com sucesso
           </h3>
-          <p className="text-sm text-emerald-800 dark:text-emerald-300">
+          <p className="text-sm text-[var(--modal-section-muted)]">
             <strong>{createdServiceOrder.title}</strong> já está registrada no fluxo operacional.
           </p>
-          <p className="text-xs text-emerald-700 dark:text-emerald-400">
+          <p className="text-xs text-[var(--modal-section-muted)]">
             Você pode abrir a O.S., ir para o cliente ou criar uma nova sem sair da tela.
           </p>
-        </section>
+        </AppSectionCard>
       ) : null}
 
       {!createdServiceOrder ? (
@@ -401,9 +402,13 @@ export default function CreateServiceOrderModal({
           </section>
 
           {customers.length === 0 ? (
-            <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+            <AppSectionCard
+              variant="warning"
+              role="alert"
+              className="text-sm text-[var(--modal-section-text)]"
+            >
               Você precisa ter ao menos um cliente para criar uma O.S. Cadastre um cliente e volte aqui.
-            </section>
+            </AppSectionCard>
           ) : null}
 
           <Accordion type="multiple" defaultValue={["main", "financial"]} className="space-y-3">
