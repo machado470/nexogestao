@@ -1168,7 +1168,7 @@ export default function GovernancePage() {
                     {action.motive}
                   </span>
                 </div>
-                <span className="mt-3 w-fit rounded-full border border-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                <span className="mt-3 w-fit rounded-full border border-[var(--app-border-subtle)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   Prioridade {priorityLabel(action.priority)}
                 </span>
                 <Button
@@ -1182,7 +1182,7 @@ export default function GovernancePage() {
             ))}
           </div>
         ) : (
-          <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+          <div className="mt-3 rounded-2xl border border-[var(--app-border-subtle)] bg-[var(--app-surface-2)] p-4">
             <p className="font-semibold text-[var(--text-primary)]">
               Nenhuma intervenção urgente
             </p>
