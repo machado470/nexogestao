@@ -137,6 +137,26 @@ const forbiddenOperationalVisualPatterns = [
   "backdrop-",
   "blur-",
 ];
+function hasDirectCardClass(source) {
+  const classNamePattern =
+    /className=[{]?["'`]([^"'`]*)["'`]/g;
+
+  return Array.from(source.matchAll(classNamePattern)).some(
+    ([, className]) =>
+      className
+        .split(/\s+/)
+        .filter(Boolean)
+        .some(token => {
+          const baseToken =
+            token.split(":").at(-1) ?? token;
+
+          return /^(?:rounded-(?:xl|2xl)|p-[468])$/.test(
+            baseToken
+          );
+        })
+  );
+}
+
 const operationalVisualScopeFiles = [
   "client/src/pages/ExecutiveDashboard.tsx",
   "client/src/pages/CustomersPage.tsx",
@@ -231,7 +251,7 @@ for (const file of styleScopeFiles) {
   }
 
   if (
-    /className=[{]?['"`][^'"`]*(rounded-(?:xl|2xl)|p-[468])/.test(source) &&
+    hasDirectCardClass(source) &&
     !/AppSectionCard|AppActionCard|NexoOperationalState/.test(source)
   ) {
     warnings.push(
