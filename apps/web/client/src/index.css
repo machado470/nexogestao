@@ -1048,36 +1048,6 @@
     box-shadow: 0 10px 22px rgba(2, 6, 23, 0.16);
   }
 
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-informative {
-    border-color: color-mix(in srgb, var(--border-subtle) 88%, #ffffff);
-    background: linear-gradient(
-      180deg,
-      var(--surface-card-light),
-      var(--surface-elevated-light)
-    );
-    box-shadow: var(--modal-card-shadow-light);
-  }
-
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-modal-body .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    .nexo-card-informative,
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    section[class*="bg-[var(--surface-base)]"],
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    details[class*="bg-[var(--surface-base)]"] {
-    background: linear-gradient(
-      180deg,
-      var(--surface-card-light),
-      var(--surface-elevated-light)
-    );
-    box-shadow: var(--modal-card-shadow-light);
-  }
-
   .nexo-kpi-card::before {
     content: "";
     position: absolute;
@@ -1251,10 +1221,6 @@
 
   .nexo-data-table tbody tr {
     @apply border-t border-[var(--border-subtle)] transition-colors;
-  }
-
-  .nexo-data-table tbody tr:hover {
-    background: var(--nexo-table-row-hover);
   }
 }
 
@@ -1749,36 +1715,6 @@ html {
     border-color: var(--border-subtle);
     background: var(--card-bg);
     box-shadow: var(--nexo-shadow-elev-1);
-  }
-
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-informative {
-    border-color: color-mix(in srgb, var(--border-subtle) 88%, #ffffff);
-    background: linear-gradient(
-      180deg,
-      var(--surface-card-light),
-      var(--surface-elevated-light)
-    );
-    box-shadow: var(--modal-card-shadow-light);
-  }
-
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-modal-body .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    .nexo-card-informative,
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    section[class*="bg-[var(--surface-base)]"],
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    details[class*="bg-[var(--surface-base)]"] {
-    background: linear-gradient(
-      180deg,
-      var(--surface-card-light),
-      var(--surface-elevated-light)
-    );
-    box-shadow: var(--modal-card-shadow-light);
   }
 
   .nexo-card-kpi {
