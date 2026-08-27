@@ -100,9 +100,7 @@ const foundationScopeFiles = [
   "client/src/index.css",
 ];
 
-const temporaryLegacyVisualAllowlist = new Set([
-  "client/src/index.css",
-]);
+const temporaryLegacyVisualAllowlist = new Set();
 
 // Baseline auditado de tokens estruturais legítimos da fundação.
 // Novas ocorrências acima destes limites voltam a gerar warning.
@@ -117,6 +115,9 @@ const foundationVisualTokenBaselines = {
   },
   "client/src/components/internal-page-system.tsx": {
     "p-8": 1,
+  },
+  "client/src/index.css": {
+    "rounded-2xl": 2,
   },
 };
 
