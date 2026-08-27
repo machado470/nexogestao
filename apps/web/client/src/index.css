@@ -900,28 +900,12 @@
     }
   }
 
-  .glass-card {
-    @apply rounded-lg border border-white/20 bg-white/10 backdrop-blur-sm;
-  }
-
-  .glass-card-dark {
-    @apply rounded-lg border border-slate-700/30 bg-slate-900/20 backdrop-blur-sm;
-  }
-
   .nexo-gradient {
     @apply bg-gradient-to-br from-orange-500 via-amber-500 to-emerald-500;
   }
 
   .nexo-text-gradient {
     @apply bg-gradient-to-r from-orange-400 via-amber-300 to-white bg-clip-text text-transparent;
-  }
-
-  .architecture-card {
-    @apply relative overflow-hidden rounded-2xl border border-slate-200/50 bg-white/80 backdrop-blur-sm shadow-sm transition-all duration-300 hover:border-slate-300/80 hover:shadow-sm;
-  }
-
-  .architecture-card:hover {
-    @apply scale-[1.01];
   }
 
   .flow-line {
@@ -988,10 +972,6 @@
     backdrop-filter: blur(18px);
   }
 
-  .nexo-app-panel {
-    @apply rounded-[1.35rem] border border-[var(--border-subtle)] bg-white/80 backdrop-blur-sm shadow-sm dark:border-white/6 dark:bg-white/[0.03] dark:shadow-[0_12px_40px_rgba(0,0,0,0.35)];
-  }
-
   .nexo-app-panel-strong {
     @apply backdrop-blur-sm;
     border-radius: var(--radius-panel);
@@ -1011,8 +991,7 @@
     box-shadow: var(--nexo-shadow-soft);
   }
 
-  .nexo-surface,
-  .nexo-surface-primary {
+  .nexo-surface {
     @apply rounded-[1.2rem] border border-white/10 bg-[var(--nexo-surface-2)] shadow-[0_14px_32px_rgba(2,6,23,0.32)];
     background: linear-gradient(
       168deg,
@@ -1030,25 +1009,8 @@
     );
   }
 
-  .nexo-surface-inner {
-    @apply rounded-xl border border-white/10;
-    background: color-mix(in srgb, var(--nexo-card-muted) 56%, transparent);
-    border-color: color-mix(in srgb, var(--nexo-border-soft) 74%, transparent);
-  }
-
-  .nexo-subtle-surface {
-    @apply rounded-2xl border border-slate-200/60 bg-white/80 dark:border-white/6 dark:bg-white/[0.03];
-  }
-
   .nexo-kpi-card {
     @apply relative overflow-hidden rounded-[1.15rem] border border-white/10 bg-[var(--nexo-surface-2)] p-5 shadow-[0_14px_30px_rgba(2,6,23,0.3)] transition-all duration-300 hover:border-orange-400/30 hover:shadow-[0_18px_38px_rgba(2,6,23,0.42)];
-  }
-
-  .nexo-card-base {
-    @apply rounded-2xl border p-4 md:p-5;
-    border-color: var(--nexo-border-soft);
-    background: var(--nexo-card-surface);
-    box-shadow: var(--nexo-shadow-elev-1);
   }
 
   .nexo-card-kpi {
@@ -1079,25 +1041,6 @@
     opacity: 0.85;
   }
 
-  .nexo-card-operational {
-    @apply rounded-2xl border p-4 md:p-5;
-    background: linear-gradient(
-      170deg,
-      color-mix(
-        in srgb,
-        var(--nexo-card-surface) 92%,
-        rgba(251, 146, 60, 0.06)
-      ),
-      color-mix(in srgb, var(--nexo-card-muted) 68%, transparent)
-    );
-    border-color: color-mix(
-      in srgb,
-      var(--nexo-border-strong) 72%,
-      rgba(251, 146, 60, 0.3)
-    );
-    box-shadow: 0 16px 34px rgba(2, 6, 23, 0.28);
-  }
-
   .nexo-card-informative {
     @apply rounded-2xl border p-4 md:p-5;
     background: color-mix(in srgb, var(--nexo-card-muted) 76%, transparent);
@@ -1106,9 +1049,7 @@
   }
 
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface-primary,
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-operational,
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-informative {
     border-color: color-mix(in srgb, var(--border-subtle) 88%, #ffffff);
     background: linear-gradient(
@@ -1120,9 +1061,6 @@
   }
 
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-modal-body .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    .nexo-card-operational,
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
     .nexo-card-informative,
@@ -1138,17 +1076,6 @@
       var(--surface-elevated-light)
     );
     box-shadow: var(--modal-card-shadow-light);
-  }
-
-  .nexo-card-alert {
-    @apply rounded-2xl border p-4 md:p-5;
-    border-color: rgba(251, 146, 60, 0.55);
-    background: linear-gradient(
-      160deg,
-      rgba(251, 146, 60, 0.18),
-      rgba(251, 146, 60, 0.04)
-    );
-    box-shadow: 0 18px 34px rgba(251, 146, 60, 0.14);
   }
 
   .nexo-kpi-card::before {
@@ -1170,10 +1097,6 @@
     opacity: 1;
   }
 
-  .nexo-metric-value {
-    @apply text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white;
-  }
-
   .nexo-section-title {
     @apply text-base font-semibold tracking-tight text-zinc-950 dark:text-white;
     font-family: var(--nexo-title-font);
@@ -1181,18 +1104,6 @@
 
   .nexo-section-description {
     @apply text-sm text-[var(--text-muted)] dark:text-[var(--text-muted)];
-  }
-
-  .nexo-list-row {
-    @apply flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-white/70 px-3 py-3 text-sm transition-colors hover:bg-white dark:border-white/8 dark:bg-white/[0.03] dark:hover:bg-white/[0.05];
-  }
-
-  .nexo-list-row-high {
-    @apply border-amber-300/70 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10;
-  }
-
-  .nexo-list-row-critical {
-    @apply min-h-20 border-red-300/70 bg-red-50/90 shadow-[0_8px_25px_rgba(239,68,68,0.15)] dark:border-red-500/30 dark:bg-red-500/12;
   }
 
   .nexo-cta-primary {
@@ -1232,18 +1143,6 @@
       transparent
     );
   }
-
-  .nexo-zone-title {
-    @apply text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)] dark:text-[var(--text-muted)];
-  }
-
-  .nexo-cta-dominant {
-    @apply inline-flex items-center justify-center rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70;
-    letter-spacing: 0.01em;
-    box-shadow:
-      0 14px 34px rgba(249, 115, 22, 0.42),
-      inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  }
   .nexo-skeleton {
     @apply relative overflow-hidden bg-zinc-200/75 dark:bg-zinc-700/55;
   }
@@ -1260,10 +1159,6 @@
       transparent 100%
     );
     animation: nexo-shimmer 1.4s ease-in-out infinite;
-  }
-
-  .nexo-skeleton-panel {
-    @apply rounded-2xl border border-[var(--border-subtle)] bg-white/85 p-4 dark:border-white/8 dark:bg-white/[0.03];
   }
 
   .nexo-fade-in {
@@ -1321,13 +1216,6 @@
 
   .nexo-topbar-grid {
     @apply grid w-full grid-cols-1 gap-3 px-4 py-3 md:px-5 md:py-3.5;
-  }
-
-  .nexo-topbar-meta {
-    @apply rounded-2xl border px-3 py-2;
-    border-color: color-mix(in srgb, var(--nexo-border-soft) 80%, transparent);
-    background: color-mix(in srgb, var(--nexo-card-surface) 86%, transparent);
-    box-shadow: var(--nexo-shadow-elev-1);
   }
 
   .nexo-primary-dock {
@@ -1441,9 +1329,7 @@
   }
 
   .nexo-page-header,
-  .nexo-card-base,
   .nexo-card-informative,
-  .nexo-card-operational,
   .nexo-card-kpi,
   .nexo-surface,
   .nexo-surface-operational {
@@ -1457,16 +1343,14 @@
     box-shadow: 0 8px 22px rgba(2, 6, 23, 0.22);
   }
 
-  .nexo-cta-primary,
-  .nexo-cta-dominant {
+  .nexo-cta-primary {
     background: var(--accent-primary);
     color: #fff;
     border-radius: 12px;
     box-shadow: 0 8px 18px rgba(232, 130, 58, 0.26);
   }
 
-  .nexo-cta-primary:hover,
-  .nexo-cta-dominant:hover {
+  .nexo-cta-primary:hover {
     background: var(--accent-primary-hover);
     box-shadow: 0 10px 20px rgba(240, 154, 90, 0.3);
   }
@@ -1854,15 +1738,11 @@ html {
     box-shadow: 0 0 0 3px var(--nexo-focus-ring);
   }
 
-  .nexo-topbar-meta,
   .nexo-app-content,
   .nexo-surface,
   .nexo-page-header,
-  .nexo-card-base,
   .nexo-card-kpi,
-  .nexo-card-operational,
   .nexo-card-informative,
-  .nexo-card-alert,
   .nexo-surface-operational,
   .nexo-data-table,
   .nexo-floating-panel {
@@ -1872,9 +1752,7 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface-primary,
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-operational,
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-informative {
     border-color: color-mix(in srgb, var(--border-subtle) 88%, #ffffff);
     background: linear-gradient(
@@ -1886,9 +1764,6 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-modal-body .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    .nexo-card-operational,
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
     .nexo-card-informative,
@@ -1906,12 +1781,7 @@ html {
     box-shadow: var(--modal-card-shadow-light);
   }
 
-  .nexo-card-alert {
-    background: color-mix(in srgb, var(--danger) 10%, var(--card-bg));
-  }
-
-  .nexo-card-kpi,
-  .nexo-card-operational {
+  .nexo-card-kpi {
     background: color-mix(in srgb, var(--accent-soft) 44%, var(--card-bg));
   }
 
@@ -1945,8 +1815,7 @@ html {
     animation: nexo-panel-exit var(--motion-fast) var(--motion-ease-exit);
   }
 
-  .nexo-cta-primary,
-  .nexo-cta-dominant {
+  .nexo-cta-primary {
     @apply inline-flex items-center justify-center rounded-[var(--radius-control)] px-5 py-3 text-sm font-semibold;
     background: var(--accent);
     color: var(--primary-foreground);
@@ -1958,28 +1827,24 @@ html {
       opacity var(--motion-fast) var(--motion-ease-standard);
   }
 
-  .nexo-cta-primary:hover,
-  .nexo-cta-dominant:hover {
+  .nexo-cta-primary:hover {
     background: var(--accent-hover);
     transform: translateY(var(--motion-float-y));
     box-shadow: 0 16px 32px color-mix(in srgb, var(--accent) 34%, transparent);
   }
 
-  .nexo-cta-primary:active,
-  .nexo-cta-dominant:active {
+  .nexo-cta-primary:active {
     transform: scale(var(--motion-press-scale));
   }
 
-  .nexo-cta-primary:focus-visible,
-  .nexo-cta-dominant:focus-visible {
+  .nexo-cta-primary:focus-visible {
     outline: none;
     box-shadow:
       0 0 0 3px var(--nexo-focus-ring),
       0 12px 28px color-mix(in srgb, var(--accent) 28%, transparent);
   }
 
-  .nexo-cta-primary:disabled,
-  .nexo-cta-dominant:disabled {
+  .nexo-cta-primary:disabled {
     opacity: 0.55;
     transform: none;
     box-shadow: none;
@@ -1998,14 +1863,12 @@ html {
   }
 
   .nexo-page-header-title,
-  .nexo-metric-value,
   .nexo-section-title {
     color: var(--text-primary);
   }
 
   .nexo-page-header-description,
-  .nexo-section-description,
-  .nexo-zone-title {
+  .nexo-section-description {
     color: var(--text-secondary);
   }
 }
@@ -2132,13 +1995,6 @@ html {
     align-items: center;
   }
 
-  .nexo-topbar-meta {
-    border: 1px solid var(--border-soft);
-    background: transparent;
-    box-shadow: none;
-    border-radius: 12px;
-  }
-
   .nexo-app-content {
     border: 0;
     border-radius: 0;
@@ -2166,11 +2022,8 @@ html {
     max-width: 100%;
   }
 
-  .nexo-surface-primary,
   .nexo-page-header,
-  .nexo-card-base,
   .nexo-card-kpi,
-  .nexo-card-operational,
   .nexo-card-informative,
   .nexo-data-table,
   .nexo-floating-panel,
@@ -2178,13 +2031,6 @@ html {
     border-radius: var(--radius-surface);
     border: 1px solid var(--border-soft);
     background: var(--bg-surface);
-    box-shadow: none;
-  }
-
-  .nexo-surface-inner {
-    border-radius: 12px;
-    border: 1px solid var(--border-soft);
-    background: var(--surface-contrast);
     box-shadow: none;
   }
 
@@ -2232,8 +2078,7 @@ html {
     backdrop-filter: blur(10px);
   }
 
-  .nexo-cta-primary,
-  .nexo-cta-dominant {
+  .nexo-cta-primary {
     border-radius: 12px;
     min-height: 36px;
     padding-inline: 0.9rem;
@@ -2242,8 +2087,7 @@ html {
     box-shadow: none;
   }
 
-  .nexo-cta-primary:hover,
-  .nexo-cta-dominant:hover {
+  .nexo-cta-primary:hover {
     background: var(--accent-primary-hover);
     transform: none;
     box-shadow: none;
@@ -2404,14 +2248,11 @@ html {
   }
 
   .nexo-page-header,
-  .nexo-card-base,
   .nexo-card-panel,
   .nexo-card-kpi,
-  .nexo-card-alert,
   .nexo-card-priority,
   .nexo-card-timeline,
   .nexo-surface,
-  .nexo-surface-primary,
   .nexo-surface-operational {
     border-radius: var(--nexo-radius-card);
     border: 1px solid var(--nexo-border-soft);
@@ -2423,13 +2264,11 @@ html {
       box-shadow 160ms ease;
   }
 
-  .nexo-card-base:hover,
   .nexo-card-panel:hover,
   .nexo-card-kpi:hover,
   .nexo-card-priority:hover,
   .nexo-card-timeline:hover,
-  .nexo-surface:hover,
-  .nexo-surface-primary:hover {
+  .nexo-surface:hover {
     border-color: color-mix(
       in srgb,
       var(--accent-primary) 24%,
@@ -2516,9 +2355,7 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-surface-primary,
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-operational,
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-card-informative {
     border-color: color-mix(in srgb, var(--border-subtle) 88%, #ffffff);
     background: linear-gradient(
@@ -2530,9 +2367,6 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"]) .nexo-modal-body .nexo-card-kpi,
-  .app-root:not(.dark):not([data-theme="dark"])
-    .nexo-modal-body
-    .nexo-card-operational,
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
     .nexo-card-informative,
@@ -2548,16 +2382,6 @@ html {
       var(--surface-elevated-light)
     );
     box-shadow: var(--modal-card-shadow-light);
-  }
-
-  .nexo-card-alert {
-    border-left: 2px solid
-      color-mix(in srgb, var(--accent-primary) 60%, transparent);
-    background: linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--accent-primary) 10%, #111d2e),
-      #152036
-    );
   }
 
   .nexo-page-header {
@@ -2796,14 +2620,10 @@ html {
 }
 
 @layer components {
-  .app-root .nexo-card-base,
   .app-root .nexo-card-kpi,
-  .app-root .nexo-card-operational,
   .app-root .nexo-card-informative,
-  .app-root .nexo-card-alert,
   .app-root .nexo-kpi-card,
   .app-root .nexo-surface,
-  .app-root .nexo-surface-primary,
   .app-root .nexo-surface-operational,
   .app-root .nexo-page-header {
     border: 1px solid var(--nexo-border-soft);
@@ -2811,24 +2631,16 @@ html {
     box-shadow: var(--nexo-depth-subtle);
   }
 
-  .app-root.dark .nexo-card-base,
   .app-root.dark .nexo-card-kpi,
-  .app-root.dark .nexo-card-operational,
   .app-root.dark .nexo-card-informative,
-  .app-root.dark .nexo-card-alert,
   .app-root.dark .nexo-kpi-card,
   .app-root.dark .nexo-surface,
-  .app-root.dark .nexo-surface-primary,
   .app-root.dark .nexo-surface-operational,
   .app-root.dark .nexo-page-header,
-  .app-root[data-theme="dark"] .nexo-card-base,
   .app-root[data-theme="dark"] .nexo-card-kpi,
-  .app-root[data-theme="dark"] .nexo-card-operational,
   .app-root[data-theme="dark"] .nexo-card-informative,
-  .app-root[data-theme="dark"] .nexo-card-alert,
   .app-root[data-theme="dark"] .nexo-kpi-card,
   .app-root[data-theme="dark"] .nexo-surface,
-  .app-root[data-theme="dark"] .nexo-surface-primary,
   .app-root[data-theme="dark"] .nexo-surface-operational,
   .app-root[data-theme="dark"] .nexo-page-header {
     border-color: color-mix(in srgb, #93a6cf 22%, transparent);
@@ -2842,14 +2654,10 @@ html {
       0 16px 34px rgba(2, 6, 23, 0.36);
   }
 
-  .app-root .nexo-card-base:hover,
   .app-root .nexo-card-kpi:hover,
-  .app-root .nexo-card-operational:hover,
   .app-root .nexo-card-informative:hover,
-  .app-root .nexo-card-alert:hover,
   .app-root .nexo-kpi-card:hover,
-  .app-root .nexo-surface:hover,
-  .app-root .nexo-surface-primary:hover {
+  .app-root .nexo-surface:hover {
     transform: translateY(-1px);
     border-color: color-mix(
       in srgb,
@@ -2859,22 +2667,14 @@ html {
     box-shadow: var(--nexo-depth-hover);
   }
 
-  .app-root.dark .nexo-card-base:hover,
   .app-root.dark .nexo-card-kpi:hover,
-  .app-root.dark .nexo-card-operational:hover,
   .app-root.dark .nexo-card-informative:hover,
-  .app-root.dark .nexo-card-alert:hover,
   .app-root.dark .nexo-kpi-card:hover,
   .app-root.dark .nexo-surface:hover,
-  .app-root.dark .nexo-surface-primary:hover,
-  .app-root[data-theme="dark"] .nexo-card-base:hover,
   .app-root[data-theme="dark"] .nexo-card-kpi:hover,
-  .app-root[data-theme="dark"] .nexo-card-operational:hover,
   .app-root[data-theme="dark"] .nexo-card-informative:hover,
-  .app-root[data-theme="dark"] .nexo-card-alert:hover,
   .app-root[data-theme="dark"] .nexo-kpi-card:hover,
-  .app-root[data-theme="dark"] .nexo-surface:hover,
-  .app-root[data-theme="dark"] .nexo-surface-primary:hover {
+  .app-root[data-theme="dark"] .nexo-surface:hover {
     border-color: color-mix(in srgb, #a9badf 30%, transparent);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
@@ -2948,14 +2748,10 @@ html {
     backdrop-filter: blur(10px);
   }
 
-  .app-root .nexo-card-base,
   .app-root .nexo-card-kpi,
-  .app-root .nexo-card-operational,
   .app-root .nexo-card-informative,
-  .app-root .nexo-card-alert,
   .app-root .nexo-kpi-card,
-  .app-root .nexo-surface,
-  .app-root .nexo-surface-primary {
+  .app-root .nexo-surface {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-soft);
@@ -2971,20 +2767,12 @@ html {
   }
 
   .app-root
-    :where(
-      input:not([type="checkbox"]):not([type="radio"]),
-      select,
-      textarea
-    )::placeholder {
+    :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea)::placeholder {
     color: var(--text-muted);
   }
 
   .app-root
-    :where(
-      input:not([type="checkbox"]):not([type="radio"]),
-      select,
-      textarea
-    ):focus-visible {
+    :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus-visible {
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px
       color-mix(in srgb, var(--accent-primary) 24%, transparent);
@@ -3043,7 +2831,6 @@ html {
 
   .app-root:not(.dark) .nexo-topbar,
   .app-root:not(.dark) .nexo-topbar-control,
-  .app-root:not(.dark) .nexo-subtle-surface,
   .app-root:not(.dark) .nexo-info-banner,
   .app-root:not(.dark) .nexo-empty-state,
   .app-root:not(.dark) .nexo-alert-card {
@@ -3096,8 +2883,7 @@ html {
   }
 
   .app-root .nexo-cta-primary,
-  .app-root .nexo-cta-secondary,
-  .app-root .nexo-cta-dominant {
+  .app-root .nexo-cta-secondary {
     transition:
       background-color 180ms ease,
       border-color 180ms ease,
@@ -3107,8 +2893,7 @@ html {
   }
 
   .app-root .nexo-cta-primary:active,
-  .app-root .nexo-cta-secondary:active,
-  .app-root .nexo-cta-dominant:active {
+  .app-root .nexo-cta-secondary:active {
     transform: translateY(1px) scale(0.995);
     box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.08);
   }
@@ -3472,14 +3257,10 @@ html {
   }
 
   .app-root .nexo-surface,
-  .app-root .nexo-surface-primary,
   .app-root .nexo-surface-operational,
   .app-root .nexo-page-header,
-  .app-root .nexo-card-base,
   .app-root .nexo-card-kpi,
-  .app-root .nexo-card-operational,
   .app-root .nexo-card-informative,
-  .app-root .nexo-card-alert,
   .app-root .nexo-card-panel,
   .app-root .nexo-card-priority,
   .app-root .nexo-card-timeline,
@@ -3635,11 +3416,6 @@ html {
     align-items: center;
     gap: 0.5rem;
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .app-root .nexo-topbar-meta {
-    padding: 0.4rem 0.6rem;
-    border-radius: 10px;
   }
 
   .app-root .nexo-topbar-search-slot {
@@ -4008,26 +3784,13 @@ html {
 
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
-    :where(
-      .nexo-card-base,
-      .nexo-card-kpi,
-      .nexo-card-operational,
-      .nexo-card-informative,
-      .nexo-surface,
-      .nexo-surface-primary,
-      .nexo-surface-operational
-    ),
+    :where(.nexo-card-kpi, .nexo-card-informative, .nexo-surface, .nexo-surface-operational),
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
     :where(section, article, details, div)[class*="bg-[var(--surface-base)]"],
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
-    :where(
-      section,
-      article,
-      details,
-      div
-    )[class*="bg-[var(--surface-elevated)]"] {
+    :where(section, article, details, div)[class*="bg-[var(--surface-elevated)]"] {
     background: linear-gradient(
       180deg,
       var(--surface-operational-raised-light),
@@ -4039,7 +3802,7 @@ html {
 
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
-    :where(.nexo-card-kpi, .nexo-card-operational, .nexo-surface-operational) {
+    :where(.nexo-card-kpi, .nexo-surface-operational) {
     background: linear-gradient(
       170deg,
       var(--surface-operational-raised-light),
@@ -4052,11 +3815,7 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"])
-    :where(
-      input:not([type="checkbox"]):not([type="radio"]),
-      textarea,
-      [data-slot="select-trigger"]
-    ) {
+    :where(input:not([type="checkbox"]):not([type="radio"]), textarea, [data-slot="select-trigger"]) {
     background: var(--surface-input);
     border-color: color-mix(in srgb, var(--border-subtle) 90%, #ffffff);
     color: var(--text-primary);
@@ -4067,11 +3826,7 @@ html {
 
   .app-root:not(.dark):not([data-theme="dark"])
     .nexo-modal-body
-    :where(
-      input:not([type="checkbox"]):not([type="radio"]),
-      textarea,
-      [data-slot="select-trigger"]
-    ) {
+    :where(input:not([type="checkbox"]):not([type="radio"]), textarea, [data-slot="select-trigger"]) {
     background: color-mix(
       in srgb,
       var(--surface-input-light) 88%,
@@ -4080,10 +3835,7 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"])
-    :where(
-      input:not([type="checkbox"]):not([type="radio"]),
-      textarea
-    )::placeholder,
+    :where(input:not([type="checkbox"]):not([type="radio"]), textarea)::placeholder,
   .app-root:not(.dark):not([data-theme="dark"]) [data-placeholder],
   .app-root:not(.dark):not([data-theme="dark"])
     [data-slot="select-trigger"][data-placeholder] {
@@ -4092,12 +3844,7 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"])
-    :where(
-      .nexo-section-description,
-      .nexo-page-header-description,
-      .nexo-zone-title,
-      .text-\[var\(--text-muted\)\]
-    ) {
+    :where(.nexo-section-description, .nexo-page-header-description, .text-\[var\(--text-muted\)\]) {
     color: var(--text-muted);
   }
 
@@ -4122,35 +3869,18 @@ html {
   }
 
   .app-root:not(.dark):not([data-theme="dark"])
-    :where(
-      [data-slot="dropdown-menu-item"],
-      [data-slot="dropdown-menu-checkbox-item"],
-      [data-slot="dropdown-menu-radio-item"],
-      [data-slot="dropdown-menu-sub-trigger"],
-      [data-slot="select-item"],
-      [data-slot="command-item"]
-    ) {
+    :where([data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-checkbox-item"], [data-slot="dropdown-menu-radio-item"], [data-slot="dropdown-menu-sub-trigger"], [data-slot="select-item"], [data-slot="command-item"]) {
     color: var(--text-secondary);
   }
 
   .app-root:not(.dark):not([data-theme="dark"])
-    :where(
-      [data-slot="dropdown-menu-item"],
-      [data-slot="dropdown-menu-checkbox-item"],
-      [data-slot="dropdown-menu-radio-item"],
-      [data-slot="dropdown-menu-sub-trigger"],
-      [data-slot="select-item"],
-      [data-slot="command-item"]
-    ):is(:hover, :focus, [data-highlighted], [data-selected="true"]) {
+    :where([data-slot="dropdown-menu-item"], [data-slot="dropdown-menu-checkbox-item"], [data-slot="dropdown-menu-radio-item"], [data-slot="dropdown-menu-sub-trigger"], [data-slot="select-item"], [data-slot="command-item"]):is(:hover, :focus, [data-highlighted], [data-selected="true"]) {
     background: var(--accent-soft);
     color: var(--text-primary);
   }
 
   .app-root:not(.dark):not([data-theme="dark"])
-    :where(
-      [data-slot="dropdown-menu-label"],
-      [data-slot="command-group"] [cmdk-group-heading]
-    ) {
+    :where([data-slot="dropdown-menu-label"], [data-slot="command-group"] [cmdk-group-heading]) {
     color: var(--text-muted);
   }
 }
