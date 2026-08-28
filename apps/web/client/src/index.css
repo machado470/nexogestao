@@ -1201,10 +1201,6 @@
   .nexo-topbar {
     position: sticky;
     top: 0;
-    background: color-mix(in srgb, var(--bg-header) 92%, #000 8%);
-    border-bottom: 1px solid var(--border-soft);
-    box-shadow: 0 8px 22px rgba(2, 6, 23, 0.24);
-    backdrop-filter: blur(10px);
   }
 
   .nexo-sidebar-item:hover {
@@ -1214,10 +1210,6 @@
   }
 
   .nexo-sidebar-item-active {
-    color: #ffd9bd;
-    border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
-    background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
-    box-shadow: none;
     ring: 0;
   }
 
@@ -1228,12 +1220,7 @@
   }
 
   .nexo-topbar-control {
-    border: 1px solid var(--border-soft);
-    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
-    color: var(--text-secondary);
-    border-radius: 12px;
     height: 38px;
-    transition: all 0.16s ease;
   }
 
   .nexo-topbar-control:hover {
@@ -1773,7 +1760,6 @@ html {
 
 @layer components {
   .nexo-app-shell {
-    background: var(--bg-app);
     color: var(--text-primary);
     font-family: var(--nexo-body-font);
     width: 100%;
@@ -1783,18 +1769,12 @@ html {
 
   .nexo-sidebar-item {
     position: relative;
-    border-radius: 12px;
-    min-height: 42px;
     width: 100%;
     display: flex;
     align-items: center;
     gap: 0.625rem;
     padding: 0 0.75rem;
     color: var(--text-secondary);
-    transition:
-      background-color 0.18s ease,
-      color 0.18s ease,
-      border-color 0.18s ease;
   }
 
   .nexo-sidebar-item:hover {
@@ -1815,10 +1795,7 @@ html {
   }
 
   .nexo-topbar {
-    border-bottom: 1px solid var(--border-soft);
-    background: color-mix(in srgb, var(--bg-header) 96%, transparent);
     box-shadow: none;
-    backdrop-filter: blur(10px);
     min-height: 72px;
     display: flex;
     align-items: center;
