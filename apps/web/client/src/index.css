@@ -1209,10 +1209,6 @@
     border-color: var(--border-soft);
   }
 
-  .nexo-sidebar-item-active {
-    ring: 0;
-  }
-
   .nexo-info-banner {
     border: 1px solid color-mix(in srgb, var(--info) 45%, var(--border-soft));
     background: color-mix(in srgb, var(--info) 12%, var(--bg-surface));
