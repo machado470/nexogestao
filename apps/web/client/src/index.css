@@ -916,34 +916,6 @@
     @apply stroke-orange-400 stroke-2 opacity-60;
   }
 
-  .nexo-app-shell {
-    @apply min-h-screen;
-    background:
-      radial-gradient(
-        circle at 15% -10%,
-        rgba(249, 115, 22, 0.1),
-        transparent 34%
-      ),
-      radial-gradient(
-        circle at 90% -20%,
-        rgba(124, 58, 237, 0.08),
-        transparent 38%
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--nexo-page-surface) 86%, transparent),
-        var(--nexo-app-bg)
-      );
-  }
-
-  .nexo-sidebar-item {
-    @apply flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-2.5 text-left text-[var(--text-secondary)] transition-all duration-200;
-  }
-
-  .nexo-sidebar-item-active {
-    @apply border-orange-400/35 bg-orange-500/14 text-orange-200 ring-1 ring-orange-400/25;
-  }
-
   .nexo-topbar-control {
     @apply inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-contrast)] px-3 text-sm text-[var(--text-primary)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--bg-surface-hover)];
   }
