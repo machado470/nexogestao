@@ -936,29 +936,12 @@
       );
   }
 
-  .nexo-sidebar {
-    background: linear-gradient(180deg, #090d16 0%, #0b111d 56%, #090f1a 100%);
-    border-right: 1px solid rgba(148, 163, 184, 0.2);
-    box-shadow: 18px 0 36px rgba(2, 6, 23, 0.45);
-  }
-
   .nexo-sidebar-item {
     @apply flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-2.5 text-left text-[var(--text-secondary)] transition-all duration-200;
   }
 
   .nexo-sidebar-item-active {
     @apply border-orange-400/35 bg-orange-500/14 text-orange-200 ring-1 ring-orange-400/25;
-  }
-
-  .nexo-topbar {
-    border-bottom: 1px solid var(--nexo-border-strong);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--nexo-surface-2) 96%, transparent),
-      color-mix(in srgb, var(--nexo-surface-2) 82%, transparent)
-    );
-    box-shadow: 0 10px 28px rgba(2, 6, 23, 0.18);
-    backdrop-filter: blur(18px);
   }
 
   .nexo-topbar-control {
@@ -978,17 +961,6 @@
     border: 1px solid var(--nexo-border-soft);
     background: var(--nexo-surface-1);
     box-shadow: var(--nexo-shadow-panel);
-  }
-
-  .nexo-app-content {
-    border-radius: var(--radius-panel);
-    border: 1px solid var(--nexo-border-soft);
-    background: color-mix(
-      in srgb,
-      var(--nexo-section-surface) 88%,
-      #05080f 12%
-    );
-    box-shadow: var(--nexo-shadow-soft);
   }
 
   .nexo-surface {
@@ -1225,16 +1197,6 @@
 }
 
 @layer components {
-  .nexo-app-shell {
-    background: linear-gradient(180deg, #0a1628 0%, #080c18 100%);
-    color: var(--text-primary);
-  }
-
-  .nexo-sidebar {
-    background: linear-gradient(180deg, #0f172b 0%, #0b1122 100%);
-    border-right: 1px solid var(--border-soft);
-    box-shadow: 10px 0 28px rgba(2, 6, 23, 0.3);
-  }
 
   .nexo-topbar {
     position: sticky;
@@ -1243,20 +1205,6 @@
     border-bottom: 1px solid var(--border-soft);
     box-shadow: 0 8px 22px rgba(2, 6, 23, 0.24);
     backdrop-filter: blur(10px);
-  }
-
-  .nexo-app-content {
-    border: 1px solid var(--border-soft);
-    background: color-mix(in srgb, var(--bg-app) 72%, var(--bg-surface) 28%);
-    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.22);
-    scrollbar-gutter: stable both-edges;
-  }
-
-  .nexo-sidebar-item {
-    color: var(--text-secondary);
-    border-radius: 14px;
-    border: 1px solid transparent;
-    transition: all 0.18s ease;
   }
 
   .nexo-sidebar-item:hover {
@@ -1622,19 +1570,6 @@ html {
 }
 
 @layer components {
-  .nexo-app-shell {
-    background: linear-gradient(
-      180deg,
-      var(--background-base),
-      color-mix(in srgb, var(--background-base) 92%, black)
-    );
-  }
-
-  .nexo-sidebar {
-    background: var(--sidebar-bg);
-    border-right: 1px solid var(--border-subtle);
-    box-shadow: 12px 0 30px rgba(15, 23, 42, 0.14);
-  }
 
   .nexo-sidebar-item {
     @apply flex w-full items-center gap-2.5 rounded-[var(--radius-control)] border border-transparent px-3 py-2.5 text-left text-sm;
@@ -1660,20 +1595,6 @@ html {
   .nexo-sidebar-item:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px var(--nexo-focus-ring);
-  }
-
-  .nexo-sidebar-item-active {
-    border-color: color-mix(in srgb, var(--accent) 36%, transparent);
-    background: var(--accent-soft);
-    color: var(--accent);
-    box-shadow: inset 0 0 0 1px
-      color-mix(in srgb, var(--accent) 20%, transparent);
-  }
-
-  .nexo-topbar {
-    border-bottom: 1px solid var(--border-subtle);
-    background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
-    backdrop-filter: blur(12px);
   }
 
   .nexo-topbar-control {
@@ -1860,12 +1781,6 @@ html {
     overflow: visible;
   }
 
-  .nexo-sidebar {
-    background: var(--bg-sidebar);
-    border-right: 1px solid var(--border-soft);
-    box-shadow: none;
-  }
-
   .nexo-sidebar-item {
     position: relative;
     border-radius: 12px;
@@ -1886,13 +1801,6 @@ html {
     background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
     color: var(--text-primary);
     transform: none;
-  }
-
-  .nexo-sidebar-item-active {
-    color: var(--text-primary);
-    background: color-mix(in srgb, var(--accent-soft) 80%, var(--bg-surface));
-    border-color: var(--border-soft);
-    box-shadow: none;
   }
 
   .nexo-sidebar-item-active::before {
