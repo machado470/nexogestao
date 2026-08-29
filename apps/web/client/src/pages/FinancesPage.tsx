@@ -52,6 +52,8 @@ import type { OperationalSeverity } from "@/lib/operations/operational-intellige
 
 type ChargeRecord = Record<string, any>;
 type StatusFilter = "all" | "pending" | "overdue" | "paid" | "canceled";
+type PeriodFilter = "all" | "overdue" | "next7" | "next30" | "noDueDate";
+type PriorityFilter = "all" | AppPriorityLevel;
 
 type PaymentMethod = "PIX" | "CASH" | "CARD" | "TRANSFER" | "OTHER";
 
@@ -163,6 +165,14 @@ function getHumanPriorityLabel(priority: AppPriorityLevel) {
   if (priority === "P1") return "Atenção";
   if (priority === "P2") return "Acompanhar";
   return "Informativo";
+}
+
+function financialRiskLabel(value: unknown) {
+  const risk = normalizeStatus(value);
+  if (risk === "SUSPENDED") return "Crítico";
+  if (risk === "RESTRICTED") return "Risco alto";
+  if (risk === "WARNING") return "Atenção";
+  return "Monitorado";
 }
 
 function chargeStatusLabel(status: string) {
@@ -447,6 +457,9 @@ export default function FinancesPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
+  const [customerFilter, setCustomerFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
   const _operationalSeverityContract: OperationalSeverity = "healthy";
@@ -473,6 +486,8 @@ export default function FinancesPage() {
       customerId: params.get("customerId") ?? "",
       serviceOrderId: params.get("serviceOrderId") ?? "",
       chargeId: params.get("chargeId") ?? "",
+      paymentId: params.get("paymentId") ?? "",
+      requestedStatus: params.get("status") ?? params.get("filter") ?? "",
     };
   }, [location]);
 
@@ -480,9 +495,14 @@ export default function FinancesPage() {
     { page: 1, limit: 500 },
     { retry: false }
   );
+  const statsQuery = trpc.finance.charges.stats.useQuery({}, { retry: false });
   const operationalQueueQuery = trpc.finance.operationalQueue.useQuery(
     { limit: 50 },
     { retry: false }
+  );
+  const linkedPaymentQuery = trpc.finance.payments.getById.useQuery(
+    { id: queryParams.paymentId },
+    { enabled: Boolean(queryParams.paymentId), retry: false }
   );
   const customersQuery = trpc.nexo.customers.list.useQuery(
     { page: 1, limit: 500 },
@@ -524,11 +544,18 @@ export default function FinancesPage() {
     [serviceOrders]
   );
 
-  const allQueriesLoading =
-    chargesQuery.isLoading ||
-    customersQuery.isLoading ||
-    serviceOrdersQuery.isLoading;
-  const allQueriesErrored = Boolean(chargesQuery.error && charges.length === 0);
+  // A carteira é a fonte principal. Falhas auxiliares enriquecem menos a tela,
+  // mas nunca podem esconder cobranças que já foram carregadas.
+  const portfolioLoading = chargesQuery.isLoading;
+  const portfolioUnavailable = Boolean(
+    chargesQuery.error && charges.length === 0
+  );
+  const auxiliaryFailures = [
+    customersQuery.error ? "clientes" : null,
+    serviceOrdersQuery.error ? "O.S." : null,
+    statsQuery.error ? "resumo de indicadores" : null,
+    linkedPaymentQuery.error ? "pagamento do link acessado" : null,
+  ].filter(Boolean) as string[];
 
   const enrichedCharges = useMemo<ChargeRecord[]>(() => {
     return charges.map((charge: ChargeRecord) => {
@@ -588,6 +615,32 @@ export default function FinancesPage() {
   const filteredCharges = useMemo(() => {
     const filtered = scopedCharges.filter(charge => {
       if (!statusMatchesFilter(charge.status, statusFilter)) return false;
+      if (customerFilter !== "all" && charge.customerId !== customerFilter)
+        return false;
+      if (
+        priorityFilter !== "all" &&
+        getChargePriority(charge) !== priorityFilter
+      )
+        return false;
+      if (periodFilter !== "all") {
+        const daysUntilDue = computeDaysUntilDue(charge.dueDate);
+        if (periodFilter === "noDueDate" && daysUntilDue !== null) return false;
+        if (
+          periodFilter === "overdue" &&
+          !(daysUntilDue !== null && daysUntilDue < 0)
+        )
+          return false;
+        if (
+          periodFilter === "next7" &&
+          !(daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 7)
+        )
+          return false;
+        if (
+          periodFilter === "next30" &&
+          !(daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 30)
+        )
+          return false;
+      }
       const source =
         `${charge.customerName} ${charge.serviceOrderLabel} ${charge.status} ${charge.id ?? ""}`.toLowerCase();
       if (
@@ -622,7 +675,14 @@ export default function FinancesPage() {
         }
       )
     );
-  }, [scopedCharges, searchTerm, statusFilter]);
+  }, [
+    scopedCharges,
+    searchTerm,
+    statusFilter,
+    customerFilter,
+    periodFilter,
+    priorityFilter,
+  ]);
   const paginatedCharges = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredCharges.slice(start, start + pageSize);
@@ -633,6 +693,9 @@ export default function FinancesPage() {
   }, [
     searchTerm,
     statusFilter,
+    customerFilter,
+    periodFilter,
+    priorityFilter,
     queryParams.customerId,
     queryParams.serviceOrderId,
   ]);
@@ -650,28 +713,29 @@ export default function FinancesPage() {
   );
 
   const health = useMemo(() => {
-    const received = enrichedCharges
+    const localReceived = enrichedCharges
       .filter(item => item.status === "PAID")
       .reduce((acc, item) => acc + Number(item?.amountCents ?? 0), 0);
-    const receivable = enrichedCharges
+    const localReceivable = enrichedCharges
       .filter(item => item.status === "PENDING")
       .reduce((acc, item) => acc + Number(item?.amountCents ?? 0), 0);
-    const overdue = enrichedCharges
+    const localOverdue = enrichedCharges
       .filter(item => item.status === "OVERDUE")
       .reduce((acc, item) => acc + Number(item?.amountCents ?? 0), 0);
-    const now = Date.now();
-    const nextThirtyDays = now + 1000 * 60 * 60 * 24 * 30;
-    const projected = enrichedCharges
-      .filter(item => {
-        if (!["PENDING", "OVERDUE"].includes(item.status)) return false;
-        const due = safeDate(item?.dueDate)?.getTime();
-        if (!due) return false;
-        return due <= nextThirtyDays;
-      })
-      .reduce((acc, item) => acc + Number(item?.amountCents ?? 0), 0);
+    const stats = statsQuery.data as Record<string, any> | undefined;
+    const received = Number(stats?.paid?.amountCents ?? localReceived);
+    const receivable = Number(stats?.pending?.amountCents ?? localReceivable);
+    const overdue = Number(stats?.overdue?.amountCents ?? localOverdue);
 
-    return { received, receivable, overdue, projected };
-  }, [enrichedCharges]);
+    // Previsto é somente a carteira comprovada em aberto; não é tendência nem
+    // previsão estatística. Vencidas permanecem incluídas porque ainda são recebíveis.
+    return {
+      received,
+      receivable,
+      overdue,
+      projected: receivable + overdue,
+    };
+  }, [enrichedCharges, statsQuery.data]);
 
   const operationalHealth = useMemo(
     () =>
@@ -720,6 +784,22 @@ export default function FinancesPage() {
       setSelectedChargeId(String(filteredCharges[0]?.id ?? ""));
     }
   }, [filteredCharges, queryParams.chargeId, selectedChargeId]);
+
+  useEffect(() => {
+    const requested = queryParams.requestedStatus.toLowerCase();
+    if (requested === "overdue") setStatusFilter("overdue");
+    else if (requested === "pending") setStatusFilter("pending");
+    else if (requested === "paid") setStatusFilter("paid");
+    else if (requested === "canceled") setStatusFilter("canceled");
+  }, [queryParams.requestedStatus]);
+
+  useEffect(() => {
+    const payment = linkedPaymentQuery.data as Record<string, any> | undefined;
+    const linkedChargeId = String(
+      payment?.chargeId ?? payment?.charge?.id ?? ""
+    );
+    if (linkedChargeId) setSelectedChargeId(linkedChargeId);
+  }, [linkedPaymentQuery.data]);
 
   const selectedCharge = useMemo(() => {
     if (!selectedChargeId) return null;
@@ -1248,6 +1328,9 @@ export default function FinancesPage() {
   async function refreshAll() {
     await Promise.all([
       chargesQuery.refetch(),
+      operationalQueueQuery.refetch(),
+      statsQuery.refetch(),
+      linkedPaymentQuery.refetch(),
       customersQuery.refetch(),
       serviceOrdersQuery.refetch(),
       selectedChargeDetailsQuery.refetch(),
@@ -1346,9 +1429,11 @@ export default function FinancesPage() {
       toast.error("Cobrança paga não pode ser cancelada.");
       return;
     }
-    const cancellationReason = window.prompt(
-      "Cancelar cobrança\n\nEsta cobrança será mantida no histórico como cancelada. Ela não será apagada.\n\nMotivo do cancelamento"
-    )?.trim();
+    const cancellationReason = window
+      .prompt(
+        "Cancelar cobrança\n\nEsta cobrança será mantida no histórico como cancelada. Ela não será apagada.\n\nMotivo do cancelamento"
+      )
+      ?.trim();
     if (!cancellationReason) {
       toast.error("Motivo do cancelamento é obrigatório.");
       return;
@@ -1357,7 +1442,9 @@ export default function FinancesPage() {
       await cancelMutation.mutateAsync({
         chargeId: String(charge.id),
         cancellationReason,
-        expectedUpdatedAt: charge.updatedAt ? String(charge.updatedAt) : undefined,
+        expectedUpdatedAt: charge.updatedAt
+          ? String(charge.updatedAt)
+          : undefined,
       });
       toast.success("Cobrança cancelada com sucesso.");
       await refreshAll();
@@ -1533,7 +1620,6 @@ export default function FinancesPage() {
         />
       </AppSectionCard>
 
-
       <AppSectionBlock
         title="Carteira Prioritária"
         subtitle="Até 50 cobranças ordenadas por atraso, impacto financeiro, risco e ausência de contato recente."
@@ -1541,6 +1627,12 @@ export default function FinancesPage() {
       >
         {operationalQueueQuery.isLoading ? (
           <AppPageLoadingState description="Carregando fila operacional financeira..." />
+        ) : operationalQueueQuery.error ? (
+          <AppPageErrorState
+            description="A fila prioritária está temporariamente indisponível. A carteira principal continua disponível abaixo."
+            actionLabel="Tentar fila novamente"
+            onAction={() => void operationalQueueQuery.refetch()}
+          />
         ) : operationalQueue.length === 0 ? (
           <AppPageEmptyState
             title="Sem ação prioritária agora"
@@ -1566,23 +1658,42 @@ export default function FinancesPage() {
                         {customerName}
                       </p>
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {summary.priorityReason ?? "Priorização derivada da cobrança."}
+                        {sanitizeFinancialText(
+                          summary.priorityReason,
+                          "Priorização derivada da cobrança."
+                        )}
                       </p>
                     </div>
                     <AppStatusBadge
-                      label={String(summary.riskLevel ?? "NORMAL")}
-                      tone={summary.riskLevel === "SUSPENDED" || summary.riskLevel === "RESTRICTED" ? "danger" : summary.riskLevel === "WARNING" ? "warning" : "success"}
+                      label={financialRiskLabel(summary.riskLevel)}
+                      tone={
+                        summary.riskLevel === "SUSPENDED" ||
+                        summary.riskLevel === "RESTRICTED"
+                          ? "danger"
+                          : summary.riskLevel === "WARNING"
+                            ? "warning"
+                            : "success"
+                      }
                     />
                   </div>
                   <div className="mt-3 grid gap-2 text-xs text-[var(--text-secondary)] sm:grid-cols-3">
                     <span>
-                      Valor: <strong className="text-[var(--text-primary)]">{formatCurrency(Number(item?.amountCents ?? 0))}</strong>
+                      Valor:{" "}
+                      <strong className="text-[var(--text-primary)]">
+                        {formatCurrency(Number(item?.amountCents ?? 0))}
+                      </strong>
                     </span>
                     <span>
-                      Atraso: <strong className="text-[var(--text-primary)]">{Number(summary.daysOverdue ?? 0)} dia(s)</strong>
+                      Atraso:{" "}
+                      <strong className="text-[var(--text-primary)]">
+                        {Number(summary.daysOverdue ?? 0)} dia(s)
+                      </strong>
                     </span>
                     <span>
-                      Ação: <strong className="text-[var(--text-primary)]">{String(summary.recommendedAction ?? item?.nextBestCollectionAction ?? "REVIEW_CHARGE")}</strong>
+                      Ação:{" "}
+                      <strong className="text-[var(--text-primary)]">
+                        {getChargePrimaryAction(item).label}
+                      </strong>
                     </span>
                   </div>
                 </button>
@@ -1672,27 +1783,78 @@ export default function FinancesPage() {
               </button>
             ))}
           </div>
-          <details className="relative">
-            <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 text-xs font-medium text-[var(--text-secondary)]">
-              Mais filtros
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 grid min-w-[190px] gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setStatusFilter("overdue")}
-              >
-                Priorizar atraso
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setStatusFilter("pending")}
-              >
-                Cobrar pendências
-              </Button>
-            </div>
-          </details>
+          <label className="sr-only" htmlFor="finance-period-filter">
+            Período de vencimento
+          </label>
+          <select
+            id="finance-period-filter"
+            aria-label="Filtrar por período"
+            value={periodFilter}
+            onChange={event =>
+              setPeriodFilter(event.target.value as PeriodFilter)
+            }
+            className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)]"
+          >
+            <option value="all">Todos os períodos</option>
+            <option value="overdue">Já vencidas</option>
+            <option value="next7">Próximos 7 dias</option>
+            <option value="next30">Próximos 30 dias</option>
+            <option value="noDueDate">Sem vencimento</option>
+          </select>
+          <label className="sr-only" htmlFor="finance-customer-filter">
+            Cliente
+          </label>
+          <select
+            id="finance-customer-filter"
+            aria-label="Filtrar por cliente"
+            value={customerFilter}
+            onChange={event => setCustomerFilter(event.target.value)}
+            className="h-9 max-w-[210px] rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)]"
+          >
+            <option value="all">Todos os clientes</option>
+            {Array.from(
+              new Map(
+                scopedCharges
+                  .filter(item => item.customerId)
+                  .map(item => [item.customerId, item.customerName])
+              ).entries()
+            ).map(([id, name]) => (
+              <option key={id} value={id}>
+                {safeFinancialEntityName(name)}
+              </option>
+            ))}
+          </select>
+          <label className="sr-only" htmlFor="finance-priority-filter">
+            Prioridade
+          </label>
+          <select
+            id="finance-priority-filter"
+            aria-label="Filtrar por prioridade"
+            value={priorityFilter}
+            onChange={event =>
+              setPriorityFilter(event.target.value as PriorityFilter)
+            }
+            className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)]"
+          >
+            <option value="all">Todas as prioridades</option>
+            <option value="P0">Crítico</option>
+            <option value="P1">Atenção</option>
+            <option value="P2">Acompanhar</option>
+            <option value="P3">Informativo</option>
+          </select>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setPeriodFilter("all");
+              setCustomerFilter("all");
+              setPriorityFilter("all");
+            }}
+          >
+            Limpar filtros
+          </Button>
           <span className="rounded-md border border-[var(--border-subtle)] px-2 py-1 text-xs text-[var(--text-muted)]">
             {filteredCharges.length} / {scopedCharges.length} cobrança(s)
           </span>
@@ -1704,11 +1866,29 @@ export default function FinancesPage() {
           </p>
         ) : null}
 
-        {allQueriesLoading && enrichedCharges.length === 0 ? (
+        {auxiliaryFailures.length > 0 ? (
+          <div
+            role="status"
+            className="rounded-lg border border-[var(--warning-border,var(--border-subtle))] bg-[var(--warning-soft,var(--surface-subtle))] px-3 py-2 text-sm text-[var(--text-secondary)]"
+          >
+            Dados auxiliares indisponíveis ({auxiliaryFailures.join(" e ")}). A
+            carteira permanece visível; nomes ou origens podem usar fallback.
+            <Button
+              className="ml-2"
+              size="sm"
+              variant="ghost"
+              onClick={() => void refreshAll()}
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        ) : null}
+
+        {portfolioLoading && enrichedCharges.length === 0 ? (
           <AppPageLoadingState description="Carregando cobranças, clientes e O.S...." />
         ) : null}
 
-        {allQueriesErrored ? (
+        {portfolioUnavailable ? (
           <AppPageErrorState
             description={
               chargesQuery.error?.message ??
@@ -1719,8 +1899,8 @@ export default function FinancesPage() {
           />
         ) : null}
 
-        {!allQueriesLoading &&
-        !allQueriesErrored &&
+        {!portfolioLoading &&
+        !portfolioUnavailable &&
         filteredCharges.length === 0 ? (
           hasSearchNoResults ? (
             <AppPageEmptyState
@@ -1735,8 +1915,8 @@ export default function FinancesPage() {
           )
         ) : null}
 
-        {!allQueriesLoading &&
-        !allQueriesErrored &&
+        {!portfolioLoading &&
+        !portfolioUnavailable &&
         filteredCharges.length > 0 ? (
           <>
             <div className="grid gap-3">
@@ -1744,9 +1924,8 @@ export default function FinancesPage() {
                 const primaryAction = getChargePrimaryAction(row);
                 const selected = selectedChargeId === String(row?.id ?? "");
                 return (
-                  <button
+                  <article
                     key={String(row?.id ?? "")}
-                    type="button"
                     className={cn(
                       "w-full rounded-2xl border p-4 text-left transition-colors",
                       selected
@@ -1866,7 +2045,7 @@ export default function FinancesPage() {
                         />
                       </div>
                     </div>
-                  </button>
+                  </article>
                 );
               })}
             </div>
@@ -1890,10 +2069,7 @@ export default function FinancesPage() {
             ["Recebido", health.received],
             ["Pendente", health.receivable],
             ["Em risco", health.overdue],
-            [
-              "Previsto total",
-              health.received + health.receivable + health.overdue,
-            ],
+            ["Previsto total", health.projected],
           ].map(([label, value]) => (
             <div
               key={String(label)}
@@ -1986,7 +2162,8 @@ export default function FinancesPage() {
                 </p>
                 {selectedFinancialRecord.status === "CANCELED" ? (
                   <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    Cancelada em {formatDate(selectedFinancialRecord.canceledAt)}
+                    Cancelada em{" "}
+                    {formatDate(selectedFinancialRecord.canceledAt)}
                     {selectedFinancialRecord.cancellationReason
                       ? ` · Motivo: ${selectedFinancialRecord.cancellationReason}`
                       : ""}
@@ -2088,6 +2265,29 @@ export default function FinancesPage() {
               </Button>
             </AppActionBar>
 
+            {selectedChargeDetailsQuery.error ||
+            timelineByCustomerQuery.error ||
+            timelineByServiceOrderQuery.error ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-3 text-sm text-[var(--text-secondary)]"
+              >
+                Parte do histórico está indisponível. O detalhe básico da
+                cobrança continua acessível.
+                <Button
+                  className="ml-2"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void selectedChargeDetailsQuery.refetch();
+                    void timelineByCustomerQuery.refetch();
+                    void timelineByServiceOrderQuery.refetch();
+                  }}
+                >
+                  Tentar histórico novamente
+                </Button>
+              </div>
+            ) : null}
             <div className="grid gap-3 lg:grid-cols-3">
               <p className="sr-only">Ações reais</p>
               <EntityTimelineCard
