@@ -1205,10 +1205,6 @@ export default function ExecutiveDashboard() {
     },
   ];
   const statusLabel = executiveDashboardStateLabel[dashboardState];
-  const moneyAtRisk = formatCurrencyFromCents(
-    (alerts.overdueCharges?.totalAmountCents ?? 0) +
-      (alerts.doneOrdersWithoutCharge?.totalAmountCents ?? 0)
-  );
   const executiveContactSummary = [
     `${readNumber(asRecord(metrics.whatsappSignals), "customersNoResponse")} aguardando resposta`,
     `${pendingWhatsAppApprovals.length} aprovações pendentes`,
@@ -1289,76 +1285,7 @@ export default function ExecutiveDashboard() {
 
       {!pageLoading && !pageError && hasOperationalData ? (
         <div className="w-full min-w-0 space-y-3 sm:space-y-4">
-          <AppSectionBlock
-            title="Bloco executivo"
-            compact
-            className="border-[var(--accent-primary)]/35 bg-[var(--accent-soft)]/25"
-            subtitle="Primeira dobra decisória: dinheiro parado, gargalo e próxima ação."
-          >
-            <div className="grid gap-3 md:grid-cols-3">
-              <OperationalInnerCard className="border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                  DINHEIRO EM RISCO
-                </p>
-                <strong className="mt-1 block text-2xl text-[var(--text-primary)]">
-                  {moneyAtRisk}
-                </strong>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  Valores vencidos ou serviços concluídos ainda sem cobrança.
-                </p>
-              </OperationalInnerCard>
-              <OperationalInnerCard className="border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                  GARGALO PRINCIPAL
-                </p>
-                <strong className="mt-1 block text-lg text-[var(--text-primary)]">
-                  {bottleneck?.label ?? "Sem gargalo calculável"}
-                </strong>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  {bottleneck
-                    ? "Ponto que trava fluxo e recebimento agora."
-                    : "Nenhum bloqueio ativo retornado pela leitura atual."}
-                </p>
-              </OperationalInnerCard>
-              <OperationalInnerCard className="border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/45">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                  AÇÃO PRIORITÁRIA
-                </p>
-                <strong className="mt-1 block text-lg text-[var(--text-primary)]">
-                  {nextBestActionQuery.isError
-                    ? "Ação prioritária indisponível"
-                    : recommendedAction?.title ?? "Nenhuma ação prioritária retornada"}
-                </strong>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  {recommendedAction?.impact ??
-                    "Sem ação prioritária real retornada."}
-                </p>
-              </OperationalInnerCard>
-            </div>
-          </AppSectionBlock>
 
-          <div className="grid w-full min-w-0 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-            <NexoGovernanceDecisionCard
-              level={operationLevel}
-              title="Estado operacional"
-              reason={operationStateReason}
-              impact={
-                operationalStateQuery.data?.evidenceAt
-                  ? `Evidência registrada em ${formatEventDateTime(operationalStateQuery.data.evidenceAt)}.`
-                  : "Nenhuma evidência operacional confiável disponível."
-              }
-              detailsLabel="Abrir governança"
-              metrics={operationStateMetrics}
-              onDetails={() => navigate("/governance")}
-            />
-
-            <NexoEvidenceTimeline
-              className="h-full"
-              events={timelineEvents}
-              fullTimelineLabel="Ver Timeline"
-              onFullTimeline={() => navigate("/timeline")}
-            />
-          </div>
 
           <AppSectionBlock
             title="Atenção imediata"
@@ -1449,61 +1376,10 @@ export default function ExecutiveDashboard() {
           </AppSectionBlock>
 
           <AppSectionBlock
-            title="Radar operacional"
-            compact
-            className="border-[var(--accent-primary)]/20 bg-[var(--accent-soft)]/20"
-            subtitle="Resumo executivo dos sinais antes da fila."
-          >
-            <div className="flex w-full min-w-0 flex-col divide-y divide-[var(--border-subtle)]/70 lg:flex-row lg:divide-x lg:divide-y-0">
-              {pulseInsights.map(
-                ({ label, keyword, Icon, iconClass, text, trend }) => (
-                  <article
-                    key={label}
-                    className="w-full min-w-0 px-3 py-3 text-sm leading-5 text-[var(--text-secondary)] first:pt-0 lg:flex-1 lg:first:pt-3"
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--accent-primary)]/20 bg-[var(--surface-elevated)]/75">
-                        <Icon className={`h-4 w-4 ${iconClass}`} />
-                      </span>
-                      <strong className="text-[var(--text-primary)]">
-                        {label}
-                      </strong>
-                    </div>
-                    <p className="text-base font-semibold leading-5 text-[var(--text-primary)]">
-                      {keyword}
-                    </p>
-                    <p className="mt-1 line-clamp-1">{text}</p>
-                    <span className="mt-2 inline-flex rounded-full border border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/55 px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]">
-                      {trend}
-                    </span>
-                  </article>
-                )
-              )}
-            </div>
-            {availableComparisons.length > 0 || missingComparisonCount > 0 ? (
-              <div className="mt-3 border-t border-[var(--border-subtle)]/70 pt-2 text-xs leading-5 text-[var(--text-secondary)]">
-                {availableComparisons.map(item => (
-                  <p key={item}>
-                    <TrendingDown className="mr-1.5 inline h-3.5 w-3.5" />
-                    {item}
-                  </p>
-                ))}
-                {missingComparisonCount > 0 ? (
-                  <p className="mt-1">
-                    Histórico em formação: sem base histórica suficiente para{" "}
-                    {missingComparisonCount} de {pulseComparisons.length}{" "}
-                    indicador(es).
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </AppSectionBlock>
-
-          <AppSectionBlock
-            title="Incidentes operacionais"
+            title="Fila operacional"
             compact
             className={dashboardSectionClass}
-            subtitle="Linhas acionáveis sem cabeçalho de tabela."
+            subtitle="Itens que exigem execução, ordenados por urgência."
           >
             {queue.length > 0 ? (
               <div className="w-full min-w-0">
@@ -1590,6 +1466,80 @@ export default function ExecutiveDashboard() {
               />
             )}
           </AppSectionBlock>
+
+          <AppSectionBlock
+            title="Pulso da operação"
+            compact
+            className="border-[var(--accent-primary)]/20 bg-[var(--accent-soft)]/20"
+            subtitle="Tendências e sinais qualitativos depois da fila operacional."
+          >
+            <div className="flex w-full min-w-0 flex-col divide-y divide-[var(--border-subtle)]/70 lg:flex-row lg:divide-x lg:divide-y-0">
+              {pulseInsights.map(
+                ({ label, keyword, Icon, iconClass, text, trend }) => (
+                  <article
+                    key={label}
+                    className="w-full min-w-0 px-3 py-3 text-sm leading-5 text-[var(--text-secondary)] first:pt-0 lg:flex-1 lg:first:pt-3"
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--accent-primary)]/20 bg-[var(--surface-elevated)]/75">
+                        <Icon className={`h-4 w-4 ${iconClass}`} />
+                      </span>
+                      <strong className="text-[var(--text-primary)]">
+                        {label}
+                      </strong>
+                    </div>
+                    <p className="text-base font-semibold leading-5 text-[var(--text-primary)]">
+                      {keyword}
+                    </p>
+                    <p className="mt-1 line-clamp-1">{text}</p>
+                    <span className="mt-2 inline-flex rounded-full border border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/55 px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]">
+                      {trend}
+                    </span>
+                  </article>
+                )
+              )}
+            </div>
+            {availableComparisons.length > 0 || missingComparisonCount > 0 ? (
+              <div className="mt-3 border-t border-[var(--border-subtle)]/70 pt-2 text-xs leading-5 text-[var(--text-secondary)]">
+                {availableComparisons.map(item => (
+                  <p key={item}>
+                    <TrendingDown className="mr-1.5 inline h-3.5 w-3.5" />
+                    {item}
+                  </p>
+                ))}
+                {missingComparisonCount > 0 ? (
+                  <p className="mt-1">
+                    Histórico em formação: sem base histórica suficiente para{" "}
+                    {missingComparisonCount} de {pulseComparisons.length}{" "}
+                    indicador(es).
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </AppSectionBlock>
+
+          <div className="grid w-full min-w-0 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <NexoGovernanceDecisionCard
+              level={operationLevel}
+              title="Estado operacional"
+              reason={operationStateReason}
+              impact={
+                operationalStateQuery.data?.evidenceAt
+                  ? `Evidência registrada em ${formatEventDateTime(operationalStateQuery.data.evidenceAt)}.`
+                  : "Nenhuma evidência operacional confiável disponível."
+              }
+              detailsLabel="Abrir governança"
+              metrics={operationStateMetrics}
+              onDetails={() => navigate("/governance")}
+            />
+
+            <NexoEvidenceTimeline
+              className="h-full"
+              events={timelineEvents}
+              fullTimelineLabel="Ver Timeline"
+              onFullTimeline={() => navigate("/timeline")}
+            />
+          </div>
 
           <AppSectionBlock
             title="WhatsApp executivo"
