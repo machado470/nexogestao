@@ -166,6 +166,23 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("Mais filtros · período");
   });
 
+  it("shows canonical last completed service and next appointment together", () => {
+    expect(source).toContain(
+      'order => String(order.status ?? "").toUpperCase() === "COMPLETED"'
+    );
+    expect(source).toContain("const lastService = serviceOrders.find(");
+    expect(source).toContain("lastService,");
+    expect(source).not.toContain("lastService: serviceOrders[0]");
+    expect(source).toContain("context: profile.activeServiceOrder");
+    expect(source).toContain('Último serviço:{" "}');
+    expect(source).toContain('Próximo agendamento:{" "}');
+    expect(source).toContain("Sem serviço concluído");
+    expect(source).toContain("Sem agenda futura");
+    expect(source).toContain(
+      "profile.lastService.updatedAt ??\n                                      profile.lastService.createdAt"
+    );
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
