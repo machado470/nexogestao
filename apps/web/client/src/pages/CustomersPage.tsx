@@ -33,6 +33,9 @@ import {
 } from "@/components/app";
 import {
   AppDataTable,
+  AppAlert,
+  AppAlertDescription,
+  AppAlertTitle,
   AppOperationalStatusBadge,
   AppPageShell,
   AppPriorityBadge,
@@ -236,10 +239,7 @@ function parseCurrencyFilterToCents(value: string) {
   return Math.round(amount * 100);
 }
 
-function parseDateFilterBoundary(
-  value: string,
-  boundary: "start" | "end"
-) {
+function parseDateFilterBoundary(value: string, boundary: "start" | "end") {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
   if (!match) return null;
 
@@ -283,9 +283,7 @@ function daysBetween(date: Date | null) {
   );
 }
 
-function isFrequentCustomer(
-  profile: Pick<CustomerProfile, "serviceOrders">
-) {
+function isFrequentCustomer(profile: Pick<CustomerProfile, "serviceOrders">) {
   const completedServices = profile.serviceOrders.filter(
     order => String(order.status ?? "").toUpperCase() === "COMPLETED"
   ).length;
@@ -757,10 +755,7 @@ export default function CustomersPage() {
       periodStartValue,
       "start"
     );
-    const periodEndTimestamp = parseDateFilterBoundary(
-      periodEndValue,
-      "end"
-    );
+    const periodEndTimestamp = parseDateFilterBoundary(periodEndValue, "end");
 
     return profiles.filter(profile => {
       if (
@@ -793,16 +788,10 @@ export default function CustomersPage() {
       if (activeFilter === "risk" && profile.status !== "Em risco") {
         return false;
       }
-      if (
-        minBalanceCents !== null &&
-        profile.pendingCents < minBalanceCents
-      ) {
+      if (minBalanceCents !== null && profile.pendingCents < minBalanceCents) {
         return false;
       }
-      if (
-        maxBalanceCents !== null &&
-        profile.pendingCents > maxBalanceCents
-      ) {
+      if (maxBalanceCents !== null && profile.pendingCents > maxBalanceCents) {
         return false;
       }
 
@@ -847,6 +836,23 @@ export default function CustomersPage() {
   const isLoading = customersQuery.isLoading && customers.length === 0;
   const hasBlockingError =
     Boolean(customersQuery.error) && customers.length === 0;
+  const auxiliaryDataSources = [
+    { label: "cobranças", query: chargesQuery },
+    { label: "ordens de serviço", query: serviceOrdersQuery },
+    { label: "agendamentos", query: appointmentsQuery },
+  ] as const;
+  const unavailableAuxiliaryData = auxiliaryDataSources.filter(source =>
+    Boolean(source.query.error)
+  );
+  const pendingAuxiliaryData = auxiliaryDataSources.filter(
+    source => source.query.isLoading && !source.query.data
+  );
+  const hasIncompleteOperationalData =
+    customers.length > 0 &&
+    (unavailableAuxiliaryData.length > 0 || pendingAuxiliaryData.length > 0);
+  const isChargesUnavailable = Boolean(chargesQuery.error);
+  const isServiceOrdersUnavailable = Boolean(serviceOrdersQuery.error);
+  const isAppointmentsUnavailable = Boolean(appointmentsQuery.error);
   const paginatedProfiles = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredProfiles.slice(start, start + pageSize);
@@ -1612,7 +1618,19 @@ export default function CustomersPage() {
     }
   }, [activeCustomerId, filteredProfiles, location, setActiveCustomerId]);
 
-  const customersOperationalStatus = getCustomersOperationalStatus(profiles);
+  const customersOperationalStatus = hasIncompleteOperationalData
+    ? getCustomersOperationalStatus(profiles) === "NORMAL"
+      ? "ATENÇÃO"
+      : getCustomersOperationalStatus(profiles)
+    : getCustomersOperationalStatus(profiles);
+
+  const getVisibleCustomerHealth = (profile: CustomerProfile) => {
+    const status = getCustomerOperationalStatus(profile);
+    if (!hasIncompleteOperationalData || status !== "NORMAL") {
+      return { status, label: profile.status };
+    }
+    return { status: "ATENÇÃO" as const, label: "Leitura parcial" };
+  };
 
   return (
     <AppPageShell className="gap-3">
@@ -1631,11 +1649,19 @@ export default function CustomersPage() {
               tone="neutral"
             />
             <AppStatusBadge
-              label={`${profiles.filter(profile => profile.status === "Em risco").length} em risco`}
+              label={
+                hasIncompleteOperationalData
+                  ? "Risco em validação"
+                  : `${profiles.filter(profile => profile.status === "Em risco").length} em risco`
+              }
               tone="warning"
             />
             <AppStatusBadge
-              label={`${profiles.filter(profile => profile.hasOpenServiceOrder).length} com O.S. aberta`}
+              label={
+                isServiceOrdersUnavailable
+                  ? "O.S. indisponíveis"
+                  : `${profiles.filter(profile => profile.hasOpenServiceOrder).length} com O.S. aberta`
+              }
               tone="info"
             />
           </>
@@ -1657,6 +1683,46 @@ export default function CustomersPage() {
         </div>
       </AppOperationalHeader>
 
+      {unavailableAuxiliaryData.length > 0 ? (
+        <AppAlert
+          className="border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_10%,var(--surface-elevated))]"
+          aria-live="polite"
+        >
+          <ShieldAlert className="h-4 w-4 text-[var(--warning)]" />
+          <AppAlertTitle>Leitura operacional parcial</AppAlertTitle>
+          <AppAlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Clientes carregados, mas{" "}
+              {unavailableAuxiliaryData.map(source => source.label).join(", ")}{" "}
+              não puderam ser consultados. Status, risco e pendências podem
+              estar incompletos; a carteira não deve ser interpretada como
+              saudável.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={() =>
+                void Promise.all(
+                  unavailableAuxiliaryData.map(source => source.query.refetch())
+                )
+              }
+            >
+              Tentar novamente
+            </Button>
+          </AppAlertDescription>
+        </AppAlert>
+      ) : pendingAuxiliaryData.length > 0 && customers.length > 0 ? (
+        <AppAlert aria-live="polite">
+          <AppAlertTitle>Complementando sinais operacionais</AppAlertTitle>
+          <AppAlertDescription>
+            Clientes carregados. Aguardando{" "}
+            {pendingAuxiliaryData.map(source => source.label).join(", ")} antes
+            de concluir a leitura de saúde da carteira.
+          </AppAlertDescription>
+        </AppAlert>
+      ) : null}
+
       <AppSectionCard
         className={cn("space-y-2.5", selectedProfile ? "order-3" : undefined)}
       >
@@ -1666,12 +1732,16 @@ export default function CustomersPage() {
             <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">
               {attentionItems[0]
                 ? attentionItems[0].title
-                : "Carteira sem bloqueio imediato"}
+                : hasIncompleteOperationalData
+                  ? "Carteira com leitura parcial"
+                  : "Carteira sem bloqueio imediato"}
             </h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
               {attentionItems[0]
                 ? attentionItems[0].context
-                : "Os dados retornados não apontam dívida vencida, O.S. aberta ou silêncio prolongado."}
+                : hasIncompleteOperationalData
+                  ? "Uma ou mais fontes operacionais estão indisponíveis; não é possível concluir que a carteira está saudável."
+                  : "Os dados retornados não apontam dívida vencida, O.S. aberta ou silêncio prolongado."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <AppStatusBadge label="Financeiro" tone="info" />
@@ -1702,7 +1772,6 @@ export default function CustomersPage() {
         </div>
       </AppSectionCard>
 
-
       <AppSectionBlock
         className={selectedProfile ? "order-4" : undefined}
         title={operationalCopy.immediateAttention}
@@ -1711,6 +1780,11 @@ export default function CustomersPage() {
       >
         {isLoading ? (
           <AppPageLoadingState description="Carregando sinais dos clientes..." />
+        ) : attentionItems.length === 0 && hasIncompleteOperationalData ? (
+          <AppPageEmptyState
+            title="Atenções podem estar incompletas"
+            description="Nenhuma atenção foi detectada nos dados disponíveis, mas faltam fontes auxiliares para concluir a leitura operacional."
+          />
         ) : attentionItems.length === 0 ? (
           <AppPageEmptyState
             title="Nenhum cliente em atenção imediata"
@@ -1823,7 +1897,9 @@ export default function CustomersPage() {
                     <input
                       type="date"
                       value={periodStartValue}
-                      onChange={event => setPeriodStartValue(event.target.value)}
+                      onChange={event =>
+                        setPeriodStartValue(event.target.value)
+                      }
                       aria-label="Período inicial"
                       className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
                     />
@@ -1972,8 +2048,7 @@ export default function CustomersPage() {
                       </div>
                       <div className="flex flex-wrap justify-end gap-2">
                         <AppOperationalStatusBadge
-                          status={getCustomerOperationalStatus(profile)}
-                          label={profile.status}
+                          {...getVisibleCustomerHealth(profile)}
                         />
                         <AppStatusBadge
                           {...getCustomerActiveStatus(profile.customer.active)}
@@ -2001,7 +2076,9 @@ export default function CustomersPage() {
                       </p>
                     ) : (
                       <p className="mt-2 text-xs text-[var(--text-muted)]">
-                        Sem O.S. aberta
+                        {isServiceOrdersUnavailable
+                          ? "O.S. indisponíveis"
+                          : "Sem O.S. aberta"}
                       </p>
                     )}
                     <div className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
@@ -2012,13 +2089,17 @@ export default function CustomersPage() {
                               profile.lastService.updatedAt ??
                                 profile.lastService.createdAt
                             )
-                          : "Sem serviço concluído"}
+                          : isServiceOrdersUnavailable
+                            ? "O.S. indisponíveis"
+                            : "Sem serviço concluído"}
                       </p>
                       <p>
                         Próximo agendamento:{" "}
                         {profile.nextAppointment
                           ? formatDateTime(profile.nextAppointment.startsAt)
-                          : "Sem agenda futura"}
+                          : isAppointmentsUnavailable
+                            ? "Agenda indisponível"
+                            : "Sem agenda futura"}
                       </p>
                     </div>
 
@@ -2078,8 +2159,7 @@ export default function CustomersPage() {
                           <div className="min-w-[170px] space-y-2 text-xs text-[var(--text-secondary)]">
                             <div className="flex flex-wrap gap-2">
                               <AppOperationalStatusBadge
-                                status={getCustomerOperationalStatus(profile)}
-                                label={profile.status}
+                                {...getVisibleCustomerHealth(profile)}
                               />
                               <AppStatusBadge
                                 {...getCustomerActiveStatus(
@@ -2089,12 +2169,12 @@ export default function CustomersPage() {
                               {isNewCustomer(profile.customer) ? (
                                 <AppStatusBadge label="Novo" tone="info" />
                               ) : null}
-                                {isFrequentCustomer(profile) ? (
-                                  <AppStatusBadge
-                                    label="Frequente"
-                                    tone="accent"
-                                  />
-                                ) : null}
+                              {isFrequentCustomer(profile) ? (
+                                <AppStatusBadge
+                                  label="Frequente"
+                                  tone="accent"
+                                />
+                              ) : null}
                               <AppPriorityBadge
                                 priority={getCustomerPriority(profile)}
                               />
@@ -2120,7 +2200,9 @@ export default function CustomersPage() {
                             </div>
                           ) : (
                             <span className="text-xs text-[var(--text-muted)]">
-                              Sem O.S. aberta
+                              {isServiceOrdersUnavailable
+                                ? "O.S. indisponíveis"
+                                : "Sem O.S. aberta"}
                             </span>
                           )}
                         </td>
@@ -2136,7 +2218,9 @@ export default function CustomersPage() {
                                     profile.lastService.updatedAt ??
                                       profile.lastService.createdAt
                                   )
-                                : "Sem serviço concluído"}
+                                : isServiceOrdersUnavailable
+                                  ? "O.S. indisponíveis"
+                                  : "Sem serviço concluído"}
                             </p>
                             <p>
                               Próximo agendamento:{" "}
@@ -2144,7 +2228,9 @@ export default function CustomersPage() {
                                 ? formatDateTime(
                                     profile.nextAppointment.startsAt
                                   )
-                                : "Sem agenda futura"}
+                                : isAppointmentsUnavailable
+                                  ? "Agenda indisponível"
+                                  : "Sem agenda futura"}
                             </p>
                           </div>
                         </td>
@@ -2153,7 +2239,12 @@ export default function CustomersPage() {
                             <p className="font-medium text-[var(--text-primary)]">
                               {formatCurrency(profile.pendingCents)}
                             </p>
-                            {profile.pendingCents === 0 ? (
+                            {isChargesUnavailable ? (
+                              <AppStatusBadge
+                                label="Financeiro indisponível"
+                                tone="warning"
+                              />
+                            ) : profile.pendingCents === 0 ? (
                               <AppStatusBadge
                                 label="Sem pendência retornada"
                                 tone="neutral"
@@ -2652,7 +2743,11 @@ export default function CustomersPage() {
                             {formatCurrency(
                               Number(charge.amountCents ?? charge.amount ?? 0)
                             )}{" "}
-                            · {presentationStatusLabel(charge.status, "Aguardando ação")}
+                            ·{" "}
+                            {presentationStatusLabel(
+                              charge.status,
+                              "Aguardando ação"
+                            )}
                           </p>
                           <p className="text-[11px] text-[var(--text-muted)]">
                             Vencimento:{" "}
