@@ -21,9 +21,7 @@ import {
   NextBestActionCard,
   OperationalFlowCard,
   OperationalRiskCard,
-  OperationalStateCard,
   type OperationalFlowStageState,
-  type OperationalStateLevel,
 } from "@/components/app/OperationalCommandLayer";
 import {
   AppOperationalHeader,
@@ -57,6 +55,13 @@ type Appointment = {
   serviceOrderId?: string | null;
   serviceOrder?: { id?: string | null; status?: string | null } | null;
   serviceOrders?: Array<{ id?: string | null; status?: string | null }> | null;
+};
+
+type PersonAssignee = {
+  id: string;
+  name?: string | null;
+  fullName?: string | null;
+  dailyAppointmentCapacity?: number | null;
 };
 
 const STATUS_COLOR: Record<Appointment["status"], string> = {
@@ -93,7 +98,7 @@ function getServiceOrderLink(item: Appointment) {
     : `/service-orders?appointmentId=${item.id}`;
 }
 
-function getPersonName(people: any[], personId?: string | null) {
+function getPersonName(people: PersonAssignee[], personId?: string | null) {
   if (!personId) return "Responsável não atribuído";
   const person = people.find(
     item => String(item?.id ?? "") === String(personId)
@@ -184,7 +189,7 @@ export default function CalendarPage() {
     [customersQuery.data]
   );
   const people = useMemo(
-    () => normalizeArrayPayload<any>(peopleQuery.data),
+    () => normalizeArrayPayload<PersonAssignee>(peopleQuery.data),
     [peopleQuery.data]
   );
 
@@ -207,10 +212,20 @@ export default function CalendarPage() {
 
   const now = Date.now();
 
+  const activeAppointments = useMemo(
+    () =>
+      filteredAppointments.filter(
+        item => !["CANCELED", "DONE", "NO_SHOW"].includes(item.status)
+      ),
+    [filteredAppointments]
+  );
+
   const conflictIds = useMemo(() => {
     const byOwner = new Map<string, Appointment[]>();
-    filteredAppointments.forEach(item => {
+
+    activeAppointments.forEach(item => {
       if (!item.assignedToPersonId) return;
+
       const ownerKey = String(item.assignedToPersonId);
       const group = byOwner.get(ownerKey) ?? [];
       group.push(item);
@@ -218,38 +233,165 @@ export default function CalendarPage() {
     });
 
     const ids = new Set<string>();
+
     byOwner.forEach(group => {
       const sorted = [...group].sort(
         (a, b) =>
-          new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+          new Date(a.startsAt).getTime() -
+          new Date(b.startsAt).getTime()
       );
-      for (let index = 1; index < sorted.length; index++) {
-        const previous = sorted[index - 1];
-        const current = sorted[index];
-        const previousEnd = getAppointmentEndMs(previous);
-        const currentStart = new Date(current.startsAt).getTime();
-        if (currentStart < previousEnd) {
-          ids.add(previous.id);
+
+      let overlappingAnchor: Appointment | null = null;
+      let overlappingEnd = Number.NEGATIVE_INFINITY;
+
+      for (const current of sorted) {
+        const currentStart =
+          new Date(current.startsAt).getTime();
+        const currentEnd = getAppointmentEndMs(current);
+
+        if (
+          overlappingAnchor &&
+          currentStart < overlappingEnd
+        ) {
+          ids.add(overlappingAnchor.id);
           ids.add(current.id);
+        }
+
+        if (
+          !overlappingAnchor ||
+          currentEnd > overlappingEnd
+        ) {
+          overlappingAnchor = current;
+          overlappingEnd = currentEnd;
         }
       }
     });
+
     return ids;
-  }, [filteredAppointments]);
+  }, [activeAppointments]);
 
   const delayedIds = useMemo(() => {
     return new Set(
-      filteredAppointments
-        .filter(item => {
-          const status = String(item.status).toUpperCase();
-          return (
-            new Date(item.startsAt).getTime() < now &&
-            ["SCHEDULED", "CONFIRMED"].includes(status)
-          );
-        })
+      activeAppointments
+        .filter(
+          item => new Date(item.startsAt).getTime() < now
+        )
         .map(item => item.id)
     );
-  }, [filteredAppointments, now]);
+  }, [activeAppointments, now]);
+
+  const capacitySnapshot = useMemo(() => {
+    const reference = new Date(now);
+
+    const relevantPeople =
+      teamFilter === "all"
+        ? people
+        : people.filter(
+            person =>
+              String(person.id) === String(teamFilter)
+          );
+
+    const rows = relevantPeople.map(person => {
+      const rawCapacity =
+        Number(person.dailyAppointmentCapacity);
+
+      const dailyAppointmentCapacity =
+        Number.isFinite(rawCapacity) && rawCapacity > 0
+          ? rawCapacity
+          : null;
+
+      const todayAppointmentsCount =
+        appointments.filter(item => {
+          if (
+            !item.assignedToPersonId ||
+            String(item.assignedToPersonId) !==
+              String(person.id)
+          ) {
+            return false;
+          }
+
+          if (
+            !["SCHEDULED", "CONFIRMED"].includes(
+              item.status
+            )
+          ) {
+            return false;
+          }
+
+          const startsAt = new Date(item.startsAt);
+
+          return (
+            startsAt.getFullYear() ===
+              reference.getFullYear() &&
+            startsAt.getMonth() ===
+              reference.getMonth() &&
+            startsAt.getDate() ===
+              reference.getDate()
+          );
+        }).length;
+
+      const appointmentCapacityUsagePct =
+        dailyAppointmentCapacity !== null
+          ? Math.round(
+              (todayAppointmentsCount /
+                dailyAppointmentCapacity) *
+                100
+            )
+          : null;
+
+      return {
+        personId: person.id,
+        dailyAppointmentCapacity,
+        todayAppointmentsCount,
+        appointmentCapacityUsagePct,
+      };
+    });
+
+    const rowsWithCapacity = rows.filter(
+      row => row.dailyAppointmentCapacity !== null
+    );
+
+    const dailyAppointmentCapacity =
+      rowsWithCapacity.reduce(
+        (sum, row) =>
+          sum + (row.dailyAppointmentCapacity ?? 0),
+        0
+      );
+
+    const todayAppointmentsCount =
+      rowsWithCapacity.reduce(
+        (sum, row) =>
+          sum + row.todayAppointmentsCount,
+        0
+      );
+
+    const appointmentCapacityUsagePct =
+      dailyAppointmentCapacity > 0
+        ? Math.round(
+            (todayAppointmentsCount /
+              dailyAppointmentCapacity) *
+              100
+          )
+        : null;
+
+    const capacityRemainingToday =
+      dailyAppointmentCapacity > 0
+        ? Math.max(
+            0,
+            dailyAppointmentCapacity -
+              todayAppointmentsCount
+          )
+        : null;
+
+    return {
+      dailyAppointmentCapacity,
+      todayAppointmentsCount,
+      appointmentCapacityUsagePct,
+      capacityRemainingToday,
+      hasConfiguredCapacity:
+        rowsWithCapacity.length > 0,
+    };
+  }, [appointments, now, people, teamFilter]);
 
   const events = useMemo<EventInput[]>(() => {
     return filteredAppointments.map(item => {
@@ -293,30 +435,15 @@ export default function CalendarPage() {
   const selected =
     filteredAppointments.find(item => item.id === selectedId) ?? null;
 
-  const executiveRead = useMemo(() => {
-    const oneHour = 60 * 60 * 1000;
-    const conflicts = conflictIds.size;
-    const overload = filteredAppointments.filter(item => {
-      const start = new Date(item.startsAt).getTime();
-      return start - now <= oneHour && start - now > 0;
-    }).length;
-    const confirmed = filteredAppointments.filter(
-      item => item.status === "CONFIRMED"
-    ).length;
-    const inProgress = 0;
-    const activePeople = teamFilter === "all" ? Math.max(people.length, 1) : 1;
-    const assignedActiveAppointments = filteredAppointments.filter(
-      item =>
-        Boolean(item.assignedToPersonId) &&
-        !["CANCELED", "DONE", "NO_SHOW"].includes(item.status)
-    ).length;
-    const possibleFits = Math.max(
-      0,
-      activePeople * 12 - assignedActiveAppointments
-    );
-
-    return { conflicts, overload, confirmed, inProgress, possibleFits };
-  }, [filteredAppointments, conflictIds, now, people.length, teamFilter]);
+  const executiveRead = useMemo(
+    () => ({
+      conflicts: conflictIds.size,
+      confirmed: filteredAppointments.filter(
+        item => item.status === "CONFIRMED"
+      ).length,
+    }),
+    [conflictIds, filteredAppointments]
+  );
 
   const immediateAttention = useMemo(() => {
     return filteredAppointments
@@ -338,160 +465,125 @@ export default function CalendarPage() {
     }>;
   }, [filteredAppointments, conflictIds, delayedIds]);
 
-  const activeAppointments = useMemo(
-    () =>
-      filteredAppointments.filter(
-        item => !["CANCELED", "DONE", "NO_SHOW"].includes(item.status)
-      ),
-    [filteredAppointments]
-  );
-
   const calendarCommand = useMemo(() => {
-    const byOwner = new Map<string, Appointment[]>();
-    activeAppointments.forEach(item => {
-      const ownerKey = String(item.assignedToPersonId ?? "unassigned");
-      const group = byOwner.get(ownerKey) ?? [];
-      group.push(item);
-      byOwner.set(ownerKey, group);
-    });
-
-    const overloadedOwners = Array.from(byOwner.entries())
-      .map(([ownerId, group]) => ({ ownerId, count: group.length, group }))
-      .filter(owner => owner.ownerId !== "unassigned" && owner.count >= 6)
-      .sort((a, b) => b.count - a.count);
-
-    const dayLoad = new Map<string, number>();
-    activeAppointments.forEach(item => {
-      const dayKey = new Date(item.startsAt).toISOString().slice(0, 10);
-      dayLoad.set(dayKey, (dayLoad.get(dayKey) ?? 0) + 1);
-    });
-    const busiestDay = Array.from(dayLoad.entries()).sort(
-      (a, b) => b[1] - a[1]
-    )[0];
-
     const unconfirmed = activeAppointments.filter(
       item => item.status === "SCHEDULED"
     );
-    const delayed = activeAppointments.filter(item => delayedIds.has(item.id));
-    const withServiceOrder = activeAppointments.filter(
-      item =>
-        Boolean(item.serviceOrderId) ||
-        Boolean(item.serviceOrder?.id) ||
-        Boolean(item.serviceOrders?.some(order => Boolean(order?.id)))
+
+    const delayed = activeAppointments.filter(item =>
+      delayedIds.has(item.id)
     );
+
+    const withServiceOrder =
+      activeAppointments.filter(
+        item =>
+          Boolean(item.serviceOrderId) ||
+          Boolean(item.serviceOrder?.id) ||
+          Boolean(
+            item.serviceOrders?.some(order =>
+              Boolean(order?.id)
+            )
+          )
+      );
+
     const unassigned = activeAppointments.filter(
       item => !item.assignedToPersonId
     );
 
-    const possibleFits = executiveRead.possibleFits;
-    const emptyWindowSignal =
-      activeAppointments.length > 0 &&
-      possibleFits >= Math.max(6, people.length * 4);
-    const conflictSample = activeAppointments.find(item =>
-      conflictIds.has(item.id)
-    );
-    const overloadedOwner = overloadedOwners[0] ?? null;
+    const conflictSample =
+      activeAppointments.find(item =>
+        conflictIds.has(item.id)
+      );
+
     const delayedSample = delayed[0] ?? null;
-    const unconfirmedSample = unconfirmed[0] ?? null;
+    const unconfirmedSample =
+      unconfirmed[0] ?? null;
+    const unassignedSample =
+      unassigned[0] ?? null;
 
-    let level: OperationalStateLevel = "NORMAL";
-    let stateReason =
-      "Agenda distribuída no recorte atual, sem conflito de responsável ou atraso operacional relevante.";
-    let stateImpact =
-      "O calendário sustenta a leitura estratégica do tempo: a equipe pode revisar a semana e manter o ritmo de execução.";
-
-    if (
-      conflictIds.size > 0 ||
-      delayed.length >= 3 ||
-      (busiestDay?.[1] ?? 0) >= 10
-    ) {
-      level = "RESTRICTED";
-      stateReason = conflictSample
-        ? `${conflictSample.customer?.name ?? "Cliente"} tem sobreposição no responsável ${getPersonName(people, conflictSample.assignedToPersonId)}.`
-        : delayed.length >= 3
-          ? `${delayed.length} agendamentos ativos já passaram do horário planejado.`
-          : `Dia com ${busiestDay?.[1] ?? 0} agendamentos ativos no mesmo recorte.`;
-      stateImpact =
-        "O tempo da operação está travado: execução, O.S. e governança podem receber atraso em cadeia se o ajuste não acontecer agora.";
-    } else if (
-      overloadedOwner ||
-      unconfirmed.length > 0 ||
-      delayed.length > 0 ||
-      emptyWindowSignal ||
-      unassigned.length > 0
-    ) {
-      level = "WARNING";
-      stateReason = overloadedOwner
-        ? `${getPersonName(people, overloadedOwner.ownerId)} concentra ${overloadedOwner.count} agendamentos ativos.`
-        : delayedSample
-          ? `${delayedSample.customer?.name ?? "Cliente"} está atrasado desde ${formatDateTime(delayedSample.startsAt)}.`
-          : unconfirmedSample
-            ? `${unconfirmed.length} agendamento(s) ainda aguardam confirmação.`
-            : unassigned.length > 0
-              ? `${unassigned.length} agendamento(s) sem responsável atribuído.`
-              : `${possibleFits} janelas úteis indicam agenda vazia demais para a capacidade atual.`;
-      stateImpact =
-        "Há oportunidade de rebalancear o tempo antes que a fila vire conflito, atraso ou ociosidade operacional.";
-    }
+    const capacityExhausted =
+      capacitySnapshot.hasConfiguredCapacity &&
+      capacitySnapshot.capacityRemainingToday === 0;
 
     const risk = conflictSample
       ? {
           title: "Conflito entre atendimentos",
-          reason: `${conflictSample.customer?.name ?? "Cliente"} disputa horário com outro evento do mesmo responsável.`,
+          reason:
+            `${conflictSample.customer?.name ?? "Cliente"} possui ` +
+            "sobreposição visual com outro evento do mesmo responsável.",
           impact:
-            "A equipe pode perder a janela de execução e empurrar O.S., Timeline e governança para tratamento corretivo.",
+            "A grade indica colisão de horário e pede revisão no fluxo de Agendamentos.",
           ctaLabel: "Ver conflitos",
           appointmentId: conflictSample.id,
           action: "reschedule" as const,
         }
-      : overloadedOwner
+      : delayedSample
         ? {
-            title: "Responsável sobrecarregado",
-            reason: `${getPersonName(people, overloadedOwner.ownerId)} concentra ${overloadedOwner.count} agendamentos ativos no recorte.`,
+            title: "Atraso no calendário",
+            reason:
+              `${delayedSample.customer?.name ?? "Cliente"} passou ` +
+              `do horário planejado desde ${formatDateTime(delayedSample.startsAt)}.`,
             impact:
-              "A distribuição desigual aumenta chance de atraso, remarcação e execução sem prova operacional no tempo certo.",
-            ctaLabel: "Revisar capacidade",
-            appointmentId: overloadedOwner.group[0]?.id,
-            action: "rebalance" as const,
+              "O atraso visual pode pressionar a sequência de execução e deve ser revisado no agendamento.",
+            ctaLabel: "Revisar agenda",
+            appointmentId: delayedSample.id,
+            action: "review" as const,
           }
-        : delayedSample
+        : unconfirmedSample
           ? {
-              title: "Risco de atrasar execução",
-              reason: `${delayedSample.customer?.name ?? "Cliente"} atrasado desde ${formatDateTime(delayedSample.startsAt)}.`,
-              impact: "Pode gerar conflito, atraso ou ociosidade operacional.",
-              ctaLabel: "Revisar agenda do dia",
-              appointmentId: delayedSample.id,
-              action: "review" as const,
+              title: "Agendamentos sem confirmação",
+              reason:
+                `${unconfirmed.length} evento(s) continuam como ` +
+                "agendados no recorte atual.",
+              impact:
+                "A confirmação permanece no fluxo de Agendamentos; o Calendário apenas sinaliza o status retornado.",
+              ctaLabel: "Revisar agendamento",
+              appointmentId:
+                unconfirmedSample.id,
+              action: "confirm" as const,
             }
-          : unconfirmedSample
+          : unassignedSample
             ? {
-                title: "Agendamentos sem confirmação",
-                reason: `${unconfirmed.length} evento(s) ainda estão como agendado, sem confirmação operacional.`,
+                title:
+                  "Agendamento sem responsável",
+                reason:
+                  `${unassigned.length} evento(s) ativos ` +
+                  "não possuem responsável atribuído.",
                 impact:
-                  "Janelas não confirmadas podem virar ociosidade, remarcação ou conflito de última hora.",
-                ctaLabel: "Revisar agendamento",
-                appointmentId: unconfirmedSample.id,
-                action: "confirm" as const,
+                  "A atribuição deve ser revisada antes da execução para preservar responsabilidade operacional.",
+                ctaLabel:
+                  "Revisar capacidade",
+                appointmentId:
+                  unassignedSample.id,
+                action: "review" as const,
               }
-            : emptyWindowSignal
+            : capacityExhausted
               ? {
-                  title: "Agenda vazia demais",
-                  reason: `${possibleFits} janelas úteis permanecem disponíveis no recorte filtrado.`,
+                  title:
+                    "Capacidade diária preenchida",
+                  reason:
+                    `${capacitySnapshot.todayAppointmentsCount}/` +
+                    `${capacitySnapshot.dailyAppointmentCapacity} ` +
+                    "posições configuradas estão ocupadas hoje.",
                   impact:
-                    "Capacidade sem ocupação reduz previsibilidade de produção e pode ocultar demanda fora do calendário.",
-                  ctaLabel: "Ver janelas livres",
-                  appointmentId: activeAppointments[0]?.id,
-                  action: "fill" as const,
+                    "O Calendário não inventa encaixes: novos horários devem ser avaliados no fluxo de Agendamentos.",
+                  ctaLabel:
+                    "Revisar capacidade",
+                  appointmentId: undefined,
+                  action:
+                    "reviewCapacity" as const,
                 }
               : {
-                  title: "Calendário saudável",
+                  title:
+                    "Sem sinal crítico no calendário",
                   reason:
-                    "Não há conflito, sobrecarga, atraso ou vazio crítico no recorte atual.",
+                    "Nenhum conflito visual, atraso ou ausência de responsável foi detectado no recorte atual.",
                   impact:
-                    "A operação pode usar o calendário para revisão preventiva da semana sem acionar fluxo automático.",
+                    "A leitura permanece preventiva; o estado operacional oficial continua pertencendo à Governança.",
                   ctaLabel: "Revisar semana",
-                  appointmentId: activeAppointments[0]?.id,
-                  action: "reviewWeek" as const,
+                  appointmentId: undefined,
+                  action:
+                    "reviewWeek" as const,
                 };
 
     const nextAction = {
@@ -499,39 +591,27 @@ export default function CalendarPage() {
       entity: risk.appointmentId
         ? "Agendamento selecionado"
         : "Calendário operacional",
-      reason:
-        delayed.length > 0
-          ? `${delayed.length} atraso detectado no período.`
-          : risk.reason,
-      impact:
-        delayed.length > 0
-          ? "Pode reduzir previsibilidade de O.S. e execução."
-          : risk.impact,
+      reason: risk.reason,
+      impact: risk.impact,
       primaryActionLabel: risk.ctaLabel,
       appointmentId: risk.appointmentId,
       action: risk.action,
     };
 
     return {
-      level,
-      stateReason,
-      stateImpact,
       risk,
       nextAction,
-      overloadedOwners,
       unconfirmedCount: unconfirmed.length,
       delayedCount: delayed.length,
-      withServiceOrderCount: withServiceOrder.length,
+      withServiceOrderCount:
+        withServiceOrder.length,
       unassignedCount: unassigned.length,
-      emptyWindowSignal,
-      busiestDayCount: busiestDay?.[1] ?? 0,
     };
   }, [
     activeAppointments,
+    capacitySnapshot,
     conflictIds,
     delayedIds,
-    executiveRead.possibleFits,
-    people,
   ]);
 
   const flowStages = useMemo(
@@ -541,18 +621,17 @@ export default function CalendarPage() {
           id: "time",
           label: "Tempo",
           summary:
-            filteredAppointments.length > 0
-              ? "Eventos distribuídos no período."
+            conflictIds.size > 0
+              ? `${conflictIds.size} evento(s) com sobreposição visual.`
               : "Eventos distribuídos no período.",
           state:
-            calendarCommand.level === "RESTRICTED"
-              ? "blocked"
-              : calendarCommand.level === "WARNING"
-                ? "warning"
-                : filteredAppointments.length > 0
-                  ? "active"
-                  : "idle",
-          countOrValue: String(filteredAppointments.length),
+            conflictIds.size > 0
+              ? "warning"
+              : filteredAppointments.length > 0
+                ? "active"
+                : "idle",
+          countOrValue:
+            String(filteredAppointments.length),
         },
         {
           id: "appointment",
@@ -561,70 +640,85 @@ export default function CalendarPage() {
             calendarCommand.unconfirmedCount > 0
               ? `${calendarCommand.unconfirmedCount} aguardando confirmação.`
               : "Eventos preparados para execução.",
-          state: calendarCommand.unconfirmedCount > 0 ? "warning" : "done",
-          countOrValue: String(activeAppointments.length),
+          state:
+            calendarCommand.unconfirmedCount > 0
+              ? "warning"
+              : "done",
+          countOrValue:
+            String(activeAppointments.length),
           hrefLabel: "Abrir Agendamentos",
-          onClick: () => navigate("/appointments?source=calendar"),
+          onClick: () =>
+            navigate(
+              "/appointments?source=calendar"
+            ),
         },
         {
           id: "owner",
           label: "Responsáveis",
           summary:
-            calendarCommand.overloadedOwners.length > 0
-              ? `${getPersonName(people, calendarCommand.overloadedOwners[0].ownerId)} está sobrecarregado.`
-              : calendarCommand.unassignedCount > 0
-                ? `${calendarCommand.unassignedCount} sem responsável.`
-                : "Equipe vinculada aos eventos.",
+            calendarCommand.unassignedCount > 0
+              ? `${calendarCommand.unassignedCount} sem responsável.`
+              : "Equipe vinculada aos eventos.",
           state:
-            calendarCommand.overloadedOwners.length > 0
+            calendarCommand.unassignedCount > 0
               ? "warning"
-              : calendarCommand.unassignedCount > 0
-                ? "warning"
-                : "done",
+              : "done",
         },
         {
           id: "service-order",
           label: "Ordens de Serviço",
           summary:
-            calendarCommand.withServiceOrderCount > 0
-              ? "Vínculos operacionais retornados."
-              : "Vínculos operacionais retornados.",
-          state: calendarCommand.withServiceOrderCount > 0 ? "active" : "idle",
+            "Vínculos operacionais retornados.",
+          state:
+            calendarCommand.withServiceOrderCount >
+            0
+              ? "active"
+              : "idle",
           hrefLabel: "Ver O.S.",
-          onClick: () => navigate("/service-orders?source=calendar"),
+          onClick: () =>
+            navigate(
+              "/service-orders?source=calendar"
+            ),
         },
         {
           id: "execution",
           label: "Execução",
           summary:
             calendarCommand.delayedCount > 0
-              ? `${calendarCommand.delayedCount} atraso(s) pressionam execução.`
-              : "Atrasos e andamento pressionam o dia.",
-          state: calendarCommand.delayedCount > 0 ? "blocked" : "active",
+              ? `${calendarCommand.delayedCount} atraso(s) visuais pedem revisão.`
+              : "Sem atraso visual ativo no recorte.",
+          state:
+            calendarCommand.delayedCount > 0
+              ? "warning"
+              : "active",
         },
         {
           id: "timeline",
           label: "Evidências",
-          summary: "Eventos reais derivados do calendário.",
-          state: filteredAppointments.length > 0 ? "active" : "idle",
-          hrefLabel: "Abrir Timeline oficial",
-          onClick: () => navigate("/timeline?source=calendar"),
+          summary:
+            "Eventos reais derivados do calendário.",
+          state:
+            filteredAppointments.length > 0
+              ? "active"
+              : "idle",
+          hrefLabel:
+            "Abrir Timeline oficial",
+          onClick: () =>
+            navigate(
+              "/timeline?source=calendar"
+            ),
         },
         {
           id: "risk",
           label: "Governança",
           summary:
-            calendarCommand.level === "NORMAL"
-              ? "Sinais antes de afetar o controle operacional."
-              : "Sinais antes de afetar o controle operacional.",
-          state:
-            calendarCommand.level === "RESTRICTED"
-              ? "blocked"
-              : calendarCommand.level === "WARNING"
-                ? "warning"
-                : "done",
+            "Sinais antes de afetar o controle operacional; estado oficial permanece em Governança.",
+          state: "active",
           hrefLabel: "Ver Governança",
-          onClick: () => navigate("/governance?source=calendar"),
+          onClick: () =>
+            navigate(
+              "/governance?source=calendar"
+            ),
         },
       ] satisfies Array<{
         id: string;
@@ -638,37 +732,40 @@ export default function CalendarPage() {
     [
       activeAppointments.length,
       calendarCommand,
+      conflictIds.size,
       filteredAppointments.length,
       navigate,
-      people,
     ]
   );
 
   const distribution = useMemo(() => {
     const total = filteredAppointments.length;
-    const confirmed = filteredAppointments.filter(
-      item => item.status === "CONFIRMED"
-    ).length;
-    const pending = filteredAppointments.filter(
-      item => item.status === "SCHEDULED"
-    ).length;
-    const completed = filteredAppointments.filter(
-      item => item.status === "DONE"
-    ).length;
-    const cancelled = filteredAppointments.filter(
-      item => item.status === "CANCELED"
-    ).length;
-    const waiting = filteredAppointments.filter(
-      item => item.status === "NO_SHOW"
-    ).length;
-    const activePeople = teamFilter === "all" ? Math.max(people.length, 1) : 1;
-    const capacityTotal = activePeople * 12;
-    const capacityUsed = activeAppointments.length;
-    const capacityPercent =
-      capacityTotal > 0
-        ? Math.min(100, Math.round((capacityUsed / capacityTotal) * 100))
-        : 0;
-    const availableTime = Math.max(0, capacityTotal - capacityUsed);
+
+    const confirmed =
+      filteredAppointments.filter(
+        item => item.status === "CONFIRMED"
+      ).length;
+
+    const pending =
+      filteredAppointments.filter(
+        item => item.status === "SCHEDULED"
+      ).length;
+
+    const completed =
+      filteredAppointments.filter(
+        item => item.status === "DONE"
+      ).length;
+
+    const cancelled =
+      filteredAppointments.filter(
+        item => item.status === "CANCELED"
+      ).length;
+
+    const waiting =
+      filteredAppointments.filter(
+        item => item.status === "NO_SHOW"
+      ).length;
+
     return {
       total,
       confirmed,
@@ -676,79 +773,67 @@ export default function CalendarPage() {
       completed,
       cancelled,
       waiting,
-      capacityTotal,
-      capacityUsed,
-      capacityPercent,
-      availableTime,
+      capacityTotal:
+        capacitySnapshot.dailyAppointmentCapacity,
+      capacityUsed:
+        capacitySnapshot.todayAppointmentsCount,
+      capacityPercent:
+        capacitySnapshot.appointmentCapacityUsagePct,
+      capacityRemainingToday:
+        capacitySnapshot.capacityRemainingToday,
     };
-  }, [
-    activeAppointments.length,
-    filteredAppointments,
-    people.length,
-    teamFilter,
-  ]);
+  }, [capacitySnapshot, filteredAppointments]);
 
   const selectedOrCritical = selected ?? immediateAttention[0]?.item ?? null;
 
   const heroSignals = useMemo(() => {
     const signals = [
-      delayedIds.size > 0 ? `${delayedIds.size} atraso(s) detectado(s)` : null,
+      delayedIds.size > 0
+        ? `${delayedIds.size} atraso(s) detectado(s)`
+        : null,
+
       calendarCommand.unassignedCount > 0
         ? `${calendarCommand.unassignedCount} sem responsável`
         : null,
-      executiveRead.possibleFits > 0
-        ? `${executiveRead.possibleFits} janelas livres`
+
+      capacitySnapshot.hasConfiguredCapacity
+        ? `${capacitySnapshot.capacityRemainingToday ?? 0} capacidade restante hoje`
         : null,
+
       executiveRead.conflicts > 0
-        ? `${executiveRead.conflicts} conflito detectado`
+        ? `${executiveRead.conflicts} conflitos visuais`
         : null,
+
       distribution.cancelled > 0
         ? `${distribution.cancelled} cancelados`
         : null,
+
       executiveRead.confirmed > 0
         ? `${executiveRead.confirmed} preparado para executar`
         : null,
     ].filter(Boolean) as string[];
-    const uniqueSignals = Array.from(new Set(signals));
+
+    const uniqueSignals =
+      Array.from(new Set(signals));
 
     return uniqueSignals.length > 0
       ? uniqueSignals.slice(0, 4)
       : ["Operação do tempo monitorada"];
   }, [
     calendarCommand.unassignedCount,
+    capacitySnapshot,
     delayedIds.size,
     distribution.cancelled,
     executiveRead.conflicts,
     executiveRead.confirmed,
-    executiveRead.possibleFits,
   ]);
 
-  const periodSummary = `${filteredAppointments.length} eventos no período · ${delayedIds.size} atraso · ${executiveRead.possibleFits} janelas livres`;
-
-  const availabilityMarkers = useMemo<EventInput[]>(() => {
-    if (filteredAppointments.length >= 6 || executiveRead.possibleFits === 0)
-      return [];
-    const baseDate = filteredAppointments[0]?.startsAt
-      ? new Date(filteredAppointments[0].startsAt)
-      : new Date();
-    return [9, 14, 16]
-      .slice(0, Math.min(3, executiveRead.possibleFits))
-      .map(hour => {
-        const start = new Date(baseDate);
-        start.setHours(hour, 0, 0, 0);
-        const end = new Date(start);
-        end.setMinutes(end.getMinutes() + 45);
-        return {
-          id: `availability-${hour}`,
-          title: "Janela livre calculada",
-          start: start.toISOString(),
-          end: end.toISOString(),
-          display: "background",
-          backgroundColor: "var(--accent-soft)",
-          extendedProps: { isAvailabilityMarker: true },
-        };
-      });
-  }, [executiveRead.possibleFits, filteredAppointments]);
+  const periodSummary =
+    `${filteredAppointments.length} eventos no período · ` +
+    `${delayedIds.size} atraso · ` +
+    (capacitySnapshot.hasConfiguredCapacity
+      ? `${capacitySnapshot.capacityRemainingToday ?? 0} capacidade restante hoje`
+      : "capacidade diária não configurada");
 
   const operationalEvidence = useMemo(() => {
     return [...filteredAppointments]
@@ -781,15 +866,11 @@ export default function CalendarPage() {
       setViewMode("timeGridWeek");
       return;
     }
-    if (action === "fill") {
-      setShowCreateModal(true);
-      return;
-    }
     if (appointmentId) {
       const queryAction =
         action === "confirm"
           ? "confirm"
-          : action === "reschedule" || action === "rebalance"
+          : action === "reschedule"
             ? "reschedule"
             : "review";
       navigate(
@@ -878,15 +959,28 @@ export default function CalendarPage() {
               icon={<AlertTriangle className="h-4 w-4" />}
             />
             <AppStatCard
-              label="Sobrecarga"
-              value={String(calendarCommand.overloadedOwners.length)}
-              helper="Pessoas acima do limite operacional do recorte."
+              label="Capacidade diária configurada"
+              value={
+                capacitySnapshot.hasConfiguredCapacity
+                  ? String(
+                      capacitySnapshot.dailyAppointmentCapacity
+                    )
+                  : "—"
+              }
+              helper="Soma dos limites diários configurados para os responsáveis do recorte."
               icon={<Clock3 className="h-4 w-4" />}
             />
             <AppStatCard
-              label="Janelas livres"
-              value={String(executiveRead.possibleFits)}
-              helper="Oportunidades disponíveis para encaixe seguro."
+              label="Capacidade restante hoje"
+              value={
+                capacitySnapshot.capacityRemainingToday ===
+                null
+                  ? "—"
+                  : String(
+                      capacitySnapshot.capacityRemainingToday
+                    )
+              }
+              helper="Diferença entre capacidade configurada e agendamentos ativos de hoje."
               icon={<Plus className="h-4 w-4" />}
             />
             <AppStatCard
@@ -897,8 +991,12 @@ export default function CalendarPage() {
             />
             <AppStatCard
               label="Capacidade da equipe"
-              value={`${distribution.capacityPercent}%`}
-              helper="Uso do tempo disponível no período filtrado."
+              value={
+                distribution.capacityPercent === null
+                  ? "—"
+                  : `${distribution.capacityPercent}%`
+              }
+              helper="Uso da capacidade diária configurada para hoje."
               icon={<RefreshCcw className="h-4 w-4" />}
             />
           </section>
@@ -1002,7 +1100,10 @@ export default function CalendarPage() {
                   ],
                   ["Finalizados", distribution.completed],
                   ["Cancelados", distribution.cancelled],
-                  ["Janelas livres", distribution.availableTime],
+                  [
+                    "Capacidade restante hoje",
+                    distribution.capacityRemainingToday ?? "—",
+                  ],
                 ].map(([label, value]) => (
                   <div
                     key={label}
@@ -1018,15 +1119,16 @@ export default function CalendarPage() {
                 ))}
               </div>
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-3 text-sm text-[var(--text-secondary)]">
-                Capacidade do período:{" "}
+                Capacidade diária configurada:{" "}
                 <strong className="text-[var(--text-primary)]">
-                  {distribution.capacityUsed}/{distribution.capacityTotal}
+                  {distribution.capacityTotal > 0
+                    ? `${distribution.capacityUsed}/${distribution.capacityTotal}`
+                    : "não informada"}
                 </strong>{" "}
-                · Janelas livres:{" "}
+                · Capacidade restante hoje:{" "}
                 <strong className="text-[var(--text-primary)]">
-                  {distribution.availableTime}
-                </strong>{" "}
-                janelas.
+                  {distribution.capacityRemainingToday ?? "—"}
+                </strong>.
               </div>
             </AppSectionCard>
           </div>
@@ -1127,8 +1229,8 @@ export default function CalendarPage() {
                   <div className="mb-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-3 text-sm font-medium text-[var(--text-primary)]">
                     {periodSummary}
                     <span className="mt-1 block text-xs font-normal text-[var(--text-secondary)]">
-                      Período útil destacado; marcações suaves indicam janela
-                      livre calculada, não agendamento real.
+                      A grade mostra somente agendamentos reais. Capacidade
+                      restante hoje não representa disponibilidade real de horário.
                     </span>
                   </div>
                   <div className="hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-2 shadow-sm xl:block">
@@ -1143,10 +1245,8 @@ export default function CalendarPage() {
                         setViewMode(view.view.type as ViewMode)
                       }
                       headerToolbar={false}
-                      events={[...events, ...availabilityMarkers]}
+                      events={events}
                       eventClick={(arg: EventClickArg) => {
-                        if (arg.event.extendedProps.isAvailabilityMarker)
-                          return;
                         setSelectedId(arg.event.id);
                       }}
                       eventContent={eventInfo => (
@@ -1258,7 +1358,7 @@ export default function CalendarPage() {
                           [
                             "Risco",
                             conflictIds.has(selectedOrCritical.id)
-                              ? "Conflito detectado"
+                              ? "Conflito visual detectado no calendário"
                               : delayedIds.has(selectedOrCritical.id)
                                 ? "Atraso detectado"
                                 : "Sem risco crítico no recorte",
@@ -1342,15 +1442,7 @@ export default function CalendarPage() {
                 </AppSectionBlock>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-3">
-                <OperationalStateCard
-                  title="Leitura macro do tempo"
-                  level={calendarCommand.level}
-                  reason={calendarCommand.stateReason}
-                  impact={calendarCommand.stateImpact}
-                  detailsLabel="Ver semana"
-                  onDetails={() => setViewMode("timeGridWeek")}
-                />
+              <div className="grid gap-4 xl:grid-cols-2">
                 <OperationalRiskCard
                   title={calendarCommand.risk.title}
                   reason={calendarCommand.risk.reason}
@@ -1408,7 +1500,7 @@ export default function CalendarPage() {
                       variant="outline"
                       onClick={() => setStatusFilter("all")}
                     >
-                      Ver janelas livres
+                      Ver capacidade hoje
                     </Button>
                     <Button
                       size="sm"
@@ -1441,13 +1533,16 @@ export default function CalendarPage() {
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-3 text-sm text-[var(--text-secondary)]">
                     Insight:{" "}
-                    {executiveRead.possibleFits > 0
-                      ? "existem janelas livres para reduzir conflito ou antecipar demanda."
-                      : "a capacidade está ocupada; evite novos encaixes sem rebalancear."}
+                    {capacitySnapshot.hasConfiguredCapacity
+                      ? `${capacitySnapshot.capacityRemainingToday ?? 0} posição(ões) permanecem dentro da capacidade diária configurada; isso não representa horário livre.`
+                      : "capacidade diária não configurada para os responsáveis deste recorte."}
                   </div>
                   <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-3 text-sm text-[var(--text-secondary)]">
-                    Equipe hoje: {distribution.capacityPercent}% de uso,{" "}
-                    {activeAppointments.length} agendamentos ativos.
+                    Equipe hoje:{" "}
+                    {distribution.capacityPercent === null
+                      ? "uso de capacidade não calculável"
+                      : `${distribution.capacityPercent}% da capacidade configurada utilizada`},{" "}
+                    {activeAppointments.length} agendamentos ativos no recorte.
                   </div>
                   <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-3 text-sm text-[var(--text-secondary)]">
                     Eventos sem vínculo de O.S.:{" "}

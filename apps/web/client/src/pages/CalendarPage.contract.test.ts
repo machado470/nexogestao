@@ -23,7 +23,7 @@ describe("CalendarPage operational time-control contract", () => {
     expect(calendar).toContain("heroSignals");
     expect(calendar).toContain("atraso(s) detectado(s)");
     expect(calendar).toContain("sem responsável");
-    expect(calendar).toContain("janelas livres");
+    expect(calendar).toContain("capacidade restante hoje");
     expect(calendar).toContain("conflitos");
     expect(calendar).toContain("Operação do tempo monitorada");
   });
@@ -72,12 +72,12 @@ describe("CalendarPage operational time-control contract", () => {
 
     expect(calendar).toContain("Abrir agendamento");
     expect(calendar).toContain("Revisar agenda");
-    expect(calendar).toContain("Ver semana");
+    expect(calendar).toContain("Revisar semana");
     expect(calendar).toContain("Ver e vincular");
     expect(calendar).toContain("Abrir Timeline oficial");
     expect(calendar).toContain("Revisar capacidade");
     expect(calendar).toContain("Ver conflitos");
-    expect(calendar).toContain("Ver janelas livres");
+    expect(calendar).toContain("Ver capacidade hoje");
     expect(calendar).not.toContain("Agendamento #");
     expect(calendar).not.toContain("Confirmar");
     expect(calendar).not.toContain("Executar");
@@ -93,7 +93,7 @@ describe("CalendarPage operational time-control contract", () => {
     expect(calendar).toContain("Precisam de atenção");
     expect(calendar).toContain("Finalizados");
     expect(calendar).toContain("Cancelados");
-    expect(calendar).toContain("Janelas livres");
+    expect(calendar).toContain("Capacidade restante hoje");
   });
 
   it("não fabrica prova operacional nem expõe metadados técnicos na leitura principal", () => {
@@ -127,14 +127,17 @@ describe("CalendarPage operational time-control contract", () => {
     expect(commandLayer).not.toContain("Impacto esperado");
   });
 
-  it("declara grade operacional com período útil e janelas livres calculadas", () => {
+  it("declara grade operacional sem fabricar disponibilidade horária", () => {
     const calendar = source();
 
-    expect(calendar).toContain("availabilityMarkers");
-    expect(calendar).toContain("Janela livre calculada");
     expect(calendar).toContain('slotMinTime="07:00:00"');
     expect(calendar).toContain("businessHours");
-    expect(calendar).toContain("não agendamento real");
+    expect(calendar).toContain("events={events}");
+    expect(calendar).toContain(
+      "não representa disponibilidade real de horário"
+    );
+    expect(calendar).not.toContain("availabilityMarkers");
+    expect(calendar).not.toContain("Janela livre calculada");
   });
 
   it("preserva a grade com indisponibilidade parcial e filtros acessíveis", () => {
@@ -148,4 +151,44 @@ describe("CalendarPage operational time-control contract", () => {
     expect(calendar).toContain('aria-label="Filtrar por status"');
     expect(calendar).toContain('aria-label="Filtrar por cliente"');
   });
+
+  it("usa capacidade configurada autoritativa sem fabricar estado ou janelas", () => {
+    const calendar = source();
+
+    expect(calendar).toContain(
+      "trpc.people.assignees.useQuery"
+    );
+    expect(calendar).not.toContain(
+      "trpc.people.operationalSummary.useQuery"
+    );
+
+    for (const field of [
+      "dailyAppointmentCapacity",
+      "todayAppointmentsCount",
+      "appointmentCapacityUsagePct",
+    ]) {
+      expect(calendar).toContain(field);
+    }
+
+    expect(calendar).toContain("Capacidade restante hoje");
+
+    expect(calendar).not.toContain("activePeople * 12");
+    expect(calendar).not.toContain("owner.count >= 6");
+    expect(calendar).not.toContain(
+      "(busiestDay?.[1] ?? 0) >= 10"
+    );
+
+    expect(calendar).not.toContain("OperationalStateLevel");
+    expect(calendar).not.toContain("<OperationalStateCard");
+
+    expect(calendar).not.toContain("availabilityMarkers");
+    expect(calendar).not.toContain("Janela livre calculada");
+    expect(calendar).not.toContain("[9, 14, 16]");
+
+    expect(calendar).toContain("conflictIds");
+    expect(calendar).toContain(
+      "Conflito visual detectado no calendário"
+    );
+  });
+
 });
