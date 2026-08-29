@@ -146,6 +146,26 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("Mais filtros · valor");
   });
 
+  it("filters customers by last operational activity period", () => {
+    expect(source).toContain("function parseDateFilterBoundary(");
+    expect(source).toContain('"nexo.customers.period-start.v2"');
+    expect(source).toContain('"nexo.customers.period-end.v2"');
+    expect(source).toContain(
+      "const lastInteractionTimestamp = profile.lastInteractionAt?.getTime()"
+    );
+    expect(source).toContain(
+      "lastInteractionTimestamp < periodStartTimestamp"
+    );
+    expect(source).toContain(
+      "lastInteractionTimestamp > periodEndTimestamp"
+    );
+    expect(source).toContain("Última atividade");
+    expect(source).toContain('aria-label="Período inicial"');
+    expect(source).toContain('aria-label="Período final"');
+    expect(source).toContain("Limpar período");
+    expect(source).toContain("Mais filtros · período");
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
