@@ -218,6 +218,20 @@ function formatCurrency(cents?: number) {
   }).format(Number(cents ?? 0) / 100);
 }
 
+function parseCurrencyFilterToCents(value: string) {
+  const normalized = value.trim().replace(/\s/g, "").replace(/^R\$/i, "");
+  if (!normalized) return null;
+
+  const decimalValue = normalized.includes(",")
+    ? normalized.replace(/\./g, "").replace(",", ".")
+    : normalized;
+
+  const amount = Number(decimalValue);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+
+  return Math.round(amount * 100);
+}
+
 function toDate(value: unknown): Date | null {
   if (!value) return null;
   const parsed = new Date(String(value));
@@ -581,6 +595,14 @@ export default function CustomersPage() {
       "nexo.customers.filter.v2",
       "all"
     );
+  const [minBalanceValue, setMinBalanceValue] = useOperationalMemoryState(
+    "nexo.customers.balance-min.v2",
+    ""
+  );
+  const [maxBalanceValue, setMaxBalanceValue] = useOperationalMemoryState(
+    "nexo.customers.balance-max.v2",
+    ""
+  );
   const [activeCustomerId, setActiveCustomerId] = useOperationalMemoryState<
     string | null
   >("nexo.customers.active-id.v2", null);
@@ -664,6 +686,8 @@ export default function CustomersPage() {
 
   const filteredProfiles = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
+    const minBalanceCents = parseCurrencyFilterToCents(minBalanceValue);
+    const maxBalanceCents = parseCurrencyFilterToCents(maxBalanceValue);
 
     return profiles.filter(profile => {
       if (
@@ -690,6 +714,18 @@ export default function CustomersPage() {
       if (activeFilter === "risk" && profile.status !== "Em risco") {
         return false;
       }
+      if (
+        minBalanceCents !== null &&
+        profile.pendingCents < minBalanceCents
+      ) {
+        return false;
+      }
+      if (
+        maxBalanceCents !== null &&
+        profile.pendingCents > maxBalanceCents
+      ) {
+        return false;
+      }
 
       if (!query) return true;
       return [
@@ -701,7 +737,13 @@ export default function CustomersPage() {
         .join(" ")
         .includes(query);
     });
-  }, [activeFilter, profiles, searchTerm]);
+  }, [
+    activeFilter,
+    maxBalanceValue,
+    minBalanceValue,
+    profiles,
+    searchTerm,
+  ]);
 
   const isLoading = customersQuery.isLoading && customers.length === 0;
   const hasBlockingError =
@@ -1636,9 +1678,11 @@ export default function CustomersPage() {
           ))}
           <details className="relative">
             <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-              Mais filtros
+              {minBalanceValue || maxBalanceValue
+                ? "Mais filtros · valor"
+                : "Mais filtros"}
             </summary>
-            <div className="absolute right-0 z-20 mt-2 grid min-w-[190px] gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
+            <div className="absolute right-0 z-20 mt-2 grid min-w-[260px] gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
               {[
                 { key: "active", label: "Ativos" },
                 { key: "inactive", label: "Inativos" },
@@ -1659,6 +1703,44 @@ export default function CustomersPage() {
                   {item.label}
                 </button>
               ))}
+
+              <div className="border-t border-[var(--border-subtle)] pt-2">
+                <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
+                  Saldo financeiro
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={minBalanceValue}
+                    onChange={event => setMinBalanceValue(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="Mín. R$"
+                    aria-label="Saldo mínimo"
+                    className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
+                  />
+                  <input
+                    value={maxBalanceValue}
+                    onChange={event => setMaxBalanceValue(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="Máx. R$"
+                    aria-label="Saldo máximo"
+                    className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
+                  />
+                </div>
+
+                {minBalanceValue || maxBalanceValue ? (
+                  <button
+                    type="button"
+                    className="mt-2 text-xs font-medium text-[var(--accent-primary)]"
+                    onClick={() => {
+                      setMinBalanceValue("");
+                      setMaxBalanceValue("");
+                    }}
+                  >
+                    Limpar intervalo de valor
+                  </button>
+                ) : null}
+              </div>
             </div>
           </details>
         </div>
