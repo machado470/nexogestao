@@ -196,6 +196,23 @@ describe("CustomersPage operational client center", () => {
     ).toBe(2);
   });
 
+  it("shows a frequent indicator after three completed services", () => {
+    expect(source).toContain(
+      "const customerFrequentCompletedServicesThreshold = 3;"
+    );
+    expect(source).toContain("function isFrequentCustomer(");
+    expect(source).toContain(
+      'order => String(order.status ?? "").toUpperCase() === "COMPLETED"'
+    );
+    expect(source).toContain(
+      "completedServices >= customerFrequentCompletedServicesThreshold"
+    );
+    expect(
+      source.match(/label="Frequente"/g)?.length
+    ).toBe(2);
+    expect(source).toContain('tone="accent"');
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
