@@ -209,6 +209,7 @@ type CustomerOperationalEventType =
 
 const pageSize = 8;
 const customerNewWindowDays = 30;
+const customerFrequentCompletedServicesThreshold = 3;
 const openServiceOrderStatuses = ["OPEN", "ASSIGNED", "IN_PROGRESS"];
 const pendingChargeStatuses = ["OVERDUE", "PENDING"];
 
@@ -278,6 +279,16 @@ function daysBetween(date: Date | null) {
     0,
     Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
   );
+}
+
+function isFrequentCustomer(
+  profile: Pick<CustomerProfile, "serviceOrders">
+) {
+  const completedServices = profile.serviceOrders.filter(
+    order => String(order.status ?? "").toUpperCase() === "COMPLETED"
+  ).length;
+
+  return completedServices >= customerFrequentCompletedServicesThreshold;
 }
 
 function isNewCustomer(customer: Customer) {
@@ -1954,6 +1965,9 @@ export default function CustomersPage() {
                         {isNewCustomer(profile.customer) ? (
                           <AppStatusBadge label="Novo" tone="info" />
                         ) : null}
+                        {isFrequentCustomer(profile) ? (
+                          <AppStatusBadge label="Frequente" tone="accent" />
+                        ) : null}
                       </div>
                     </div>
                     <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">
@@ -2059,6 +2073,12 @@ export default function CustomersPage() {
                               {isNewCustomer(profile.customer) ? (
                                 <AppStatusBadge label="Novo" tone="info" />
                               ) : null}
+                                {isFrequentCustomer(profile) ? (
+                                  <AppStatusBadge
+                                    label="Frequente"
+                                    tone="accent"
+                                  />
+                                ) : null}
                               <AppPriorityBadge
                                 priority={getCustomerPriority(profile)}
                               />
