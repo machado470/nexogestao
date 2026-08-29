@@ -136,11 +136,43 @@ describe("PeoplePage human operation center contract", () => {
     expect(source).not.toContain("Math.random");
   });
 
-  it("consome contrato operacional consolidado com fallback local apenas de segurança", () => {
-    expect(source).toContain("operationalStatus?: AppOperationalStatus | null");
-    expect(source).toContain("priority?: AppPriorityLevel | null");
-    expect(source).toContain("interventionReason?: string | null");
-    expect(source).toContain("recommendedActionLabel?: string | null");
+  it("consome status e prioridade autoritativos sem reclassificar operação no frontend", () => {
+    const peopleRouter = readFileSync(
+      new URL("../../../server/routers/people.ts", import.meta.url),
+      "utf8"
+    );
+
+    expect(peopleRouter).toContain(
+      'operationalStatus: z.enum(["NORMAL", "ATENÇÃO", "RISCO", "CRÍTICO"])'
+    );
+    expect(peopleRouter).toContain(
+      'priority: z.enum(["P0", "P1", "P2", "P3"])'
+    );
+
+    expect(source).not.toContain("function derivePersonOperationalStatus(");
+    expect(source).not.toContain("function derivePersonPriority(");
+
+    expect(source).not.toContain(
+      "header.overdueServiceOrders >= 5 || header.overloadedPeople >= 2"
+    );
+
+    expect(source).toContain("person.operationalStatus");
+    expect(source).toContain("person.priority");
+    expect(source).toContain("operationalStatus: AppOperationalStatus;");
+    expect(source).toContain("priority: AppPriorityLevel;");
+    expect(source).toContain(
+      "const teamHealth = deriveTeamHealth(people, header);"
+    );
+    expect(source).toContain(
+      'people.some(person => person.operationalStatus !== "NORMAL")'
+    );
+  });
+
+  it("consome contrato operacional consolidado sem reclassificação local", () => {
+    expect(source).toContain("operationalStatus: AppOperationalStatus;");
+    expect(source).toContain("priority: AppPriorityLevel;");
+    expect(source).toContain("interventionReason: string | null;");
+    expect(source).toContain("recommendedActionLabel: string | null;");
     expect(source).toContain("operationalSummaryText?: string | null");
     expect(source).toContain("capacitySummaryText?: string | null");
     expect(source).toContain("riskSummaryText?: string | null");
@@ -153,11 +185,41 @@ describe("PeoplePage human operation center contract", () => {
     expect(source).toContain('data-testid="people-recent-execution"');
     expect(source).toContain('data-testid="people-operational-proof"');
     expect(source).toContain('data-testid="people-individual-risk"');
-    expect(source).toContain(
-      "if (person.operationalStatus) return person.operationalStatus"
-    );
-    expect(source).toContain("if (person.priority) return person.priority");
     expect(source).toContain('data-testid="people-recommended-action"');
+  });
+
+  it("usa recomendação operacional do backend e deixa o frontend apenas rotear a ação", () => {
+    const peopleRouter = readFileSync(
+      new URL("../../../server/routers/people.ts", import.meta.url),
+      "utf8"
+    );
+
+    expect(peopleRouter).toContain(
+      "interventionReason: z.string().nullable()"
+    );
+    expect(peopleRouter).toContain(
+      "recommendedActionLabel: z.string().nullable()"
+    );
+    expect(peopleRouter).toMatch(
+      /recommendedActionTarget:\s*z\s*\.enum\(\["PERSON", "SERVICE_ORDERS", "APPOINTMENTS", "TIMELINE"\]\)\s*\.nullable\(\)/
+    );
+
+    expect(source).not.toContain("function buildPeopleNextBestAction(");
+    expect(source).not.toContain("const overduePerson =");
+    expect(source).not.toContain("const overloadedPerson =");
+    expect(source).not.toContain("const unavailablePerson =");
+
+    expect(source).not.toContain('"Resolver atrasos atribuídos"');
+    expect(source).not.toContain('"Redistribuir carga"');
+    expect(source).not.toContain('"Revisar disponibilidade"');
+
+    expect(source).toContain("person.recommendedActionLabel");
+    expect(source).toContain("person.recommendedActionTarget");
+    expect(source).toContain("person.interventionReason");
+    expect(source).toContain("function recommendedActionHandler(");
+    expect(source).toContain(
+      'person.recommendedActionTarget === "TIMELINE"'
+    );
   });
 
   it("renderiza blocos opcionais de financeiro relacionado e comunicação atribuída sem comissão ou venda inventada", () => {
