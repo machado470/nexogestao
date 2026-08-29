@@ -64,7 +64,13 @@ import {
 
 type ConversationFilter = "all" | "waiting_customer" | "resolved";
 
-type WhatsAppConversationStatus = "OPEN" | "PENDING" | "RESOLVED" | "FAILED";
+type WhatsAppConversationStatus =
+  | "OPEN"
+  | "WAITING_CUSTOMER"
+  | "WAITING_OPERATOR"
+  | "PENDING"
+  | "RESOLVED"
+  | "FAILED";
 type WhatsAppPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type ContextType =
   | "CUSTOMER"
@@ -74,7 +80,15 @@ type ContextType =
   | "PAYMENT"
   | "GENERAL";
 type MessageDirection = "INBOUND" | "OUTBOUND";
-type MessageStatus = "QUEUED" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+type MessageStatus =
+  | "QUEUED"
+  | "SENDING"
+  | "SENT"
+  | "DELIVERED"
+  | "READ"
+  | "FAILED"
+  | "UNCERTAIN"
+  | "CANCELED";
 export type OperationalMessageType =
   | "APPOINTMENT_CONFIRMATION"
   | "APPOINTMENT_REMINDER"
@@ -175,7 +189,7 @@ function resolveComposerErrorMessage(error: unknown) {
   const rawMessage =
     typeof error === "string"
       ? error
-      : (error as { message?: string })?.message ?? fallback;
+      : ((error as { message?: string })?.message ?? fallback);
   if (rawMessage.includes("Please login (10001)")) {
     return "Sessão expirada. Faça login novamente para enviar mensagens.";
   }
@@ -525,6 +539,7 @@ type Conversation = {
   hasFailedDelivery?: boolean;
   isVirtual?: boolean;
   customer?: { id?: string; name?: string; phone?: string | null } | null;
+  responsibleName?: string | null;
 };
 
 type ChatMessage = {
@@ -595,6 +610,8 @@ const statusUi: Record<
   { label: string; dot: string }
 > = {
   OPEN: { label: "Aberta", dot: "bg-amber-400" },
+  WAITING_CUSTOMER: { label: "Aguardando cliente", dot: "bg-sky-400" },
+  WAITING_OPERATOR: { label: "Aguardando operação", dot: "bg-amber-400" },
   PENDING: { label: "Pendente", dot: "bg-[var(--accent-primary)]" },
   RESOLVED: { label: "Resolvida", dot: "bg-emerald-400" },
   FAILED: { label: "Falha", dot: "bg-rose-400" },
@@ -651,19 +668,48 @@ function fmtTime(value?: string | null) {
   });
 }
 
+/** Keep personal and provider identifiers out of the operational surface. */
+export function maskPhone(value?: string | null) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length < 4) return "Telefone cadastrado";
+  return `•••• ${digits.slice(-4)}`;
+}
+
+export function getMessageDeliveryPresentation(message: ChatMessage) {
+  const labels: Record<MessageStatus, string> = {
+    QUEUED: "Na fila",
+    SENDING: "Enviando",
+    SENT: "Enviada ao provedor",
+    DELIVERED: "Entregue",
+    READ: "Lida",
+    FAILED: "Falha no envio",
+    UNCERTAIN: "Entrega incerta",
+    CANCELED: "Cancelada",
+  };
+  return {
+    label: labels[message.status] ?? "Status indisponível",
+    uncertain: message.status === "UNCERTAIN",
+    failed: message.status === "FAILED",
+  };
+}
+
 function mapConversation(item: any): Conversation {
   const customerName = item?.customer?.name ?? item?.title ?? "Sem nome";
-  const hasPendingCharge =
-    item?.contextType === "CHARGE" &&
-    ["OPEN", "PENDING"].includes(String(item?.status ?? "OPEN"));
-  const hasUpcomingAppointment = item?.contextType === "APPOINTMENT";
-  const hasActiveServiceOrder = item?.contextType === "SERVICE_ORDER";
+  const hasPendingCharge = Boolean(item?.flags?.hasPendingCharge);
+  const hasUpcomingAppointment = Boolean(
+    item?.flags?.hasUpcomingAppointment ?? item?.contextType === "APPOINTMENT"
+  );
+  const hasActiveServiceOrder = Boolean(
+    item?.flags?.hasActiveServiceOrder ?? item?.contextType === "SERVICE_ORDER"
+  );
   const governanceSignal = (item?.metadata?.governanceSignal ??
     null) as GovernanceSignal | null;
   const hasFailedDelivery =
     item?.status === "FAILED" ||
     Boolean(governanceSignal?.communicationFailure);
-  const hasNoResponse = item?.unreadCount > 0 || hasPendingCharge;
+  const hasNoResponse = Boolean(
+    item?.flags?.hasNoResponse ?? item?.status === "WAITING_CUSTOMER"
+  );
   const operationalStatus = hasFailedDelivery
     ? "Falha"
     : hasNoResponse
@@ -671,13 +717,17 @@ function mapConversation(item: any): Conversation {
       : hasPendingCharge || hasUpcomingAppointment || hasActiveServiceOrder
         ? "Com pendência"
         : "Resolvido";
-  const priority = resolveInboxPriority({
-    hasFailedDelivery,
-    hasPendingCharge,
-    isAwaitingReply: hasNoResponse,
-    isResolved: String(item?.status ?? "") === "RESOLVED",
-    governanceSignal,
-  });
+  const backendPriority =
+    item?.priority === "NORMAL" ? "MEDIUM" : item?.priority;
+  const priority =
+    backendPriority ??
+    resolveInboxPriority({
+      hasFailedDelivery,
+      hasPendingCharge,
+      isAwaitingReply: hasNoResponse,
+      isResolved: String(item?.status ?? "") === "RESOLVED",
+      governanceSignal,
+    });
   return {
     id: String(item?.id ?? ""),
     conversationId: String(item?.id ?? ""),
@@ -714,6 +764,11 @@ function mapConversation(item: any): Conversation {
             : undefined,
         }
       : null,
+    responsibleName:
+      item?.assignedTo?.name ??
+      item?.responsible?.name ??
+      item?.responsibleName ??
+      null,
   };
 }
 
@@ -1031,7 +1086,7 @@ const ConversationRow = memo(function ConversationRow({
             </p>
             {conversation.phone ? (
               <span className="hidden max-w-[7rem] shrink truncate text-[10px] text-app-muted sm:inline">
-                {conversation.phone}
+                {maskPhone(conversation.phone)}
               </span>
             ) : null}
           </div>
@@ -1082,6 +1137,12 @@ function InboxQueueColumn({
   hasError,
   errorMessage,
   emptyStateMessage,
+  priorityFilter,
+  onPriorityFilter,
+  responsibleFilter,
+  onResponsibleFilter,
+  responsibles,
+  onRetry,
 }: {
   rows: Conversation[];
   selectedId: string | null;
@@ -1094,6 +1155,12 @@ function InboxQueueColumn({
   hasError: boolean;
   errorMessage?: string;
   emptyStateMessage: string;
+  priorityFilter: "ALL" | WhatsAppPriority;
+  onPriorityFilter: (value: "ALL" | WhatsAppPriority) => void;
+  responsibleFilter: string;
+  onResponsibleFilter: (value: string) => void;
+  responsibles: string[];
+  onRetry: () => void;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -1151,6 +1218,45 @@ function InboxQueueColumn({
             </button>
           ))}
         </div>
+        <div
+          className="grid grid-cols-2 gap-2"
+          aria-label="Filtros operacionais"
+        >
+          <label className="sr-only" htmlFor="whatsapp-priority-filter">
+            Prioridade
+          </label>
+          <select
+            id="whatsapp-priority-filter"
+            value={priorityFilter}
+            onChange={event =>
+              onPriorityFilter(event.target.value as "ALL" | WhatsAppPriority)
+            }
+            className="h-8 rounded-lg border border-[var(--app-border)]/50 bg-app-surface px-2 text-[11px] text-app-primary"
+          >
+            <option value="ALL">Todas as prioridades</option>
+            <option value="CRITICAL">Crítica</option>
+            <option value="HIGH">Alta</option>
+            <option value="MEDIUM">Média</option>
+            <option value="LOW">Baixa</option>
+          </select>
+          <label className="sr-only" htmlFor="whatsapp-responsible-filter">
+            Responsável
+          </label>
+          <select
+            id="whatsapp-responsible-filter"
+            value={responsibleFilter}
+            onChange={event => onResponsibleFilter(event.target.value)}
+            className="h-8 rounded-lg border border-[var(--app-border)]/50 bg-app-surface px-2 text-[11px] text-app-primary"
+          >
+            <option value="ALL">Todos responsáveis</option>
+            <option value="UNASSIGNED">Sem responsável</option>
+            {responsibles.map(name => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <div
         ref={viewportRef}
@@ -1177,6 +1283,17 @@ function InboxQueueColumn({
                   ? "Limpe a busca ou altere os filtros."
                   : "As conversas reais aparecerão aqui quando clientes responderem ou mensagens forem enviadas."}
             </p>
+            {hasError ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={onRetry}
+              >
+                Tentar novamente
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div style={{ height: totalHeight, position: "relative" }}>
@@ -1546,7 +1663,9 @@ function ExecutionChatColumn({
             </p>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
               {conversation?.conversationId
-                ? conversation.title ?? conversation.contextHint ?? "Conversa operacional"
+                ? (conversation.title ??
+                  conversation.contextHint ??
+                  "Conversa operacional")
                 : "Nenhuma conversa ativa"}
             </p>
           </div>
@@ -1625,6 +1744,7 @@ function ExecutionChatColumn({
           <div className="space-y-3">
             {messages.map(message => {
               const outgoing = message.direction === "OUTBOUND";
+              const delivery = getMessageDeliveryPresentation(message);
               return (
                 <div
                   key={message.id}
@@ -1643,17 +1763,17 @@ function ExecutionChatColumn({
                   >
                     <p>{message.content}</p>
                     <p className="mt-2 flex items-center justify-end gap-1 text-[10px] text-[var(--text-muted)]/85">
-                      {fmtTime(message.createdAt)} · Operação: {presentationStatusLabel(message.status)}
-                      {message.messageType ? ` · ${message.messageType}` : ""}
+                      {fmtTime(message.createdAt)} · {delivery.label}
                       {outgoing &&
                       ["DELIVERED", "READ"].includes(message.status) ? (
                         <CheckCheck className="size-3" />
                       ) : null}
                     </p>
-                    {message.status === "FAILED" ? (
+                    {delivery.failed || delivery.uncertain ? (
                       <p className="mt-1 text-[10px] text-[var(--danger)]">
-                        {message.errorMessage ??
-                          "Falha de entrega. Use reenviar nas ações."}
+                        {delivery.uncertain
+                          ? "O provedor não confirmou o resultado. Verifique antes de reenviar para evitar duplicidade."
+                          : "Não foi possível enviar. Use a ação de retentativa."}
                       </p>
                     ) : null}
                   </div>
@@ -1672,86 +1792,86 @@ function ExecutionChatColumn({
         ) : null}
         <div className="rounded-2xl border border-[var(--app-border)]/40 bg-app-surface/75 p-2">
           <div className="flex items-center gap-2">
-          <input
-            value={content}
-            onChange={event => canCompose && setContent(event.target.value)}
-            onKeyDown={event => {
-              if (event.key !== "Enter" || event.shiftKey) return;
-              event.preventDefault();
-              if (hasConversation && canCompose) sendMessage();
-            }}
-            placeholder={
-              hasConversation
-                ? composePlaceholder
-                : "Selecione uma conversa para responder..."
-            }
-            disabled={!hasConversation || !canCompose}
-            className="h-9 min-w-0 flex-1 rounded-xl bg-app-card px-3 text-sm text-app-primary outline-none placeholder:text-app-muted/70"
-          />
-          <DropdownMenu dir="rtl">
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="whatsapp-action-menu h-9 shrink-0 gap-1.5 border-[var(--wa-menu-badge-border)] bg-[var(--wa-menu-badge-bg)] px-3 text-[11px] font-semibold text-[var(--wa-menu-fg-primary)] hover:border-[color-mix(in_srgb,var(--accent-primary)_28%,var(--app-border))] hover:bg-[var(--wa-menu-item-hover)] hover:text-[var(--wa-menu-fg-primary)] disabled:opacity-100 disabled:saturate-100 disabled:text-[var(--wa-menu-fg-disabled)] [&_svg]:text-[var(--wa-menu-icon)]"
-                disabled={!hasConversation}
-                aria-label="Mais ações da conversa"
+            <input
+              value={content}
+              onChange={event => canCompose && setContent(event.target.value)}
+              onKeyDown={event => {
+                if (event.key !== "Enter" || event.shiftKey) return;
+                event.preventDefault();
+                if (hasConversation && canCompose) sendMessage();
+              }}
+              placeholder={
+                hasConversation
+                  ? composePlaceholder
+                  : "Selecione uma conversa para responder..."
+              }
+              disabled={!hasConversation || !canCompose}
+              className="h-9 min-w-0 flex-1 rounded-xl bg-app-card px-3 text-sm text-app-primary outline-none placeholder:text-app-muted/70"
+            />
+            <DropdownMenu dir="rtl">
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="whatsapp-action-menu h-9 shrink-0 gap-1.5 border-[var(--wa-menu-badge-border)] bg-[var(--wa-menu-badge-bg)] px-3 text-[11px] font-semibold text-[var(--wa-menu-fg-primary)] hover:border-[color-mix(in_srgb,var(--accent-primary)_28%,var(--app-border))] hover:bg-[var(--wa-menu-item-hover)] hover:text-[var(--wa-menu-fg-primary)] disabled:opacity-100 disabled:saturate-100 disabled:text-[var(--wa-menu-fg-disabled)] [&_svg]:text-[var(--wa-menu-icon)]"
+                  disabled={!hasConversation}
+                  aria-label="Mais ações da conversa"
+                >
+                  Mais ações
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="nexo-cascade-surface whatsapp-action-menu z-[60] max-h-[min(560px,calc(100vh-12rem),var(--radix-dropdown-menu-content-available-height))] w-[min(22rem,calc(100vw-2rem))] overflow-visible p-0 [direction:ltr]"
               >
-                Mais ações
-                <ChevronDown className="size-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              className="nexo-cascade-surface whatsapp-action-menu z-[60] max-h-[min(560px,calc(100vh-12rem),var(--radix-dropdown-menu-content-available-height))] w-[min(22rem,calc(100vw-2rem))] overflow-visible p-0 [direction:ltr]"
+                <div className="scrollbar-menu-nexo max-h-[min(560px,calc(100vh-12rem),var(--radix-dropdown-menu-content-available-height))] min-h-0 overflow-y-auto overscroll-contain p-2">
+                  {renderActionSection({
+                    title: composerActionPalette.recommendedActions.length
+                      ? "Recomendadas agora"
+                      : "Ações principais",
+                    tone: "primary",
+                    actions: composerActionPalette.primaryActions,
+                  })}
+                  {composerActionPalette.secondaryActions.length ? (
+                    <DropdownMenuSeparator className="mx-2 my-1.5 bg-[var(--wa-action-separator)] opacity-100" />
+                  ) : null}
+                  {renderActionSection({
+                    title: "Outras ações",
+                    tone: "secondary",
+                    actions: composerActionPalette.secondaryActions,
+                  })}
+                  {composerActionPalette.unavailableActions.length ? (
+                    <DropdownMenuSeparator className="mx-2 my-1.5 bg-[var(--wa-action-separator)] opacity-100" />
+                  ) : null}
+                  {renderActionSection({
+                    title: "Indisponíveis neste contexto",
+                    tone: "muted",
+                    actions: composerActionPalette.unavailableActions,
+                  })}
+                  {composerActionPalette.upcomingActions.length ? (
+                    <DropdownMenuSeparator className="mx-2 my-1.5 bg-[var(--wa-action-separator)] opacity-100" />
+                  ) : null}
+                  {renderActionSection({
+                    title: "Em breve",
+                    tone: "upcoming",
+                    actions: composerActionPalette.upcomingActions,
+                  })}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 rounded-xl bg-[var(--accent-primary)] px-3 text-[var(--primary-foreground)] hover:bg-[var(--accent-primary-hover)] disabled:cursor-not-allowed disabled:opacity-45"
+              onClick={sendMessage}
+              disabled={!hasConversation || !canCompose}
+              aria-label="Enviar mensagem"
             >
-              <div className="scrollbar-menu-nexo max-h-[min(560px,calc(100vh-12rem),var(--radix-dropdown-menu-content-available-height))] min-h-0 overflow-y-auto overscroll-contain p-2">
-                {renderActionSection({
-                  title: composerActionPalette.recommendedActions.length
-                    ? "Recomendadas agora"
-                    : "Ações principais",
-                  tone: "primary",
-                  actions: composerActionPalette.primaryActions,
-                })}
-                {composerActionPalette.secondaryActions.length ? (
-                  <DropdownMenuSeparator className="mx-2 my-1.5 bg-[var(--wa-action-separator)] opacity-100" />
-                ) : null}
-                {renderActionSection({
-                  title: "Outras ações",
-                  tone: "secondary",
-                  actions: composerActionPalette.secondaryActions,
-                })}
-                {composerActionPalette.unavailableActions.length ? (
-                  <DropdownMenuSeparator className="mx-2 my-1.5 bg-[var(--wa-action-separator)] opacity-100" />
-                ) : null}
-                {renderActionSection({
-                  title: "Indisponíveis neste contexto",
-                  tone: "muted",
-                  actions: composerActionPalette.unavailableActions,
-                })}
-                {composerActionPalette.upcomingActions.length ? (
-                  <DropdownMenuSeparator className="mx-2 my-1.5 bg-[var(--wa-action-separator)] opacity-100" />
-                ) : null}
-                {renderActionSection({
-                  title: "Em breve",
-                  tone: "upcoming",
-                  actions: composerActionPalette.upcomingActions,
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 rounded-xl bg-[var(--accent-primary)] px-3 text-[var(--primary-foreground)] hover:bg-[var(--accent-primary-hover)] disabled:cursor-not-allowed disabled:opacity-45"
-            onClick={sendMessage}
-            disabled={!hasConversation || !canCompose}
-            aria-label="Enviar mensagem"
-          >
-            <Send className="size-3.5" />
-          </Button>
+              <Send className="size-3.5" />
+            </Button>
           </div>
         </div>
       </footer>
@@ -1947,7 +2067,8 @@ function OperationalContextColumn({
                 : NO_SERVICE_ORDER_TEXT}
             </p>
             <p className="text-[11px] text-[var(--text-muted)]">
-              Status: {presentationStatusLabel(context?.activeServiceOrder?.status)}
+              Status:{" "}
+              {presentationStatusLabel(context?.activeServiceOrder?.status)}
             </p>
             <p className="text-[11px] text-[var(--text-muted)]">
               Técnico: {context?.activeServiceOrder?.technician ?? "--"}
@@ -1980,9 +2101,7 @@ function OperationalContextColumn({
               Financeiro
             </p>
             <p className="mt-1 font-medium">
-              {context?.openCharge?.id
-                ? `Cobrança #${context.openCharge.id}`
-                : NO_CHARGE_TEXT}
+              {context?.openCharge?.id ? "Cobrança pendente" : NO_CHARGE_TEXT}
             </p>
             <p className="text-[11px] text-[var(--text-muted)]">
               Vencimento: {fmtDateTime(context?.openCharge?.dueDate)}
@@ -2141,6 +2260,10 @@ export default function WhatsAppPage() {
     ""
   );
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
+  const [priorityFilter, setPriorityFilter] = useState<
+    "ALL" | WhatsAppPriority
+  >("ALL");
+  const [responsibleFilter, setResponsibleFilter] = useState("ALL");
   const [content, setContent] = useOperationalMemoryState(
     "nexo.whatsapp.composer.v2",
     ""
@@ -2174,13 +2297,15 @@ export default function WhatsAppPage() {
     }
   );
 
-  const conversations = useMemo(
-    () =>
-      Array.isArray(conversationsQuery.data)
-        ? conversationsQuery.data.map(mapConversation)
-        : [],
-    [conversationsQuery.data]
-  );
+  const conversations = useMemo<Conversation[]>(() => {
+    const payload = conversationsQuery.data as any;
+    const items = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : [];
+    return items.map((item: unknown) => mapConversation(item));
+  }, [conversationsQuery.data]);
   const customersQuery = trpc.nexo.customers.list.useQuery(
     { page: 1, limit: 300 },
     { retry: false, enabled: true }
@@ -2355,6 +2480,17 @@ export default function WhatsAppPage() {
     () => [...conversations, ...customersWithoutConversation],
     [conversations, customersWithoutConversation]
   );
+  const responsibles = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          allInboxRows
+            .map(item => item.responsibleName)
+            .filter((name): name is string => Boolean(name))
+        )
+      ).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [allInboxRows]
+  );
   const filteredRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     return allInboxRows
@@ -2372,9 +2508,19 @@ export default function WhatsAppPage() {
           .toLowerCase();
         const matchesSearch = !query || searchable.includes(query);
         if (!matchesSearch) return false;
+        if (priorityFilter !== "ALL" && item.priority !== priorityFilter)
+          return false;
+        if (responsibleFilter === "UNASSIGNED" && item.responsibleName)
+          return false;
+        if (
+          responsibleFilter !== "ALL" &&
+          responsibleFilter !== "UNASSIGNED" &&
+          item.responsibleName !== responsibleFilter
+        )
+          return false;
         if (activeFilter === "all") return true;
         if (activeFilter === "waiting_customer")
-          return item.unreadCount > 0 || item.hasNoResponse;
+          return item.status === "WAITING_CUSTOMER";
         if (activeFilter === "resolved") return item.status === "RESOLVED";
         return true;
       })
@@ -2385,7 +2531,13 @@ export default function WhatsAppPage() {
         const bDate = new Date(b.lastMessageAt ?? 0).getTime();
         return bDate - aDate;
       });
-  }, [activeFilter, allInboxRows, debouncedSearch]);
+  }, [
+    activeFilter,
+    allInboxRows,
+    debouncedSearch,
+    priorityFilter,
+    responsibleFilter,
+  ]);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     console.debug("[WhatsAppPage][customers-debug]", {
@@ -3180,6 +3332,25 @@ export default function WhatsAppPage() {
 
   return (
     <AppPageShell className="h-[calc(100vh-4.25rem)] min-h-0 bg-transparent px-4 pb-2 pt-2 text-app-primary xl:pb-3 xl:pt-2 2xl:pb-4 2xl:pt-2">
+      {healthQuery.error ? (
+        <div
+          role="status"
+          className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--warning)_10%,var(--app-surface))] px-3 py-2 text-xs text-app-primary"
+        >
+          <span>
+            Canal parcialmente indisponível. O histórico pode ser consultado,
+            mas novos envios podem falhar.
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void healthQuery.refetch()}
+          >
+            Verificar novamente
+          </Button>
+        </div>
+      ) : null}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 rounded-none border-0 bg-transparent xl:grid-cols-[minmax(320px,360px)_minmax(0,1fr)_minmax(300px,340px)]">
         <div className="h-full min-h-0 min-w-0 overflow-hidden">
           <InboxQueueColumn
@@ -3206,6 +3377,17 @@ export default function WhatsAppPage() {
                 : "Não foi possível carregar conversas"
             }
             emptyStateMessage={emptyStateMessage}
+            priorityFilter={priorityFilter}
+            onPriorityFilter={setPriorityFilter}
+            responsibleFilter={responsibleFilter}
+            onResponsibleFilter={setResponsibleFilter}
+            responsibles={responsibles}
+            onRetry={() =>
+              void Promise.all([
+                conversationsQuery.refetch(),
+                customersQuery.refetch(),
+              ])
+            }
           />
         </div>
 
@@ -3337,7 +3519,6 @@ export default function WhatsAppPage() {
           />
         </div>
       </div>
-      {healthQuery.error ? <p className="sr-only">health error</p> : null}
       {/* TODO: Conectar registro direto quando finance.markAsPaid estiver exposto no BFF. */}
       {/* TODO: Abrir detalhe de clientes/financeiro pelo query id caso a rota ainda não suporte foco automático. */}
     </AppPageShell>

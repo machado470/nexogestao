@@ -4,8 +4,33 @@ import {
   buildWhatsAppComposerActionGroups,
   buildWhatsAppSendPayload,
   getDefaultMessageType,
+  getMessageDeliveryPresentation,
+  maskPhone,
   resolveMessageType,
 } from "./WhatsAppPage";
+
+describe("WhatsApp operational presentation", () => {
+  it("masks personal phone numbers", () => {
+    expect(maskPhone("+55 (11) 98765-4321")).toBe("•••• 4321");
+    expect(maskPhone(null)).toBe("Telefone cadastrado");
+  });
+
+  it("does not claim delivery while queued, sending or uncertain", () => {
+    const message = (status: "QUEUED" | "SENDING" | "UNCERTAIN") =>
+      getMessageDeliveryPresentation({
+        id: "message",
+        direction: "OUTBOUND",
+        content: "Olá",
+        status,
+      });
+    expect(message("QUEUED").label).toBe("Na fila");
+    expect(message("SENDING").label).toBe("Enviando");
+    expect(message("UNCERTAIN")).toMatchObject({
+      label: "Entrega incerta",
+      uncertain: true,
+    });
+  });
+});
 
 describe("WhatsApp composer action groups", () => {
   it("renders Mais ações as compact operational sections", () => {
