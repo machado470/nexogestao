@@ -32,12 +32,8 @@ describe("ExecutiveDashboard decision center", () => {
 
     expect(source).not.toContain('title="Bloco executivo"');
 
-    const governancePosition = source.indexOf(
-      "<NexoGovernanceDecisionCard"
-    );
-    const pulsePosition = source.indexOf(
-      'title="Pulso da operação"'
-    );
+    const governancePosition = source.indexOf("<NexoGovernanceDecisionCard");
+    const pulsePosition = source.indexOf('title="Pulso da operação"');
 
     expect(governancePosition).toBeGreaterThan(pulsePosition);
   });
@@ -64,9 +60,11 @@ describe("ExecutiveDashboard decision center", () => {
   it("uses the real next best action endpoint and an honest empty state", () => {
     expect(source).toContain("trpc.dashboard.nextBestAction.useQuery");
     expect(source).toContain("Nenhuma ação prioritária encontrada.");
-    expect(source).toContain("Nenhuma ação prioritária retornada para o período.");
+    expect(source).toContain(
+      "Nenhuma ação prioritária retornada para o período."
+    );
     expect(source).not.toContain("Monitorar operação");
-    expect(source).not.toContain("fetch(\"/internal");
+    expect(source).not.toContain('fetch("/internal');
   });
 
   it("gives every KPI context and CTA routes to its owning module", () => {
@@ -105,7 +103,9 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("sem base histórica suficiente");
     expect(source).toContain("describeMicroTrend");
     expect(source).toContain("Sem base histórica suficiente");
-    expect(source).toContain("Tendências e sinais qualitativos depois da fila operacional.");
+    expect(source).toContain(
+      "Tendências e sinais qualitativos depois da fila operacional."
+    );
     expect(source).not.toContain(
       "Tendência histórica: indisponível neste lote"
     );
@@ -119,7 +119,9 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("CUSTOMER_AWAITING_RESPONSE");
     expect(source).toContain('path: "/appointments"');
     expect(source).toContain('path: "/whatsapp"');
-    expect(source).toContain("Itens que exigem execução, ordenados por urgência.");
+    expect(source).toContain(
+      "Itens que exigem execução, ordenados por urgência."
+    );
     expect(source).toContain("formatRelativeDelay");
     expect(source).toContain("Cliente com cobrança vencida");
   });
@@ -148,6 +150,26 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain(
       "A operação não cria alertas ou recomendações fictícias"
     );
+  });
+
+  it("keeps valid sections visible when an auxiliary source is unavailable", () => {
+    expect(source).toContain("const isPartiallyUnavailable");
+    expect(source).toContain("Leitura parcial.");
+    expect(source).toContain("ausência de sinal não indica operação");
+    expect(source).toContain("saudável.");
+    expect(source).toContain("Tentar fontes indisponíveis novamente");
+    expect(source).toContain(
+      "const pageError = kpisQuery.isError && alertsQuery.isError"
+    );
+    expect(source).toContain("Tentar próxima ação novamente");
+  });
+
+  it("shows the authoritative state verbatim and contextualizes the current role", () => {
+    expect(source).toContain("Estado: {operationLevel}");
+    expect(source).toContain("Visão administrativa");
+    expect(source).toContain("Visão de gestão");
+    expect(source).toContain("Visão operacional");
+    expect(source).toContain("Visão de consulta");
   });
 
   it("keeps governance grade separate from authoritative operational state", () => {
