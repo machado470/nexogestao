@@ -151,6 +151,27 @@ describe("FinancesPage manual payment contract", () => {
     expect(financesPage).not.toContain("Telefone não retornado");
   });
 
+  it("mantém carteira principal disponível diante de falhas auxiliares e oferece retentativa", () => {
+    expect(financesPage).toContain("portfolioUnavailable");
+    expect(financesPage).toContain("auxiliaryFailures");
+    expect(financesPage).toContain("carteira permanece visível");
+    expect(financesPage).toContain("Tentar fila novamente");
+    expect(financesPage).toContain("Tentar histórico novamente");
+    expect(financesPage).not.toContain("allQueriesLoading");
+  });
+
+  it("aceita deep links e filtros comprováveis de carteira", () => {
+    expect(financesPage).toContain('params.get("customerId")');
+    expect(financesPage).toContain('params.get("serviceOrderId")');
+    expect(financesPage).toContain('params.get("chargeId")');
+    expect(financesPage).toContain('params.get("paymentId")');
+    expect(financesPage).toContain('params.get("status")');
+    expect(financesPage).toContain('aria-label="Filtrar por período"');
+    expect(financesPage).toContain('aria-label="Filtrar por cliente"');
+    expect(financesPage).toContain('aria-label="Filtrar por prioridade"');
+    expect(financesPage).toContain("Previsto é somente a carteira comprovada");
+  });
+
   it("remove Pulso repetitivo e usa Radar compacto com linguagem operacional", () => {
     expect(financesPage).toContain("Radar financeiro");
     expect(financesPage).not.toContain("Pulso Financeiro");
