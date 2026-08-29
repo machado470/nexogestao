@@ -157,6 +157,19 @@ describe("AppointmentsPage as operational execution entry", () => {
 });
 
 describe("AppointmentsPage final polish guardrails", () => {
+  it("mantém filtros completos e degrada apenas fontes complementares", () => {
+    expect(source).toContain('aria-label="Filtrar por cliente"');
+    expect(source).toContain('aria-label="Filtrar por responsável"');
+    expect(source).toContain('customerFilter !== "all"');
+    expect(source).toContain("Indisponibilidade parcial");
+    expect(source).toContain("const loading = appointmentsQuery.isLoading");
+    expect(source).toContain("const hasError = appointmentsQuery.isError");
+    expect(source).toContain('params.get("appointmentId") ?? params.get("id")');
+    expect(source).toContain('queryParams.action !== "reschedule"');
+    expect(source).toContain("const timelineCustomerId = useMemo");
+    expect(source).toContain("{ customerId: timelineCustomerId, limit: 25 }");
+  });
+
   it("does not duplicate the open appointment CTA across operational sections", () => {
     expect(source.match(/>\s*Abrir agendamento\s*</g) ?? []).toHaveLength(1);
   });

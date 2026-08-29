@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -357,6 +357,7 @@ export default function AppointmentsPage() {
     string | null
   >(null);
   const [responsibleFilter, setResponsibleFilter] = useState("all");
+  const [customerFilter, setCustomerFilter] = useState("all");
   const [queryText, setQueryText] = useState("");
   const [openModal, setOpenModal] = useState(false);
   const [editing, setEditing] = useState<AppointmentRow | null>(null);
@@ -372,7 +373,8 @@ export default function AppointmentsPage() {
     const params = new URLSearchParams(queryString);
     return {
       customerId: params.get("customerId"),
-      appointmentId: params.get("appointmentId"),
+      appointmentId: params.get("appointmentId") ?? params.get("id"),
+      action: params.get("action"),
     };
   }, [location]);
 
@@ -399,10 +401,21 @@ export default function AppointmentsPage() {
     { page: 1, limit: 100 },
     { enabled: isAuthenticated, retry: false }
   );
+  const appointments = useMemo(
+    () => normalizeArrayPayload<AppointmentRow>(appointmentsQuery.data),
+    [appointmentsQuery.data]
+  );
+  const timelineCustomerId = useMemo(() => {
+    if (queryParams.customerId) return queryParams.customerId;
+    const focused = appointments.find(
+      item => String(item.id ?? "") === String(selectedAppointmentId ?? "")
+    );
+    return String(focused?.customerId ?? focused?.customer?.id ?? "");
+  }, [appointments, queryParams.customerId, selectedAppointmentId]);
   const timelineQuery = trpc.nexo.timeline.listByCustomer.useQuery(
-    { customerId: queryParams.customerId ?? "", limit: 25 },
+    { customerId: timelineCustomerId, limit: 25 },
     {
-      enabled: isAuthenticated && Boolean(queryParams.customerId),
+      enabled: isAuthenticated && Boolean(timelineCustomerId),
       retry: false,
     }
   );
@@ -410,10 +423,6 @@ export default function AppointmentsPage() {
   const createMutation = trpc.nexo.appointments.create.useMutation();
   const updateMutation = trpc.nexo.appointments.update.useMutation();
 
-  const appointments = useMemo(
-    () => normalizeArrayPayload<AppointmentRow>(appointmentsQuery.data),
-    [appointmentsQuery.data]
-  );
   const customers = useMemo(
     () => normalizeArrayPayload<any>(customersQuery.data),
     [customersQuery.data]
@@ -584,6 +593,8 @@ export default function AppointmentsPage() {
     let base = mapped;
     if (queryParams.customerId)
       base = base.filter(row => row.customerId === queryParams.customerId);
+    if (customerFilter !== "all")
+      base = base.filter(row => row.customerId === customerFilter);
 
     if (selectedFilter === "today")
       base = base.filter(
@@ -620,6 +631,7 @@ export default function AppointmentsPage() {
     );
   }, [
     mapped,
+    customerFilter,
     queryParams.customerId,
     selectedFilter,
     queryText,
@@ -636,7 +648,13 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [queryText, queryParams.customerId, responsibleFilter, selectedFilter]);
+  }, [
+    customerFilter,
+    queryText,
+    queryParams.customerId,
+    responsibleFilter,
+    selectedFilter,
+  ]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -656,6 +674,26 @@ export default function AppointmentsPage() {
     filtered.find(
       row => String(row.item.id ?? "") === String(selectedAppointmentId ?? "")
     ) ?? null;
+  const openedRouteAction = useRef<string | null>(null);
+
+  useEffect(() => {
+    const routeActionKey = `${queryParams.appointmentId ?? ""}:${queryParams.action ?? ""}`;
+    if (
+      queryParams.action !== "reschedule" ||
+      !selected?.item?.id ||
+      openModal ||
+      openedRouteAction.current === routeActionKey
+    )
+      return;
+    openedRouteAction.current = routeActionKey;
+    setEditing(selected.item);
+    setOpenModal(true);
+  }, [
+    openModal,
+    queryParams.action,
+    queryParams.appointmentId,
+    selected?.item,
+  ]);
 
   const assigneeWarningTelemetry = useAssigneeWarningTelemetry("APPOINTMENT");
   const [form, setForm] = useState({
@@ -807,18 +845,17 @@ export default function AppointmentsPage() {
     [appointments, updateMutation, utils.nexo.appointments.list]
   );
 
-  const loading =
-    appointmentsQuery.isLoading ||
-    customersQuery.isLoading ||
-    peopleQuery.isLoading ||
-    serviceOrdersQuery.isLoading ||
-    chargesQuery.isLoading;
-  const hasError =
-    appointmentsQuery.isError ||
-    customersQuery.isError ||
-    peopleQuery.isError ||
-    serviceOrdersQuery.isError ||
-    chargesQuery.isError;
+  // A agenda continua utilizável quando uma relação complementar falha. Só a
+  // consulta principal bloqueia a carteira; as demais viram indisponibilidade
+  // parcial explícita, sem fabricar cliente, responsável ou vínculo financeiro.
+  const loading = appointmentsQuery.isLoading;
+  const hasError = appointmentsQuery.isError;
+  const partialUnavailable = [
+    customersQuery.isError ? "clientes" : null,
+    peopleQuery.isError ? "responsáveis" : null,
+    serviceOrdersQuery.isError ? "ordens de serviço" : null,
+    chargesQuery.isError ? "financeiro" : null,
+  ].filter(Boolean) as string[];
 
   const agendaHealth = useMemo(() => {
     const scheduled = mapped.filter(row => row.status === "SCHEDULED").length;
@@ -2163,9 +2200,25 @@ export default function AppointmentsPage() {
                 </button>
               ))}
               <select
+                aria-label="Filtrar por cliente"
+                className="h-8 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 text-xs text-[var(--text-muted)]"
+                value={customerFilter}
+                onChange={event => setCustomerFilter(event.target.value)}
+                disabled={customersQuery.isError}
+              >
+                <option value="all">Cliente: todos</option>
+                {customers.map((customer: any) => (
+                  <option key={String(customer.id)} value={String(customer.id)}>
+                    {String(customer.name ?? "Cliente")}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Filtrar por responsável"
                 className="h-8 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 text-xs text-[var(--text-muted)]"
                 value={responsibleFilter}
                 onChange={event => setResponsibleFilter(event.target.value)}
+                disabled={peopleQuery.isError}
               >
                 <option value="all">Responsável: todos</option>
                 {people.map((person: any) => (
@@ -2180,6 +2233,34 @@ export default function AppointmentsPage() {
 
         {successMessage ? (
           <p className="text-sm text-[var(--success)]">{successMessage}</p>
+        ) : null}
+
+        {partialUnavailable.length > 0 ? (
+          <div
+            role="status"
+            className="flex flex-col gap-2 rounded-xl border border-[var(--warning)]/35 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--text-secondary)] sm:flex-row sm:items-center"
+          >
+            <p className="flex-1">
+              Indisponibilidade parcial: não foi possível carregar{" "}
+              {partialUnavailable.join(", ")}. A carteira de agendamentos
+              continua disponível sem inventar esses vínculos.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void Promise.all([
+                  customersQuery.refetch(),
+                  peopleQuery.refetch(),
+                  serviceOrdersQuery.refetch(),
+                  chargesQuery.refetch(),
+                ]);
+              }}
+            >
+              Tentar novamente
+            </Button>
+          </div>
         ) : null}
 
         <AppSectionBlock
@@ -2228,6 +2309,8 @@ export default function AppointmentsPage() {
                 onClick={() => {
                   setSelectedFilter("all");
                   setQueryText("");
+                  setCustomerFilter("all");
+                  setResponsibleFilter("all");
                 }}
               >
                 Limpar filtro
