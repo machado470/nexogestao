@@ -162,6 +162,8 @@ type CustomerFilter =
   | "all"
   | "pending"
   | "open_os"
+  | "active"
+  | "inactive"
   | "no_recent_contact"
   | "risk";
 
@@ -659,6 +661,12 @@ export default function CustomersPage() {
         return false;
       }
       if (activeFilter === "open_os" && !profile.hasOpenServiceOrder) {
+        return false;
+      }
+      if (activeFilter === "active" && profile.customer.active !== true) {
+        return false;
+      }
+      if (activeFilter === "inactive" && profile.customer.active !== false) {
         return false;
       }
       if (
@@ -1620,6 +1628,8 @@ export default function CustomersPage() {
             </summary>
             <div className="absolute right-0 z-20 mt-2 grid min-w-[190px] gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
               {[
+                { key: "active", label: "Ativos" },
+                { key: "inactive", label: "Inativos" },
                 { key: "no_recent_contact", label: "Sem contato recente" },
                 { key: "risk", label: "Em risco" },
               ].map(item => (

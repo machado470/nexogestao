@@ -105,6 +105,19 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("Sem O.S. aberta");
   });
 
+  it("exposes canonical active and inactive customer filters", () => {
+    expect(source).toContain('| "active"');
+    expect(source).toContain('| "inactive"');
+    expect(source).toContain('{ key: "active", label: "Ativos" }');
+    expect(source).toContain('{ key: "inactive", label: "Inativos" }');
+    expect(source).toContain(
+      'activeFilter === "active" && profile.customer.active !== true'
+    );
+    expect(source).toContain(
+      'activeFilter === "inactive" && profile.customer.active !== false'
+    );
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
