@@ -275,6 +275,18 @@ function getCustomerContact(customer: Customer) {
   return phone || email || "Sem contato cadastrado";
 }
 
+function getCustomerActiveStatus(active: unknown) {
+  if (active === true) {
+    return { label: "Ativo", tone: "success" as const };
+  }
+
+  if (active === false) {
+    return { label: "Inativo", tone: "neutral" as const };
+  }
+
+  return { label: "Status não informado", tone: "neutral" as const };
+}
+
 function isChargePending(charge: Charge) {
   return pendingChargeStatuses.includes(
     String(charge.status ?? "").toUpperCase()
@@ -1725,10 +1737,15 @@ export default function CustomersPage() {
                           {profile.contact}
                         </p>
                       </div>
-                      <AppOperationalStatusBadge
-                        status={getCustomerOperationalStatus(profile)}
-                        label={profile.status}
-                      />
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <AppOperationalStatusBadge
+                          status={getCustomerOperationalStatus(profile)}
+                          label={profile.status}
+                        />
+                        <AppStatusBadge
+                          {...getCustomerActiveStatus(profile.customer.active)}
+                        />
+                      </div>
                     </div>
                     <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">
                       {profile.riskSignal}
@@ -1806,6 +1823,11 @@ export default function CustomersPage() {
                               <AppOperationalStatusBadge
                                 status={getCustomerOperationalStatus(profile)}
                                 label={profile.status}
+                              />
+                              <AppStatusBadge
+                                {...getCustomerActiveStatus(
+                                  profile.customer.active
+                                )}
                               />
                               <AppPriorityBadge
                                 priority={getCustomerPriority(profile)}
