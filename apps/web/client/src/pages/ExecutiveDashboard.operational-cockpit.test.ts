@@ -14,8 +14,8 @@ describe("ExecutiveDashboard decision center", () => {
       "Próxima melhor ação",
       "KPIs operacionais",
       "Fluxo operacional",
-      "Radar operacional",
-      "Incidentes operacionais",
+      "Fila operacional",
+      "Pulso da operação",
       "Acessos rápidos contextuais",
     ];
     sections.forEach(section => expect(source).toContain(section));
@@ -29,6 +29,17 @@ describe("ExecutiveDashboard decision center", () => {
       if (index > 0)
         expect(position).toBeGreaterThan(renderedSections[index - 1]);
     });
+
+    expect(source).not.toContain('title="Bloco executivo"');
+
+    const governancePosition = source.indexOf(
+      "<NexoGovernanceDecisionCard"
+    );
+    const pulsePosition = source.indexOf(
+      'title="Pulso da operação"'
+    );
+
+    expect(governancePosition).toBeGreaterThan(pulsePosition);
   });
 
   it("limits immediate attention and the queue instead of rendering giant lists", () => {
@@ -94,7 +105,7 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("sem base histórica suficiente");
     expect(source).toContain("describeMicroTrend");
     expect(source).toContain("Sem base histórica suficiente");
-    expect(source).toContain("Resumo executivo dos sinais antes da fila.");
+    expect(source).toContain("Tendências e sinais qualitativos depois da fila operacional.");
     expect(source).not.toContain(
       "Tendência histórica: indisponível neste lote"
     );
@@ -108,7 +119,7 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("CUSTOMER_AWAITING_RESPONSE");
     expect(source).toContain('path: "/appointments"');
     expect(source).toContain('path: "/whatsapp"');
-    expect(source).toContain("Linhas acionáveis sem cabeçalho de tabela.");
+    expect(source).toContain("Itens que exigem execução, ordenados por urgência.");
     expect(source).toContain("formatRelativeDelay");
     expect(source).toContain("Cliente com cobrança vencida");
   });
