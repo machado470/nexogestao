@@ -118,6 +118,19 @@ describe("CustomersPage operational client center", () => {
     );
   });
 
+  it("filters customers with overdue open service orders from loaded contract data", () => {
+    expect(source).toContain('| "overdue_os"');
+    expect(source).toContain(
+      '{ key: "overdue_os", label: "Com O.S. atrasada" }'
+    );
+    expect(source).toContain('activeFilter === "overdue_os"');
+    expect(source).toContain(
+      "!profile.serviceOrders.some(isServiceOrderOverdue)"
+    );
+    expect(source).toContain("function isServiceOrderOverdue(");
+    expect(source).toContain("if (!isServiceOrderOpen(order)) return false;");
+  });
+
   it("shows active status separately from operational health", () => {
     expect(source).toContain("function getCustomerActiveStatus(active: unknown)");
     expect(source).toContain('label: "Ativo"');
