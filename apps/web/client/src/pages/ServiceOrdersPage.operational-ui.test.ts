@@ -62,4 +62,26 @@ describe("ServiceOrdersPage Nexo Operating System UI contract", () => {
       "aria-label={getStartUnavailableReason(selectedOrder)}"
     );
   });
+
+  it("keeps operational filters, appointment context and partial outages explicit", () => {
+    expect(page).toContain("service-order-customer-filter");
+    expect(page).toContain("service-order-responsible-filter");
+    expect(page).toContain("service-order-deadline-filter");
+    expect(page).toContain("service-order-priority-filter");
+    expect(page).toContain('params.get("serviceOrderId")');
+    expect(page).toContain("setOpenCreate(true)");
+    expect(page).toContain("Dados auxiliares parcialmente indisponíveis");
+    expect(page).toContain(
+      "isso não\n              significa ausência saudável de pendências"
+    );
+  });
+
+  it("uses the active execution contract when completing and exposes execution records", () => {
+    expect(page).toContain("utils.nexo.executions.listByServiceOrder.fetch");
+    expect(page).toContain("executionId: String(execution.id)");
+    expect(page).toContain("Registros de execução");
+    expect(page).toContain("Comunicação");
+    expect(page).toContain("Atraso: {item.overdueLabel}");
+    expect(page).toContain("{item.financialStatusLabel}");
+  });
 });

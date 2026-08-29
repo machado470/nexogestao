@@ -51,6 +51,14 @@ type ServiceOrdersFilter =
   | "done"
   | "without_charge";
 
+type DeadlineFilter =
+  | "all"
+  | "overdue"
+  | "today"
+  | "next_7_days"
+  | "no_deadline";
+type PriorityFilter = "all" | "0" | "1" | "2" | "3";
+
 function toDate(value: unknown): Date | null {
   if (!value) return null;
   const date = new Date(String(value));
@@ -375,7 +383,8 @@ export default function ServiceOrdersPage() {
     [location]
   );
 
-  const urlServiceOrderId = params.get("id");
+  const urlServiceOrderId =
+    params.get("id") ?? params.get("serviceOrderId") ?? params.get("os");
   const urlCustomerId = params.get("customerId");
   const urlAppointmentId = params.get("appointmentId");
 
@@ -390,6 +399,10 @@ export default function ServiceOrdersPage() {
     "nexo.service-orders.search.v5",
     ""
   );
+  const [customerFilter, setCustomerFilter] = useState("all");
+  const [responsibleFilter, setResponsibleFilter] = useState("all");
+  const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("all");
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [selectedOrderId, setSelectedOrderId] = useOperationalMemoryState<
     string | null
   >("nexo.service-orders.selected-id.v5", null);
@@ -420,6 +433,10 @@ export default function ServiceOrdersPage() {
   );
   const peopleQuery = trpc.people.list.useQuery(undefined, { retry: false });
   const timelineQuery = trpc.nexo.timeline.listByServiceOrder.useQuery(
+    { serviceOrderId: String(selectedOrderId ?? ""), limit: 20 },
+    { enabled: Boolean(selectedOrderId), retry: false }
+  );
+  const executionsQuery = trpc.nexo.executions.listByServiceOrder.useQuery(
     { serviceOrderId: String(selectedOrderId ?? ""), limit: 20 },
     { enabled: Boolean(selectedOrderId), retry: false }
   );
@@ -511,9 +528,14 @@ export default function ServiceOrdersPage() {
         chargeByServiceOrderId.get(id) ??
         order?.financialSummary?.latestCharge ??
         null;
-      const hasCharge =
+      const confirmedHasCharge =
         Boolean(order?.financialSummary?.hasCharge) ||
         Boolean(linkedCharge?.id);
+      const financialUnavailable =
+        Boolean(chargesQuery.error) && !order?.financialSummary;
+      // Unknown is intentionally not treated as "no charge": an auxiliary
+      // finance outage must never create a false healthy/attention signal.
+      const hasCharge = confirmedHasCharge || financialUnavailable;
       const chargeStatus = getChargeStatus(linkedCharge);
       const chargeOverdue = isChargeOverdue(linkedCharge);
       const chargePending = chargeStatus === "PENDING";
@@ -549,7 +571,10 @@ export default function ServiceOrdersPage() {
         amountCents:
           Number(order?.amountCents ?? linkedCharge?.amountCents ?? 0) || 0,
         hasCharge,
-        financialStatusLabel: getChargeStatusLabel(linkedCharge, hasCharge),
+        financialStatusLabel: financialUnavailable
+          ? "Cobrança indisponível"
+          : getChargeStatusLabel(linkedCharge, hasCharge),
+        financialUnavailable,
         linkedCharge,
         chargeStatus,
         chargeOverdue,
@@ -588,6 +613,45 @@ export default function ServiceOrdersPage() {
     return enrichedOrders.filter(item => {
       if (urlCustomerId && item.customerId !== String(urlCustomerId))
         return false;
+      if (customerFilter !== "all" && item.customerId !== customerFilter)
+        return false;
+      if (
+        responsibleFilter !== "all" &&
+        (responsibleFilter === "unassigned"
+          ? Boolean(item.assignedToPersonId)
+          : item.assignedToPersonId !== responsibleFilter)
+      )
+        return false;
+      if (
+        priorityFilter !== "all" &&
+        String(item.raw?.priority ?? 2) !== priorityFilter
+      )
+        return false;
+      if (deadlineFilter !== "all") {
+        const now = new Date();
+        const startToday = new Date(now);
+        startToday.setHours(0, 0, 0, 0);
+        const endToday = new Date(startToday);
+        endToday.setDate(endToday.getDate() + 1);
+        const endWeek = new Date(startToday);
+        endWeek.setDate(endWeek.getDate() + 8);
+        if (deadlineFilter === "overdue" && !item.isOverdue) return false;
+        if (deadlineFilter === "no_deadline" && item.dueDate) return false;
+        if (
+          deadlineFilter === "today" &&
+          (!item.dueDate ||
+            item.dueDate < startToday ||
+            item.dueDate >= endToday)
+        )
+          return false;
+        if (
+          deadlineFilter === "next_7_days" &&
+          (!item.dueDate ||
+            item.dueDate < startToday ||
+            item.dueDate >= endWeek)
+        )
+          return false;
+      }
 
       if (
         activeFilter === "open" &&
@@ -612,7 +676,16 @@ export default function ServiceOrdersPage() {
 
       return true;
     });
-  }, [activeFilter, enrichedOrders, searchTerm, urlCustomerId]);
+  }, [
+    activeFilter,
+    customerFilter,
+    deadlineFilter,
+    enrichedOrders,
+    priorityFilter,
+    responsibleFilter,
+    searchTerm,
+    urlCustomerId,
+  ]);
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredOrders.slice(start, start + pageSize);
@@ -620,7 +693,32 @@ export default function ServiceOrdersPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeFilter, searchTerm, urlCustomerId]);
+  }, [
+    activeFilter,
+    customerFilter,
+    deadlineFilter,
+    priorityFilter,
+    responsibleFilter,
+    searchTerm,
+    urlCustomerId,
+  ]);
+
+  useEffect(() => {
+    if (!urlAppointmentId) return;
+    const linkedOrder = enrichedOrders.find(
+      item => item.appointmentId === urlAppointmentId
+    );
+    if (linkedOrder) {
+      setSelectedOrderId(linkedOrder.id);
+    } else if (!serviceOrdersQuery.isLoading) {
+      setOpenCreate(true);
+    }
+  }, [
+    enrichedOrders,
+    serviceOrdersQuery.isLoading,
+    setSelectedOrderId,
+    urlAppointmentId,
+  ]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
@@ -679,7 +777,8 @@ export default function ServiceOrdersPage() {
     const overdue = enrichedOrders.filter(item => item.isOverdue).length;
     const done = enrichedOrders.filter(item => item.status === "DONE").length;
     const doneWithoutCharge = enrichedOrders.filter(
-      item => item.status === "DONE" && !item.hasCharge
+      item =>
+        item.status === "DONE" && !item.hasCharge && !item.financialUnavailable
     ).length;
     const noCharge = enrichedOrders.filter(item => !item.hasCharge).length;
     const unassigned = enrichedOrders.filter(
@@ -1164,8 +1263,30 @@ export default function ServiceOrdersPage() {
         enrichedOrders.find(item => item.id === orderId)?.raw?.outcomeSummary ??
           ""
       ).trim();
+      const cachedExecutions =
+        orderId === selectedOrderId
+          ? normalizeArrayPayload<any>(executionsQuery.data)
+          : [];
+      const executionPayload = cachedExecutions.length
+        ? cachedExecutions
+        : normalizeArrayPayload<any>(
+            await utils.nexo.executions.listByServiceOrder.fetch({
+              serviceOrderId: orderId,
+              limit: 20,
+            })
+          );
+      const execution = executionPayload.find(item =>
+        ["IN_PROGRESS", "STARTED"].includes(
+          String(item?.status ?? "").toUpperCase()
+        )
+      );
+      if (!execution?.id) {
+        throw new Error(
+          "Execução ativa não encontrada. Atualize e tente novamente."
+        );
+      }
       await completeExecutionMutation.mutateAsync({
-        executionId: orderId,
+        executionId: String(execution.id),
         ...(outcomeSummary ? { notes: outcomeSummary } : {}),
       });
       await refreshEverything(orderId);
@@ -1664,6 +1785,39 @@ export default function ServiceOrdersPage() {
         </div>
       </AppSectionBlock>
 
+      {[customersQuery, appointmentsQuery, chargesQuery, peopleQuery].some(
+        query => Boolean(query.error)
+      ) ? (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-xl border border-[var(--warning)] bg-[color-mix(in_srgb,var(--warning)_9%,var(--surface-base))] p-4 text-sm text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p className="font-semibold text-[var(--text-primary)]">
+              Dados auxiliares parcialmente indisponíveis
+            </p>
+            <p>
+              A lista principal continua disponível. Cliente, responsável,
+              agenda ou cobrança podem aparecer sem confirmação; isso não
+              significa ausência saudável de pendências.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() =>
+              void Promise.all([
+                customersQuery.refetch(),
+                appointmentsQuery.refetch(),
+                chargesQuery.refetch(),
+                peopleQuery.refetch(),
+              ])
+            }
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      ) : null}
+
       <AppFiltersBar className="shrink-0 gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2">
         <div className="min-w-[220px] flex-1">
           <input
@@ -1673,6 +1827,73 @@ export default function ServiceOrdersPage() {
             className="h-9 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
           />
         </div>
+        <label className="sr-only" htmlFor="service-order-customer-filter">
+          Filtrar por cliente
+        </label>
+        <select
+          id="service-order-customer-filter"
+          value={customerFilter}
+          onChange={event => setCustomerFilter(event.target.value)}
+          className="h-9 max-w-[190px] rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
+        >
+          <option value="all">Todos os clientes</option>
+          {customers.map(customer => (
+            <option key={customer.id} value={String(customer.id)}>
+              {safeText(customer.name, "Cliente")}
+            </option>
+          ))}
+        </select>
+        <label className="sr-only" htmlFor="service-order-responsible-filter">
+          Filtrar por responsável
+        </label>
+        <select
+          id="service-order-responsible-filter"
+          value={responsibleFilter}
+          onChange={event => setResponsibleFilter(event.target.value)}
+          className="h-9 max-w-[190px] rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
+        >
+          <option value="all">Todos os responsáveis</option>
+          <option value="unassigned">Sem responsável</option>
+          {people.map(person => (
+            <option key={person.id} value={String(person.id)}>
+              {safeText(person.name, "Pessoa")}
+            </option>
+          ))}
+        </select>
+        <label className="sr-only" htmlFor="service-order-deadline-filter">
+          Filtrar por prazo
+        </label>
+        <select
+          id="service-order-deadline-filter"
+          value={deadlineFilter}
+          onChange={event =>
+            setDeadlineFilter(event.target.value as DeadlineFilter)
+          }
+          className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
+        >
+          <option value="all">Todos os prazos</option>
+          <option value="overdue">Atrasadas</option>
+          <option value="today">Vencem hoje</option>
+          <option value="next_7_days">Próximos 7 dias</option>
+          <option value="no_deadline">Sem prazo</option>
+        </select>
+        <label className="sr-only" htmlFor="service-order-priority-filter">
+          Filtrar por prioridade
+        </label>
+        <select
+          id="service-order-priority-filter"
+          value={priorityFilter}
+          onChange={event =>
+            setPriorityFilter(event.target.value as PriorityFilter)
+          }
+          className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
+        >
+          <option value="all">Todas as prioridades</option>
+          <option value="0">Prioridade 0</option>
+          <option value="1">Prioridade 1</option>
+          <option value="2">Prioridade 2</option>
+          <option value="3">Prioridade 3</option>
+        </select>
         <div className="flex flex-wrap items-center gap-2">
           {[
             { key: "all", label: `Todas (${counts.all})` },
@@ -1825,7 +2046,7 @@ export default function ServiceOrdersPage() {
                           }
                         }}
                       >
-                        <div className="grid gap-3 lg:grid-cols-[1.1fr_0.75fr_0.75fr_auto] lg:items-center">
+                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1.1fr_0.75fr_0.9fr_0.8fr_auto] lg:items-center">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
                               {item.customerName}
@@ -1849,6 +2070,20 @@ export default function ServiceOrdersPage() {
                               {item.responsibleName}
                             </p>
                             <p>Prazo: {item.dueDateLabel}</p>
+                            <p
+                              className={cn(
+                                item.isOverdue &&
+                                  "font-semibold text-[var(--danger)]"
+                              )}
+                            >
+                              Atraso: {item.overdueLabel}
+                            </p>
+                          </div>
+                          <div className="text-xs text-[var(--text-secondary)]">
+                            <p className="font-medium text-[var(--text-primary)]">
+                              {formatCurrency(item.amountCents)}
+                            </p>
+                            <p>{item.financialStatusLabel}</p>
                           </div>
                           <div
                             className="flex items-center justify-end gap-2"
@@ -2038,6 +2273,82 @@ export default function ServiceOrdersPage() {
                       </p>
                     </article>
                   ))}
+                </div>
+
+                <div className="grid gap-2 md:grid-cols-2">
+                  <article className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3">
+                    <p className="text-xs uppercase text-[var(--text-muted)]">
+                      Registros de execução
+                    </p>
+                    {executionsQuery.isLoading ? (
+                      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                        Carregando registros...
+                      </p>
+                    ) : executionsQuery.error ? (
+                      <div className="mt-2 text-sm text-[var(--text-secondary)]">
+                        <p>Registros temporariamente indisponíveis.</p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void executionsQuery.refetch()}
+                        >
+                          Tentar novamente
+                        </Button>
+                      </div>
+                    ) : normalizeArrayPayload<any>(executionsQuery.data)
+                        .length ? (
+                      <ul className="mt-2 space-y-2">
+                        {normalizeArrayPayload<any>(executionsQuery.data)
+                          .slice(0, 3)
+                          .map((execution, index) => (
+                            <li
+                              key={`${String(execution?.id ?? "execution")}-${index}`}
+                              className="rounded-md bg-[var(--surface-subtle)] p-2 text-xs text-[var(--text-secondary)]"
+                            >
+                              <span className="font-medium text-[var(--text-primary)]">
+                                {getStatusLabel(
+                                  String(execution?.status ?? "").toUpperCase()
+                                )}
+                              </span>{" "}
+                              · início {formatDate(execution?.startedAt)} · fim{" "}
+                              {formatDate(execution?.endedAt)}
+                              {execution?.notes ? (
+                                <p className="mt-1">
+                                  {sanitizeOperationalText(execution.notes)}
+                                </p>
+                              ) : null}
+                            </li>
+                          ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                        Nenhum registro de execução retornado.
+                      </p>
+                    )}
+                  </article>
+                  <article className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3">
+                    <p className="text-xs uppercase text-[var(--text-muted)]">
+                      Comunicação
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                      Abra a conversa contextual da O.S. para enviar a
+                      atualização pelo fluxo canônico de WhatsApp.
+                    </p>
+                    <Button
+                      className="mt-3"
+                      size="sm"
+                      variant="outline"
+                      disabled={!selectedOrder.customerId}
+                      onClick={() =>
+                        goToWhatsAppServiceOrder(
+                          selectedOrder.customerId,
+                          selectedOrder.id
+                        )
+                      }
+                    >
+                      Abrir WhatsApp
+                    </Button>
+                  </article>
                 </div>
 
                 <EntityTimelineCard
