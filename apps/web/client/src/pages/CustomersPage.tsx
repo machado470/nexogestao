@@ -232,6 +232,33 @@ function parseCurrencyFilterToCents(value: string) {
   return Math.round(amount * 100);
 }
 
+function parseDateFilterBoundary(
+  value: string,
+  boundary: "start" | "end"
+) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+
+  const date =
+    boundary === "end"
+      ? new Date(year, month, day, 23, 59, 59, 999)
+      : new Date(year, month, day, 0, 0, 0, 0);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date.getTime();
+}
+
 function toDate(value: unknown): Date | null {
   if (!value) return null;
   const parsed = new Date(String(value));
@@ -603,6 +630,14 @@ export default function CustomersPage() {
     "nexo.customers.balance-max.v2",
     ""
   );
+  const [periodStartValue, setPeriodStartValue] = useOperationalMemoryState(
+    "nexo.customers.period-start.v2",
+    ""
+  );
+  const [periodEndValue, setPeriodEndValue] = useOperationalMemoryState(
+    "nexo.customers.period-end.v2",
+    ""
+  );
   const [activeCustomerId, setActiveCustomerId] = useOperationalMemoryState<
     string | null
   >("nexo.customers.active-id.v2", null);
@@ -688,6 +723,14 @@ export default function CustomersPage() {
     const query = searchTerm.trim().toLowerCase();
     const minBalanceCents = parseCurrencyFilterToCents(minBalanceValue);
     const maxBalanceCents = parseCurrencyFilterToCents(maxBalanceValue);
+    const periodStartTimestamp = parseDateFilterBoundary(
+      periodStartValue,
+      "start"
+    );
+    const periodEndTimestamp = parseDateFilterBoundary(
+      periodEndValue,
+      "end"
+    );
 
     return profiles.filter(profile => {
       if (
@@ -727,6 +770,24 @@ export default function CustomersPage() {
         return false;
       }
 
+      const lastInteractionTimestamp = profile.lastInteractionAt?.getTime();
+
+      if (
+        periodStartTimestamp !== null &&
+        (!lastInteractionTimestamp ||
+          lastInteractionTimestamp < periodStartTimestamp)
+      ) {
+        return false;
+      }
+
+      if (
+        periodEndTimestamp !== null &&
+        (!lastInteractionTimestamp ||
+          lastInteractionTimestamp > periodEndTimestamp)
+      ) {
+        return false;
+      }
+
       if (!query) return true;
       return [
         profile.customer.name,
@@ -741,6 +802,8 @@ export default function CustomersPage() {
     activeFilter,
     maxBalanceValue,
     minBalanceValue,
+    periodEndValue,
+    periodStartValue,
     profiles,
     searchTerm,
   ]);
@@ -1678,9 +1741,13 @@ export default function CustomersPage() {
           ))}
           <details className="relative">
             <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-              {minBalanceValue || maxBalanceValue
-                ? "Mais filtros · valor"
-                : "Mais filtros"}
+              {periodStartValue || periodEndValue
+                ? minBalanceValue || maxBalanceValue
+                  ? "Mais filtros · período + valor"
+                  : "Mais filtros · período"
+                : minBalanceValue || maxBalanceValue
+                  ? "Mais filtros · valor"
+                  : "Mais filtros"}
             </summary>
             <div className="absolute right-0 z-20 mt-2 grid min-w-[260px] gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
               {[
@@ -1703,6 +1770,49 @@ export default function CustomersPage() {
                   {item.label}
                 </button>
               ))}
+
+              <div className="border-t border-[var(--border-subtle)] pt-2">
+                <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
+                  Última atividade
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="grid gap-1 text-[11px] text-[var(--text-muted)]">
+                    De
+                    <input
+                      type="date"
+                      value={periodStartValue}
+                      onChange={event => setPeriodStartValue(event.target.value)}
+                      aria-label="Período inicial"
+                      className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                    />
+                  </label>
+
+                  <label className="grid gap-1 text-[11px] text-[var(--text-muted)]">
+                    Até
+                    <input
+                      type="date"
+                      value={periodEndValue}
+                      onChange={event => setPeriodEndValue(event.target.value)}
+                      aria-label="Período final"
+                      className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                    />
+                  </label>
+                </div>
+
+                {periodStartValue || periodEndValue ? (
+                  <button
+                    type="button"
+                    className="mt-2 text-xs font-medium text-[var(--accent-primary)]"
+                    onClick={() => {
+                      setPeriodStartValue("");
+                      setPeriodEndValue("");
+                    }}
+                  >
+                    Limpar período
+                  </button>
+                ) : null}
+              </div>
 
               <div className="border-t border-[var(--border-subtle)] pt-2">
                 <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
