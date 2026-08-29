@@ -74,10 +74,23 @@ describe("CustomersPage operational client center", () => {
 
   it("keeps WhatsApp inline condensed and exposes real primary CTAs", () => {
     expect(source).not.toContain("<textarea");
-    ["Abrir WhatsApp", "Agendar", "Cobrar", "Ver timeline"].forEach(cta =>
-      expect(source).toContain(cta)
+
+    const heroStart = source.indexOf("Hero Executivo do Cliente");
+    const decisionStart = source.indexOf("Decisão e próxima ação", heroStart);
+    const heroSource = source.slice(heroStart, decisionStart);
+
+    ["Abrir WhatsApp", "Agendar", "Nova O.S.", "Cobrar"].forEach(cta =>
+      expect(heroSource).toContain(cta)
     );
-    expect(source).toContain("openCustomerWhatsApp");
+
+    expect(heroSource).toContain("openCustomerWhatsApp");
+    expect(heroSource).toContain("setCreateAppointmentOpen(true)");
+    expect(heroSource).toContain("setCreateServiceOrderOpen(true)");
+    expect(heroSource).toContain(
+      "navigate(`/finances?customerId=${activeCustomerId}`)"
+    );
+
+    expect(source).toContain("Ver timeline");
   });
 
   it("keeps the operational wallet command-centered with real CTAs", () => {
