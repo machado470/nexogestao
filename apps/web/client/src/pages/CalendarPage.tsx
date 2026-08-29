@@ -800,12 +800,12 @@ export default function CalendarPage() {
     navigate("/appointments?source=calendar");
   };
 
-  const isLoading =
-    appointmentsQuery.isLoading ||
-    customersQuery.isLoading ||
-    peopleQuery.isLoading;
-  const hasError =
-    appointmentsQuery.isError || customersQuery.isError || peopleQuery.isError;
+  const isLoading = appointmentsQuery.isLoading;
+  const hasError = appointmentsQuery.isError;
+  const partialUnavailable = [
+    customersQuery.isError ? "clientes" : null,
+    peopleQuery.isError ? "responsáveis" : null,
+  ].filter(Boolean) as string[];
 
   const refetchAll = () => {
     void Promise.all([
@@ -843,6 +843,27 @@ export default function CalendarPage() {
           tempo. Agendamentos continua sendo o fluxo operacional da entrada.
         </p>
       </AppOperationalHeader>
+
+      {partialUnavailable.length > 0 && !hasError ? (
+        <div
+          role="status"
+          className="mt-4 flex flex-col gap-2 rounded-xl border border-[var(--warning)]/35 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--text-secondary)] sm:flex-row sm:items-center"
+        >
+          <p className="flex-1">
+            Indisponibilidade parcial: não foi possível carregar{" "}
+            {partialUnavailable.join(" e ")}. A grade permanece disponível;
+            filtros e nomes dependentes dessas fontes podem ficar limitados.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={refetchAll}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      ) : null}
 
       {!isLoading && !hasError ? (
         <div className="mt-4 space-y-4">
@@ -1015,6 +1036,7 @@ export default function CalendarPage() {
       <AppFiltersBar className="mt-4 gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <select
+            aria-label="Período do calendário"
             className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
             value={viewMode}
             onChange={event => setViewMode(event.target.value as ViewMode)}
@@ -1024,9 +1046,11 @@ export default function CalendarPage() {
             <option value="dayGridMonth">Mês</option>
           </select>
           <select
+            aria-label="Filtrar por responsável"
             className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
             value={teamFilter}
             onChange={event => setTeamFilter(event.target.value)}
+            disabled={peopleQuery.isError}
           >
             <option value="all">Equipe: todas</option>
             {people.map((person: any) => (
@@ -1036,6 +1060,7 @@ export default function CalendarPage() {
             ))}
           </select>
           <select
+            aria-label="Filtrar por serviço"
             className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
             value={serviceFilter}
             onChange={event => setServiceFilter(event.target.value)}
@@ -1046,6 +1071,7 @@ export default function CalendarPage() {
             <option value="vistoria">Vistoria</option>
           </select>
           <select
+            aria-label="Filtrar por status"
             className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
             value={statusFilter}
             onChange={event => setStatusFilter(event.target.value)}
@@ -1057,9 +1083,11 @@ export default function CalendarPage() {
             <option value="CANCELED">Cancelado</option>
           </select>
           <select
+            aria-label="Filtrar por cliente"
             className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
             value={customerFilter}
             onChange={event => setCustomerFilter(event.target.value)}
+            disabled={customersQuery.isError}
           >
             <option value="all">Cliente: todos</option>
             {customers.map(customer => (

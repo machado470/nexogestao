@@ -136,4 +136,16 @@ describe("CalendarPage operational time-control contract", () => {
     expect(calendar).toContain("businessHours");
     expect(calendar).toContain("não agendamento real");
   });
+
+  it("preserva a grade com indisponibilidade parcial e filtros acessíveis", () => {
+    const calendar = source();
+
+    expect(calendar).toContain("Indisponibilidade parcial");
+    expect(calendar).toContain("const isLoading = appointmentsQuery.isLoading");
+    expect(calendar).toContain("const hasError = appointmentsQuery.isError");
+    expect(calendar).toContain('aria-label="Período do calendário"');
+    expect(calendar).toContain('aria-label="Filtrar por responsável"');
+    expect(calendar).toContain('aria-label="Filtrar por status"');
+    expect(calendar).toContain('aria-label="Filtrar por cliente"');
+  });
 });
