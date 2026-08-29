@@ -131,6 +131,21 @@ describe("CustomersPage operational client center", () => {
     );
   });
 
+  it("filters customers by pending balance value range", () => {
+    expect(source).toContain(
+      "function parseCurrencyFilterToCents(value: string)"
+    );
+    expect(source).toContain('"nexo.customers.balance-min.v2"');
+    expect(source).toContain('"nexo.customers.balance-max.v2"');
+    expect(source).toContain("profile.pendingCents < minBalanceCents");
+    expect(source).toContain("profile.pendingCents > maxBalanceCents");
+    expect(source).toContain('placeholder="Mín. R$"');
+    expect(source).toContain('placeholder="Máx. R$"');
+    expect(source).toContain("Saldo financeiro");
+    expect(source).toContain("Limpar intervalo de valor");
+    expect(source).toContain("Mais filtros · valor");
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
