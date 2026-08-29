@@ -517,6 +517,9 @@ function buildCustomerProfiles(input: {
     const activeServiceOrder =
       serviceOrders.find(isServiceOrderOverdue) ??
       serviceOrders.find(isServiceOrderOpen);
+    const lastService = serviceOrders.find(
+      order => String(order.status ?? "").toUpperCase() === "COMPLETED"
+    );
     const hasOpenServiceOrder = Boolean(activeServiceOrder);
     const daysWithoutContact = daysBetween(profile.lastInteractionAt);
     const status = customerStatus({
@@ -566,7 +569,7 @@ function buildCustomerProfiles(input: {
       }),
       nextActionLabel,
       nextActionPath,
-      lastService: serviceOrders[0],
+      lastService,
       activeServiceOrder,
       nextAppointment,
       contact: getCustomerContact(profile.customer),
@@ -847,8 +850,8 @@ export default function CustomersPage() {
           isBlocked: true,
           key: `${profile.customerId}-open-os`,
           title: String(profile.customer.name ?? "Cliente sem nome"),
-          context: profile.lastService
-            ? `O.S. ${String(profile.lastService.title ?? profile.lastService.id ?? "aberta")} em ${presentationStatusLabel(profile.lastService.status, "em andamento")}.`
+          context: profile.activeServiceOrder
+            ? `O.S. ${String(profile.activeServiceOrder.title ?? profile.activeServiceOrder.id ?? "aberta")} em ${presentationStatusLabel(profile.activeServiceOrder.status, "em andamento")}.`
             : "O.S. aberta exige acompanhamento.",
           status: "Atenção",
           actionLabel: "Ver O.S.",
@@ -1957,6 +1960,24 @@ export default function CustomersPage() {
                         Sem O.S. aberta
                       </p>
                     )}
+                    <div className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
+                      <p>
+                        Último serviço:{" "}
+                        {profile.lastService
+                          ? formatDateTime(
+                              profile.lastService.updatedAt ??
+                                profile.lastService.createdAt
+                            )
+                          : "Sem serviço concluído"}
+                      </p>
+                      <p>
+                        Próximo agendamento:{" "}
+                        {profile.nextAppointment
+                          ? formatDateTime(profile.nextAppointment.startsAt)
+                          : "Sem agenda futura"}
+                      </p>
+                    </div>
+
                     <div className="mt-3 flex items-center justify-between gap-2">
                       <span className="text-sm font-medium text-[var(--text-primary)]">
                         {formatCurrency(profile.pendingCents)}
@@ -2056,13 +2077,21 @@ export default function CustomersPage() {
                               {profile.nextActionLabel}
                             </p>
                             <p>
+                              Último serviço:{" "}
+                              {profile.lastService
+                                ? formatDateTime(
+                                    profile.lastService.updatedAt ??
+                                      profile.lastService.createdAt
+                                  )
+                                : "Sem serviço concluído"}
+                            </p>
+                            <p>
+                              Próximo agendamento:{" "}
                               {profile.nextAppointment
                                 ? formatDateTime(
                                     profile.nextAppointment.startsAt
                                   )
-                                : profile.lastService
-                                  ? `Última O.S.: ${presentationStatusLabel(profile.lastService.status, "-")}`
-                                  : "Sem agenda futura"}
+                                : "Sem agenda futura"}
                             </p>
                           </div>
                         </td>
