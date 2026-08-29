@@ -770,7 +770,7 @@ function AttentionRow({
 export default function ExecutiveDashboard() {
   useRenderWatchdog("ExecutiveDashboard");
   const [, navigate] = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role } = useAuth();
   const kpisQuery = trpc.dashboard.kpis.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
@@ -784,18 +784,24 @@ export default function ExecutiveDashboard() {
       { limit: 10 },
       { enabled: isAuthenticated, retry: false }
     );
-  const operationalStateQuery = trpc.dashboard.operationalState.useQuery(undefined, {
-    enabled: isAuthenticated,
-    retry: false,
-  });
+  const operationalStateQuery = trpc.dashboard.operationalState.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+      retry: false,
+    }
+  );
   const operationalSignalsQuery = trpc.dashboard.operationalSignals.useQuery(
     { limit: 8 },
     { enabled: isAuthenticated, retry: false }
   );
-  const nextBestActionQuery = trpc.dashboard.nextBestAction.useQuery(undefined, {
-    enabled: isAuthenticated,
-    retry: false,
-  });
+  const nextBestActionQuery = trpc.dashboard.nextBestAction.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+      retry: false,
+    }
+  );
   const timelineQuery = trpc.nexo.timeline.listByOrg.useQuery(
     { limit: 3 },
     { enabled: isAuthenticated, retry: false }
@@ -815,22 +821,28 @@ export default function ExecutiveDashboard() {
   )
     ? (pendingWhatsAppApprovalsQuery.data as WhatsAppActionExecution[])
     : [];
+  // Métricas e alertas formam a leitura mínima. Sinais auxiliares degradam
+  // apenas seus próprios blocos e nunca escondem dados operacionais válidos.
   const pageLoading =
-    kpisQuery.isLoading ||
-    alertsQuery.isLoading ||
-    operationalStateQuery.isLoading ||
-    operationalSignalsQuery.isLoading ||
-    nextBestActionQuery.isLoading;
-  const pageError =
-    kpisQuery.isError ||
-    alertsQuery.isError ||
-    operationalStateQuery.isError ||
-    operationalSignalsQuery.isError ||
-    nextBestActionQuery.isError;
+    (kpisQuery.isLoading && !kpisQuery.data) ||
+    (alertsQuery.isLoading && !alertsQuery.data);
+  const pageError = kpisQuery.isError && alertsQuery.isError;
+  const unavailableSources = [
+    kpisQuery.isError ? "KPIs" : null,
+    alertsQuery.isError ? "alertas e fila" : null,
+    operationalStateQuery.isError ? "estado operacional" : null,
+    operationalSignalsQuery.isError ? "sinais de risco" : null,
+    nextBestActionQuery.isError ? "próxima melhor ação" : null,
+    timelineQuery.isError ? "prova da Timeline" : null,
+    pendingWhatsAppApprovalsQuery.isError ? "aprovações WhatsApp" : null,
+  ].filter((source): source is string => Boolean(source));
+  const isPartiallyUnavailable = unavailableSources.length > 0 && !pageError;
   const dashboardState = resolveExecutiveDashboardState({
     isLoading: pageLoading,
     isError: pageError,
-    backendState: operationalStateQuery.data?.dashboardState,
+    backendState:
+      operationalStateQuery.data?.dashboardState ??
+      (kpisQuery.data || alertsQuery.data ? "ATTENTION" : undefined),
   });
   const comparison = asRecord(metrics.comparison);
   const pulseComparisons: Array<[string, ComparisonKey, boolean?]> = [
@@ -851,7 +863,8 @@ export default function ExecutiveDashboard() {
     operationalStateQuery.data?.operationalState ?? "UNKNOWN";
   const operationStateReason = operationalStateQuery.isError
     ? "Não foi possível consultar o estado operacional."
-    : operationalStateQuery.data?.reason ?? "Estado operacional sem evidência disponível.";
+    : (operationalStateQuery.data?.reason ??
+      "Estado operacional sem evidência disponível.");
 
   const flow: FlowStage[] = [
     {
@@ -927,40 +940,6 @@ export default function ExecutiveDashboard() {
           ? "idle"
           : "done",
     },
-    {
-      id: "timeline",
-      label: "Timeline",
-      value: timelineQuery.isError ? "!" : String(timelineEvents.length),
-      context: timelineQuery.isError
-        ? "leitura indisponível"
-        : "eventos oficiais recentes",
-      path: "/timeline",
-      action: "Ver prova",
-      state: timelineQuery.isError
-        ? "warning"
-        : timelineEvents.length > 0
-          ? "done"
-          : "idle",
-    },
-    {
-      id: "governance",
-      label: "Risco/Governança",
-      value: operationLevel,
-      context:
-        criticalCount > 0
-          ? `${criticalCount} risco(s) crítico(s)`
-          : "sinal transversal consolidado",
-      path: "/governance",
-      action: "Ver governança",
-      state:
-        operationLevel === "SUSPENDED"
-          ? "blocked"
-          : operationLevel === "WARNING"
-            ? "warning"
-            : operationLevel === "NORMAL"
-              ? "done"
-              : "idle",
-    },
   ];
   const bottleneck =
     overdueCharges >= overdueOrders &&
@@ -1002,7 +981,9 @@ export default function ExecutiveDashboard() {
     },
     {
       label: "Gargalo",
-      value: alertsQuery.isError ? "não calculado" : (bottleneck?.label ?? "sem gargalo"),
+      value: alertsQuery.isError
+        ? "não calculado"
+        : (bottleneck?.label ?? "sem gargalo"),
       tone: bottleneck ? "warning" : "neutral",
     },
   ] satisfies Array<{
@@ -1205,6 +1186,14 @@ export default function ExecutiveDashboard() {
     },
   ];
   const statusLabel = executiveDashboardStateLabel[dashboardState];
+  const roleContext =
+    role === "ADMIN"
+      ? "Visão administrativa"
+      : role === "MANAGER"
+        ? "Visão de gestão"
+        : role === "STAFF"
+          ? "Visão operacional"
+          : "Visão de consulta";
   const executiveContactSummary = [
     `${readNumber(asRecord(metrics.whatsappSignals), "customersNoResponse")} aguardando resposta`,
     `${pendingWhatsAppApprovals.length} aprovações pendentes`,
@@ -1222,10 +1211,11 @@ export default function ExecutiveDashboard() {
             <AppContextChip>{formatPeriod()}</AppContextChip>
             <AppContextChip>Período: Hoje / Semana / 30 dias</AppContextChip>
             <AppContextChip
-              tone={dashboardState === "HEALTHY" ? "success" : "accent"}
+              tone={operationLevel === "NORMAL" ? "success" : "accent"}
             >
-              Estado: {statusLabel}
+              Estado: {operationLevel}
             </AppContextChip>
+            <AppContextChip>{roleContext}</AppContextChip>
             <AppContextChip tone={criticalCount > 0 ? "danger" : "neutral"}>
               {operationalSignalsQuery.isError
                 ? "Riscos críticos indisponíveis"
@@ -1242,9 +1232,10 @@ export default function ExecutiveDashboard() {
                 : `${overdueOrders} O.S. atrasadas`}
             </AppContextChip>
             <AppContextChip tone={bottleneck ? "warning" : "neutral"}>
-              Gargalo: {alertsQuery.isError
+              Gargalo:{" "}
+              {alertsQuery.isError
                 ? "não calculado"
-                : bottleneck?.label ?? "sem gargalo calculável"}
+                : (bottleneck?.label ?? "sem gargalo calculável")}
             </AppContextChip>
           </>
         }
@@ -1269,6 +1260,41 @@ export default function ExecutiveDashboard() {
           }}
         />
       ) : null}
+      {isPartiallyUnavailable ? (
+        <div
+          role="status"
+          className="flex flex-col gap-2 rounded-xl border border-[var(--warning)]/35 bg-[var(--warning)]/10 p-3 text-sm text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p>
+            <strong className="text-[var(--text-primary)]">
+              Leitura parcial.
+            </strong>{" "}
+            Indisponível agora: {unavailableSources.join(", ")}. Os dados
+            visíveis permanecem válidos; ausência de sinal não indica operação
+            saudável.
+          </p>
+          <Button
+            className="shrink-0"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              if (kpisQuery.isError) void kpisQuery.refetch();
+              if (alertsQuery.isError) void alertsQuery.refetch();
+              if (operationalStateQuery.isError)
+                void operationalStateQuery.refetch();
+              if (operationalSignalsQuery.isError)
+                void operationalSignalsQuery.refetch();
+              if (nextBestActionQuery.isError)
+                void nextBestActionQuery.refetch();
+              if (timelineQuery.isError) void timelineQuery.refetch();
+              if (pendingWhatsAppApprovalsQuery.isError)
+                void pendingWhatsAppApprovalsQuery.refetch();
+            }}
+          >
+            Tentar fontes indisponíveis novamente
+          </Button>
+        </div>
+      ) : null}
       {!pageLoading && !pageError && !hasOperationalData ? (
         <div className="space-y-3">
           <AppPageEmptyState
@@ -1285,8 +1311,6 @@ export default function ExecutiveDashboard() {
 
       {!pageLoading && !pageError && hasOperationalData ? (
         <div className="w-full min-w-0 space-y-3 sm:space-y-4">
-
-
           <AppSectionBlock
             title="Atenção imediata"
             compact
@@ -1326,10 +1350,31 @@ export default function ExecutiveDashboard() {
                 className="border-[var(--accent-primary)]/55 bg-[var(--accent-soft)]/50"
               />
             ) : (
-              <AppPageEmptyState
-                title="Nenhuma ação prioritária encontrada."
-                description="Nenhuma ação prioritária retornada para o período."
-              />
+              <div className="space-y-2">
+                <AppPageEmptyState
+                  title={
+                    nextBestActionQuery.isError
+                      ? "Próxima ação indisponível"
+                      : "Nenhuma ação prioritária encontrada."
+                  }
+                  description={
+                    nextBestActionQuery.isError
+                      ? "A fonte desta recomendação falhou. Use a fila e os alertas disponíveis ou tente novamente; nenhuma recomendação foi inventada."
+                      : "Nenhuma ação prioritária retornada para o período."
+                  }
+                />
+                {nextBestActionQuery.isError ? (
+                  <div className="flex justify-center">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void nextBestActionQuery.refetch()}
+                    >
+                      Tentar próxima ação novamente
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             )}
           </AppSectionBlock>
 
