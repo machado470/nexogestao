@@ -156,6 +156,7 @@ type Workspace = {
   serviceOrders?: ServiceOrder[];
   charges?: Charge[];
   timeline?: Record<string, any>[];
+  totalSpentCents?: number;
 };
 
 type CustomerFilter =
@@ -328,6 +329,9 @@ function normalizeWorkspace(input: unknown): Workspace {
     serviceOrders: normalizeArrayPayload(raw.serviceOrders ?? raw.orders),
     charges: normalizeArrayPayload(raw.charges ?? raw.finance),
     timeline: normalizeArrayPayload(raw.timeline ?? raw.events),
+    totalSpentCents: Number.isFinite(Number(raw.totalSpentCents))
+      ? Math.max(0, Number(raw.totalSpentCents))
+      : 0,
   };
 }
 
@@ -1023,6 +1027,10 @@ export default function CustomersPage() {
     if (!isChargePending(charge)) return total;
     return total + Number(charge.amountCents ?? charge.amount ?? 0);
   }, 0);
+  const workspaceTotalSpentCents = Math.max(
+    0,
+    Number(workspace.totalSpentCents ?? 0)
+  );
   const workspaceOverdueCharges = workspaceCharges.filter(
     charge => String(charge.status ?? "").toUpperCase() === "OVERDUE"
   );
@@ -2311,7 +2319,16 @@ export default function CustomersPage() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                  <NexoExecutiveMetric
+                    title="Total gasto"
+                    value={formatCurrency(workspaceTotalSpentCents)}
+                    context="Pagamentos registrados"
+                    ctaLabel="Ver financeiro"
+                    onClick={() =>
+                      navigate(`/finances?customerId=${activeCustomerId}`)
+                    }
+                  />
                   <NexoExecutiveMetric
                     title="Saldo"
                     value={formatCurrency(

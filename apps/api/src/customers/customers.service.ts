@@ -162,7 +162,13 @@ export class CustomersService {
 
     if (!customer) throw new NotFoundException('Cliente não encontrado')
 
-    const [appointments, serviceOrders, charges, timeline] = await Promise.all([
+    const [
+      appointments,
+      serviceOrders,
+      charges,
+      timeline,
+      paymentsAggregate,
+    ] = await Promise.all([
       this.prisma.appointment.findMany({
         where: { orgId, customerId: id },
         orderBy: { startsAt: 'desc' },
@@ -190,9 +196,28 @@ export class CustomersService {
         orderBy: { createdAt: 'desc' },
         take: 200,
       }),
+      this.prisma.payment.aggregate({
+        where: {
+          orgId,
+          charge: {
+            orgId,
+            customerId: id,
+          },
+        },
+        _sum: {
+          amountCents: true,
+        },
+      }),
     ])
 
-    return { customer, timeline, appointments, serviceOrders, charges }
+    return {
+      customer,
+      timeline,
+      appointments,
+      serviceOrders,
+      charges,
+      totalSpentCents: paymentsAggregate._sum.amountCents ?? 0,
+    }
   }
 
   async create(params: {
