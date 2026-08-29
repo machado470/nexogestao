@@ -13,8 +13,14 @@ describe("appointment assignee UI contract", () => {
       'teamFilter === "all" ? { limit: 1000 } : { assignedToPersonId: teamFilter, limit: 1000 }'
     );
     expect(calendar).toContain("if (!item.assignedToPersonId) return;");
+    expect(calendar).toContain(
+      "const activeAppointments = useMemo("
+    );
     expect(normalizedCalendar).toContain(
-      'Boolean(item.assignedToPersonId) && !["CANCELED", "DONE", "NO_SHOW"].includes(item.status)'
+      '!["CANCELED", "DONE", "NO_SHOW"].includes(item.status)'
+    );
+    expect(calendar).toContain(
+      "activeAppointments.forEach(item => {"
     );
   });
 
