@@ -208,6 +208,7 @@ type CustomerOperationalEventType =
   | "CUSTOMER_CHARGE_CONTEXT_UPDATED";
 
 const pageSize = 8;
+const customerNewWindowDays = 30;
 const openServiceOrderStatuses = ["OPEN", "ASSIGNED", "IN_PROGRESS"];
 const pendingChargeStatuses = ["OVERDUE", "PENDING"];
 
@@ -277,6 +278,16 @@ function daysBetween(date: Date | null) {
     0,
     Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
   );
+}
+
+function isNewCustomer(customer: Customer) {
+  const createdAt = toDate(customer.createdAt);
+  if (!createdAt) return false;
+
+  const ageMs = Date.now() - createdAt.getTime();
+  const windowMs = customerNewWindowDays * 24 * 60 * 60 * 1000;
+
+  return ageMs >= 0 && ageMs <= windowMs;
 }
 
 function customerStatus(input: {
@@ -1940,6 +1951,9 @@ export default function CustomersPage() {
                         <AppStatusBadge
                           {...getCustomerActiveStatus(profile.customer.active)}
                         />
+                        {isNewCustomer(profile.customer) ? (
+                          <AppStatusBadge label="Novo" tone="info" />
+                        ) : null}
                       </div>
                     </div>
                     <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">
@@ -2042,6 +2056,9 @@ export default function CustomersPage() {
                                   profile.customer.active
                                 )}
                               />
+                              {isNewCustomer(profile.customer) ? (
+                                <AppStatusBadge label="Novo" tone="info" />
+                              ) : null}
                               <AppPriorityBadge
                                 priority={getCustomerPriority(profile)}
                               />

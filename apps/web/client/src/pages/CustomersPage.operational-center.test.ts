@@ -183,6 +183,19 @@ describe("CustomersPage operational client center", () => {
     );
   });
 
+  it("shows an explicit badge for customers in the first 30 days", () => {
+    expect(source).toContain("const customerNewWindowDays = 30;");
+    expect(source).toContain("function isNewCustomer(customer: Customer)");
+    expect(source).toContain("const createdAt = toDate(customer.createdAt)");
+    expect(source).toContain(
+      "const windowMs = customerNewWindowDays * 24 * 60 * 60 * 1000"
+    );
+    expect(source).toContain("return ageMs >= 0 && ageMs <= windowMs");
+    expect(
+      source.match(/AppStatusBadge label="Novo" tone="info"/g)?.length
+    ).toBe(2);
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
