@@ -132,7 +132,9 @@ describe("CustomersPage operational client center", () => {
   });
 
   it("shows active status separately from operational health", () => {
-    expect(source).toContain("function getCustomerActiveStatus(active: unknown)");
+    expect(source).toContain(
+      "function getCustomerActiveStatus(active: unknown)"
+    );
     expect(source).toContain('label: "Ativo"');
     expect(source).toContain('label: "Inativo"');
     expect(source).toContain('label: "Status não informado"');
@@ -166,12 +168,8 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain(
       "const lastInteractionTimestamp = profile.lastInteractionAt?.getTime()"
     );
-    expect(source).toContain(
-      "lastInteractionTimestamp < periodStartTimestamp"
-    );
-    expect(source).toContain(
-      "lastInteractionTimestamp > periodEndTimestamp"
-    );
+    expect(source).toContain("lastInteractionTimestamp < periodStartTimestamp");
+    expect(source).toContain("lastInteractionTimestamp > periodEndTimestamp");
     expect(source).toContain("Última atividade");
     expect(source).toContain('aria-label="Período inicial"');
     expect(source).toContain('aria-label="Período final"');
@@ -220,9 +218,7 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain(
       "completedServices >= customerFrequentCompletedServicesThreshold"
     );
-    expect(
-      source.match(/label="Frequente"/g)?.length
-    ).toBe(2);
+    expect(source.match(/label="Frequente"/g)?.length).toBe(2);
     expect(source).toContain('tone="accent"');
   });
 
@@ -244,16 +240,12 @@ describe("CustomersPage operational client center", () => {
   });
 
   it("shows canonical total spent from the customer workspace", () => {
-    expect(source).toContain(
-      "const workspaceTotalSpentCents = Math.max("
-    );
+    expect(source).toContain("const workspaceTotalSpentCents = Math.max(");
     expect(source).toContain("totalSpentCents?: number;");
     expect(source).toContain(
       "totalSpentCents: Number.isFinite(Number(raw.totalSpentCents))"
     );
-    expect(source).toContain(
-      "Number(workspace.totalSpentCents ?? 0)"
-    );
+    expect(source).toContain("Number(workspace.totalSpentCents ?? 0)");
     expect(source).toContain('title="Total gasto"');
     expect(source).toContain(
       "value={formatCurrency(workspaceTotalSpentCents)}"
@@ -268,5 +260,28 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("Financeiro");
     expect(source).toContain("Mais ações");
     expect(source).toContain("AppPagination");
+  });
+
+  it("keeps auxiliary failures non-blocking without presenting a healthy wallet", () => {
+    expect(source).toContain("Leitura operacional parcial");
+    expect(source).toContain("Clientes carregados, mas");
+    expect(source).toContain("não deve ser interpretada como");
+    expect(source).toContain("unavailableAuxiliaryData");
+    expect(source).toContain("hasIncompleteOperationalData");
+    expect(source).toContain('label: "cobranças"');
+    expect(source).toContain('label: "ordens de serviço"');
+    expect(source).toContain('label: "agendamentos"');
+    expect(source).toContain("Tentar novamente");
+    expect(source).toContain('label: "Leitura parcial"');
+    expect(source).toContain("Financeiro indisponível");
+    expect(source).toContain("O.S. indisponíveis");
+    expect(source).toContain("Agenda indisponível");
+  });
+
+  it("does not block already loaded customers while auxiliary data is loading", () => {
+    expect(source).toContain("Complementando sinais operacionais");
+    expect(source).toContain("pendingAuxiliaryData");
+    expect(source).toContain("de concluir a leitura de saúde da carteira");
+    expect(source).toContain('aria-live="polite"');
   });
 });
