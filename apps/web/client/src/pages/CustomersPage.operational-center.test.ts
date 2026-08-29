@@ -213,6 +213,24 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain('tone="accent"');
   });
 
+  it("shows canonical total spent from the customer workspace", () => {
+    expect(source).toContain(
+      "const workspaceTotalSpentCents = Math.max("
+    );
+    expect(source).toContain("totalSpentCents?: number;");
+    expect(source).toContain(
+      "totalSpentCents: Number.isFinite(Number(raw.totalSpentCents))"
+    );
+    expect(source).toContain(
+      "Number(workspace.totalSpentCents ?? 0)"
+    );
+    expect(source).toContain('title="Total gasto"');
+    expect(source).toContain(
+      "value={formatCurrency(workspaceTotalSpentCents)}"
+    );
+    expect(source).toContain('context="Pagamentos registrados"');
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
