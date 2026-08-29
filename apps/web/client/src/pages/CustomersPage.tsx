@@ -38,7 +38,6 @@ import {
   AppPriorityBadge,
   AppRowActionsDropdown,
   AppSectionCard,
-  AppStatCard,
   AppStatusBadge,
   type AppOperationalStatus,
   type AppPriorityLevel,
@@ -52,17 +51,10 @@ import {
   AppPageLoadingState,
   AppPagination,
   AppSectionBlock,
-  AppNextBestActionBlock,
 } from "@/components/internal-page-system";
 import { cn } from "@/lib/utils";
 import { operationalCopy } from "@/lib/operational-semantics";
 import { aggregateOperationalHealth } from "@/lib/operational-health";
-import {
-  detectOperationalInterventions,
-  getPrimaryOperationalIntervention,
-  getOperationalInterventionImpact,
-  getOperationalInterventionReason,
-} from "@/lib/operational-interventions";
 import {
   compareOperationalPriority,
   getDominantOperationalAction,
@@ -614,19 +606,6 @@ export default function CustomersPage() {
     [workspaceQuery.data]
   );
 
-  const primaryIntervention = useMemo(
-    () =>
-      getPrimaryOperationalIntervention(
-        detectOperationalInterventions({
-          customers: workspace.customer ? [workspace.customer] : [],
-          appointments: workspace.appointments,
-          serviceOrders: workspace.serviceOrders,
-          charges: workspace.charges,
-          people: normalizeArrayPayload(peopleQuery.data),
-        })
-      ),
-    [workspace, peopleQuery.data]
-  );
   const filteredProfiles = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
@@ -1516,95 +1495,7 @@ export default function CustomersPage() {
         </div>
       </AppSectionCard>
 
-      <AppSectionBlock
-        title="Resumo do cliente"
-        subtitle="Memória operacional consolidada da carteira."
-        compact
-        className="hidden"
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <AppStatCard
-            label="Saldo em atenção"
-            value={formatCurrency(
-              profiles.reduce(
-                (total, profile) => total + profile.pendingCents,
-                0
-              )
-            )}
-            helper="Soma segura das cobranças pendentes/vencidas retornadas."
-            delta={
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setActiveFilter("pending")}
-              >
-                Filtrar pendências
-              </Button>
-            }
-          />
-          <AppStatCard
-            label="Risco de relacionamento"
-            value={
-              profiles.filter(profile => profile.status === "Em risco").length
-            }
-            helper="Clientes com dívida vencida ou longo período sem contato."
-            delta={
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setActiveFilter("risk")}
-              >
-                Ver risco
-              </Button>
-            }
-          />
-          <AppStatCard
-            label="Execução aberta"
-            value={
-              profiles.filter(profile => profile.hasOpenServiceOrder).length
-            }
-            helper="Clientes com O.S. aberta que ainda pede acompanhamento."
-            delta={
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setActiveFilter("open_os")}
-              >
-                Ver O.S.
-              </Button>
-            }
-          />
-        </div>
-      </AppSectionBlock>
 
-      <AppNextBestActionBlock
-        title="Intervenção operacional recomendada"
-        subtitle="Sugestão contextual para destravar fluxo sem execução automática."
-        compact
-        className="hidden"
-      >
-        {primaryIntervention ? (
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
-              {primaryIntervention.label}
-            </p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Motivo: {getOperationalInterventionReason(primaryIntervention)}
-            </p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Impacto: {getOperationalInterventionImpact(primaryIntervention)}
-            </p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Responsável sugerido: {primaryIntervention.recommendedOwner}
-            </p>
-          </div>
-        ) : (
-          <AppPageEmptyState
-            title="Sem intervenção dominante"
-            description="Contexto insuficiente para recomendar intervenção segura."
-          />
-        )}
-      </AppNextBestActionBlock>
       <AppSectionBlock
         className={selectedProfile ? "order-4" : undefined}
         title={operationalCopy.immediateAttention}

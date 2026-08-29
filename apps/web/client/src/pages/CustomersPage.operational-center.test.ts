@@ -34,6 +34,11 @@ describe("CustomersPage operational client center", () => {
     expect(source).not.toContain('title="Decisão do sistema"');
     expect(source).not.toContain("Próxima melhor ação");
     expect(source).not.toContain("<NexoPriorityPanel");
+    expect(source).not.toContain('title="Resumo do cliente"');
+    expect(source).not.toContain("<AppStatCard");
+    expect(source).not.toContain("<AppNextBestActionBlock");
+    expect(source).not.toContain("primaryIntervention");
+    expect(source).not.toContain("detectOperationalInterventions");
   });
 
   it("keeps the client pipeline focused on operational flow instead of raw cadastro", () => {
