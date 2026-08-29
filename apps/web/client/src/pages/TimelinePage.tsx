@@ -253,6 +253,27 @@ function eventHumanFallback(event: TimelineEvent) {
   return `${eventHumanTitle(event)} registrado para ${entity} em ${when}`;
 }
 
+export function isSafeHumanText(value: unknown) {
+  const candidate = text(value, "");
+  if (!candidate || candidate.length > 240) return false;
+  if (/[{}\[\]]/.test(candidate)) return false;
+  if (
+    /\b(?:payload|requestId|entityId|customerId|serviceOrderId|appointmentId|chargeId|actorUserId|orgId)\b\s*[:=]/i.test(
+      candidate
+    )
+  )
+    return false;
+  if (
+    /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i.test(
+      candidate
+    )
+  )
+    return false;
+  return (
+    /^-?\d+(?:[.,]\d+)?$/.test(candidate) || !isTechnicalEventText(candidate)
+  );
+}
+
 function eventDisplayTitle(event: TimelineEvent) {
   const actionLabel = eventHumanTitle(event);
   if (actionLabel !== "Evento operacional registrado") return actionLabel;
@@ -260,7 +281,7 @@ function eventDisplayTitle(event: TimelineEvent) {
     event?.summary ?? event?.title ?? event?.description,
     ""
   );
-  if (explicit && !isTechnicalEventText(explicit)) return explicit;
+  if (isSafeHumanText(explicit)) return explicit;
   const whatsappLabel = whatsappExecutionEventLabel(eventAction(event));
   return whatsappLabel === eventAction(event).replace(/_/g, " ")
     ? eventHumanFallback(event)
@@ -279,7 +300,20 @@ function isWhatsAppExecutionEvent(action: string) {
 export function eventEntityLabel(event: TimelineEvent) {
   const metadata = metadataRecord(event);
   const explicitType = text(event?.entityType ?? metadata.entityType, "");
-  if (explicitType) return explicitType;
+  if (explicitType) {
+    const normalized = explicitType.toLowerCase().replace(/[\s-]/g, "_");
+    if (["customer", "client", "cliente"].includes(normalized))
+      return "Cliente";
+    if (
+      ["service_order", "serviceorder", "ordem_de_serviço"].includes(normalized)
+    )
+      return "Ordem de serviço";
+    if (["appointment", "agendamento"].includes(normalized))
+      return "Agendamento";
+    if (["charge", "payment", "cobrança", "pagamento"].includes(normalized))
+      return "Cobrança";
+    return "Entidade vinculada";
+  }
   if (event?.customerId) return "Cliente";
   if (event?.serviceOrderId) return "Ordem de serviço";
   if (event?.appointmentId) return "Agendamento";
@@ -354,14 +388,10 @@ function eventPrimarySubject(event: TimelineEvent) {
       : "Agendamento";
   }
 
-  const entityId = eventEntityId(event);
-  if (entityId !== "—") return `ID ${entityId}`;
-  return "Entidade não informada";
-}
-
-function eventTechnicalIdSummary(event: TimelineEvent) {
-  const id = eventEntityId(event);
-  return id === "—" ? "ID não informado" : `ID: ${id}`;
+  const entityType = eventEntityLabel(event);
+  return entityType === "Entidade não informada"
+    ? entityType
+    : `${entityType} vinculada`;
 }
 
 export function eventModule(event: TimelineEvent): ModuleFilter {
@@ -480,7 +510,7 @@ export function eventSeverity(
 
 function eventReason(event: TimelineEvent) {
   const description = text(event?.description, "");
-  if (description) return description;
+  if (isSafeHumanText(description)) return description;
   const action = eventAction(event);
   if (action === "EXECUTION_BLOCKED")
     return "Ação operacional bloqueada por segurança; revise o módulo de origem antes de qualquer nova tentativa.";
@@ -528,6 +558,8 @@ function eventRecommendedAction(event: TimelineEvent) {
 }
 
 function eventRoute(event: TimelineEvent) {
+  const deepLink = eventDeepLinks(event)[0]?.route;
+  if (deepLink) return deepLink;
   if (event?.customerId) return "/customers";
   if (event?.appointmentId) return "/appointments";
   if (event?.serviceOrderId) return "/service-orders";
@@ -543,8 +575,9 @@ function eventRoute(event: TimelineEvent) {
 }
 
 function eventActorLabel(event: TimelineEvent) {
+  const metadata = metadataRecord(event);
   return text(
-    event?.personName ?? event?.actorName ?? event?.actorUserId,
+    event?.personName ?? event?.actorName ?? metadata.actorName,
     "Ator não informado pela fonte"
   );
 }
@@ -587,42 +620,58 @@ function eventAuditFallbacks(event: TimelineEvent) {
   ].filter(Boolean) as string[];
 }
 
-function eventRealCtas(event: TimelineEvent) {
-  const id = eventEntityId(event);
+export function eventDeepLinks(event: TimelineEvent) {
+  const metadata = metadataRecord(event);
+  const customerId = text(event?.customerId ?? metadata.customerId, "");
+  const serviceOrderId = text(
+    event?.serviceOrderId ?? metadata.serviceOrderId,
+    ""
+  );
+  const appointmentId = text(
+    event?.appointmentId ?? metadata.appointmentId,
+    ""
+  );
+  const chargeId = text(event?.chargeId ?? metadata.chargeId, "");
+  const genericId = eventEntityId(event);
   const type = normalizedEntityType(event);
   const module = eventModule(event);
-  const hasUsableEntity = id !== "—";
   const ctas: Array<{ label: string; route: string; reason: string }> = [];
+  const customerTarget = customerId || (type === "customer" ? genericId : "");
+  const serviceOrderTarget =
+    serviceOrderId || (type === "service_order" ? genericId : "");
+  const appointmentTarget =
+    appointmentId || (type === "appointment" ? genericId : "");
+  const chargeTarget = chargeId || (type === "finance" ? genericId : "");
 
-  if (hasUsableEntity && (type === "customer" || eventCustomerId(event))) {
+  if (customerTarget && customerTarget !== "—") {
     ctas.push({
       label: "Abrir cliente",
-      route: "/customers",
+      route: `/customers?customerId=${encodeURIComponent(customerTarget)}`,
       reason: "entityType/entityId ou customerId utilizável",
     });
   }
-  if (hasUsableEntity && (type === "service_order" || event?.serviceOrderId)) {
+  if (serviceOrderTarget && serviceOrderTarget !== "—") {
     ctas.push({
       label: "Abrir O.S.",
-      route: "/service-orders",
+      route: `/service-orders?serviceOrderId=${encodeURIComponent(serviceOrderTarget)}`,
       reason: "entityType/entityId ou serviceOrderId utilizável",
     });
   }
-  if (hasUsableEntity && (type === "appointment" || event?.appointmentId)) {
+  if (appointmentTarget && appointmentTarget !== "—") {
     ctas.push({
       label: "Abrir agendamento",
-      route: "/appointments",
+      route: `/appointments?appointmentId=${encodeURIComponent(appointmentTarget)}`,
       reason: "entityType/entityId ou appointmentId utilizável",
     });
   }
-  if (hasUsableEntity && (type === "finance" || event?.chargeId)) {
+  if (chargeTarget && chargeTarget !== "—") {
     ctas.push({
       label: "Abrir financeiro",
-      route: "/finances",
+      route: `/finances?chargeId=${encodeURIComponent(chargeTarget)}`,
       reason: "entityType/entityId ou chargeId utilizável",
     });
   }
-  if (hasUsableEntity && (type === "whatsapp" || module === "whatsapp")) {
+  if (genericId !== "—" && (type === "whatsapp" || module === "whatsapp")) {
     ctas.push({
       label: "Abrir WhatsApp",
       route: "/whatsapp",
@@ -632,6 +681,8 @@ function eventRealCtas(event: TimelineEvent) {
 
   return ctas;
 }
+
+const eventRealCtas = eventDeepLinks;
 
 function eventTone(event: TimelineEvent) {
   const action = eventAction(event);
@@ -847,13 +898,18 @@ const METADATA_PRIORITY_FIELDS = [
   "riskLevel",
   "operationalState",
   "result",
-  "reason",
   "messageStatus",
-  "chargeId",
-  "serviceOrderId",
-  "appointmentId",
-  "customerId",
 ];
+
+const METADATA_LABELS: Record<string, string> = {
+  amount: "Valor",
+  previousState: "Estado anterior",
+  nextState: "Novo estado",
+  riskLevel: "Nível de risco",
+  operationalState: "Estado operacional",
+  result: "Resultado",
+  messageStatus: "Status da mensagem",
+};
 
 function formatMetadataValue(value: unknown) {
   if (value === null || value === undefined) return "";
@@ -871,9 +927,9 @@ function formatMetadataValue(value: unknown) {
 export function usefulMetadataPairs(event: TimelineEvent) {
   const metadata = metadataRecord(event);
   const pairs = METADATA_PRIORITY_FIELDS.map(key => ({
-    key,
+    key: METADATA_LABELS[key] ?? key,
     value: formatMetadataValue(metadata[key]),
-  })).filter(pair => pair.value.length > 0 && pair.value.length <= 140);
+  })).filter(pair => isSafeHumanText(pair.value));
 
   return pairs.slice(0, 6);
 }
@@ -978,12 +1034,16 @@ export default function TimelinePage() {
   }, [events]);
 
   const clientOptions = useMemo(() => {
-    const values = Array.from(
-      new Set(events.map(event => eventCustomerId(event)).filter(Boolean))
+    const values = new Map<string, string>();
+    events.forEach(event => {
+      const id = eventCustomerId(event);
+      const name = eventCustomerName(event);
+      if (id && name) values.set(id, name);
+    });
+    return Array.from(values, ([value, label]) => ({ value, label })).slice(
+      0,
+      30
     );
-    return values
-      .slice(0, 30)
-      .map(value => ({ value, label: `Cliente ${value}` }));
   }, [events]);
 
   const responsibleOptions = useMemo(() => {
@@ -1897,9 +1957,7 @@ export default function TimelinePage() {
             </div>
           ) : hasInitialError ? (
             <AppPageErrorState
-              description={
-                timelineQuery.error?.message ?? "Falha ao carregar timeline."
-              }
+              description="A fonte oficial da Timeline está indisponível no momento. Nenhum dado técnico foi exibido."
               actionLabel="Tentar novamente"
               onAction={() => void timelineQuery.refetch()}
             />
@@ -1909,7 +1967,29 @@ export default function TimelinePage() {
               description="Ajuste os filtros para investigar outra janela operacional."
             />
           ) : (
-            <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
+            <div
+              className="max-h-[620px] space-y-3 overflow-y-auto pr-1"
+              aria-live="polite"
+            >
+              {timelineQuery.error ? (
+                <div
+                  role="alert"
+                  className="flex flex-col gap-2 rounded-lg border border-[var(--warning)] bg-[var(--surface-secondary)] p-3 text-sm text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span>
+                    Os eventos já carregados continuam disponíveis, mas o
+                    próximo lote não pôde ser consultado.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void timelineQuery.refetch()}
+                  >
+                    Tentar novamente
+                  </Button>
+                </div>
+              ) : null}
               {groupedEvents.map(([dateLabel, dayEvents]) => (
                 <section key={dateLabel} className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
@@ -1972,9 +2052,22 @@ export default function TimelinePage() {
                                   severity,
                                   module,
                                 })}
+                                role="button"
+                                tabIndex={0}
+                                aria-pressed={isSelected}
+                                aria-label={`Ver detalhes: ${eventDisplayTitle(event)}`}
                                 onClick={() =>
                                   setSelectedEventId(String(event?.id))
                                 }
+                                onKeyDown={keyboardEvent => {
+                                  if (
+                                    keyboardEvent.key === "Enter" ||
+                                    keyboardEvent.key === " "
+                                  ) {
+                                    keyboardEvent.preventDefault();
+                                    setSelectedEventId(String(event?.id));
+                                  }
+                                }}
                               >
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                   <div className="min-w-0 flex-1">
@@ -1989,8 +2082,12 @@ export default function TimelinePage() {
                                     </div>
                                     <div className="mt-2 grid gap-2 text-xs text-[var(--text-secondary)] md:grid-cols-2">
                                       <p>
-                                        <strong>Consequência:</strong>{" "}
-                                        {eventOperationalConsequence(event)}
+                                        <strong>Tipo:</strong>{" "}
+                                        {eventHumanTitle(event)}
+                                      </p>
+                                      <p>
+                                        <strong>Resumo:</strong>{" "}
+                                        {eventReason(event)}
                                       </p>
                                       <p>
                                         <strong>Impactado:</strong>{" "}
@@ -2021,9 +2118,7 @@ export default function TimelinePage() {
                                   <p>
                                     Quando: {formatDateTime(event?.createdAt)}
                                   </p>
-                                  <p>
-                                    Entidade: {eventTechnicalIdSummary(event)}
-                                  </p>
+                                  <p>Entidade: {eventPrimarySubject(event)}</p>
                                 </div>
                                 {usefulMetadataPairs(event).length > 0 ? (
                                   <div className="mt-2 flex flex-wrap gap-1">
@@ -2126,20 +2221,12 @@ export default function TimelinePage() {
                   <li>
                     Módulo: {eventModuleLabel(eventModule(selectedEvent))}
                   </li>
-                  <li>
-                    Cliente:{" "}
-                    {eventCustomerId(selectedEvent)
-                      ? `#${eventCustomerId(selectedEvent)}`
-                      : "Não vinculado"}
-                  </li>
+                  <li>Entidade: {eventPrimarySubject(selectedEvent)}</li>
                 </ul>
                 {usefulMetadataPairs(selectedEvent).length > 0 ? (
                   <div className="mt-3 border-t border-[var(--border-subtle)] pt-3">
                     <p className="text-xs font-semibold text-[var(--text-primary)]">
                       Resumo técnico
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      {eventTechnicalIdSummary(selectedEvent)}
                     </p>
                     <dl className="mt-2 grid gap-1 text-xs text-[var(--text-secondary)]">
                       {usefulMetadataPairs(selectedEvent).map(pair => (
@@ -2330,10 +2417,12 @@ export default function TimelinePage() {
       >
         <AppFiltersBar className="grid grid-cols-1 gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2 md:grid-cols-2 xl:grid-cols-4">
           <input
+            type="search"
+            aria-label="Buscar na Timeline"
             value={searchValue}
             onChange={event => setSearchValue(event.target.value)}
             placeholder="Buscar evento, entidade, responsável ou contexto"
-            className="h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm"
+            className="h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
           />
           <AppSelect
             value={eventTypeFilter}

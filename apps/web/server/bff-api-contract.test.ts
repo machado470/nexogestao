@@ -93,6 +93,45 @@ describe("BFF↔API contract - lote 1", () => {
     );
   });
 
+  it("timeline.listByOrg preserva cursor/filtro e normaliza o envelope oficial", async () => {
+    const event = {
+      id: "event-1",
+      action: "CHARGE_CREATED",
+      createdAt: "2026-08-29T10:00:00.000Z",
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ success: true, data: { ok: true, data: [event] } }),
+          { status: 200 }
+        )
+      );
+    const caller = appRouter.createCaller({
+      req: makeReq(),
+      res: makeRes(),
+      user: { token: "trusted-user-token", validated: true },
+    } as any);
+
+    await expect(
+      caller.nexo.timeline.listByOrg({
+        limit: 12,
+        action: "CHARGE_CREATED",
+        cursor: "2026-08-29T10:00:00.000Z_event-1",
+      })
+    ).resolves.toEqual([event]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/timeline?limit=12&action=CHARGE_CREATED&cursor=2026-08-29T10%3A00%3A00.000Z_event-1"
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer trusted-user-token",
+        }),
+      })
+    );
+  });
+
   it("nexo.settings.get e update usam /organization-settings e preservam payload", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -652,9 +691,12 @@ describe("BFF↔API contract - pagamento manual", () => {
 
   it("finance.charges.cancel usa endpoint de cancelamento sem orgId do client", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ data: { id: "ch-1", status: "CANCELED" } }), {
-        status: 200,
-      })
+      new Response(
+        JSON.stringify({ data: { id: "ch-1", status: "CANCELED" } }),
+        {
+          status: 200,
+        }
+      )
     );
     const caller = appRouter.createCaller({
       req: makeReq(),
@@ -709,18 +751,33 @@ describe("BFF↔API contract - pagamento manual", () => {
   });
 });
 
-describe('finance.operationalQueue contract', () => {
-  it('repassa apenas limit e nunca orgId vindo do client', async () => {
+describe("finance.operationalQueue contract", () => {
+  it("repassa apenas limit e nunca orgId vindo do client", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (url: any, init?: RequestInit) => {
-      calls.push({ url: String(url), init });
-      return new Response(JSON.stringify({ success: true, data: { ok: true, data: { items: [], meta: { limit: 50, total: 0 } } } }), { status: 200, headers: { "content-type": "application/json" } });
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (url: any, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              ok: true,
+              data: { items: [], meta: { limit: 50, total: 0 } },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    );
+    const caller = appRouter.createCaller({
+      req: makeReq(),
+      res: makeRes(),
+      user: { validated: true } as any,
     });
-    const caller = appRouter.createCaller({ req: makeReq(), res: makeRes(), user: { validated: true } as any });
 
     await caller.finance.operationalQueue({ limit: 50 });
 
     expect(calls[0].url).toMatch(/\/finance\/operational-queue\?limit=50$/);
-    expect(calls[0].url).not.toContain('orgId=');
+    expect(calls[0].url).not.toContain("orgId=");
   });
 });

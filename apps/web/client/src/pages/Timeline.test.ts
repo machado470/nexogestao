@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   eventAction,
   eventCustomerId,
+  eventDeepLinks,
   eventEntityId,
   eventEntityLabel,
   eventModule,
   eventSeverity,
   formatDateTime,
   metadataRecord,
+  isSafeHumanText,
   text,
   usefulMetadataPairs,
   type TimelineEvent,
@@ -53,7 +55,7 @@ describe("TimelinePage official operational audit contract", () => {
   });
 
   it("oferece CTAs reais somente quando há entidade utilizável", () => {
-    expect(source).toContain("function eventRealCtas");
+    expect(source).toContain("function eventDeepLinks");
     expect(source).toContain("entityType/entityId");
     expect(source).toContain("Sem CTA de entidade");
     expect(source).toContain("Abrir cliente");
@@ -99,8 +101,30 @@ describe("TimelinePage audit helpers", () => {
     expect(eventSeverity(chargeEvent)).toBe("critical");
     expect(formatDateTime(null)).toBe("Sem data");
     expect(usefulMetadataPairs(chargeEvent)).toEqual([
-      { key: "amount", value: "120" },
-      { key: "reason", value: "provider failed" },
+      { key: "Valor", value: "120" },
     ]);
+  });
+
+  it("gera deep links compatíveis sem renderizar identificadores como texto", () => {
+    expect(eventDeepLinks({ customerId: "customer 1" })[0]?.route).toBe(
+      "/customers?customerId=customer%201"
+    );
+    expect(eventDeepLinks({ serviceOrderId: "os-1" })[0]?.route).toBe(
+      "/service-orders?serviceOrderId=os-1"
+    );
+    expect(eventDeepLinks({ appointmentId: "agenda-1" })[0]?.route).toBe(
+      "/appointments?appointmentId=agenda-1"
+    );
+    expect(eventDeepLinks({ chargeId: "charge-1" })[0]?.route).toBe(
+      "/finances?chargeId=charge-1"
+    );
+  });
+
+  it("bloqueia payload, UUID e chaves técnicas em textos humanos", () => {
+    expect(isSafeHumanText("Pagamento confirmado pelo cliente")).toBe(true);
+    expect(isSafeHumanText('{"payload":{"chargeId":"x"}}')).toBe(false);
+    expect(
+      isSafeHumanText("customerId: 59c664ea-f745-4b50-9c74-0ff44305df35")
+    ).toBe(false);
   });
 });
