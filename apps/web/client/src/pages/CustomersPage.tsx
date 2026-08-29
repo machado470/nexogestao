@@ -2021,6 +2021,14 @@ export default function CustomersPage() {
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => setCreateServiceOrderOpen(true)}
+                  >
+                    <Wrench className="mr-1.5 h-3.5 w-3.5" />
+                    Nova O.S.
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() =>
                       navigate(`/finances?customerId=${activeCustomerId}`)
                     }
