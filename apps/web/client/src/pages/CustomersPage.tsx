@@ -163,6 +163,7 @@ type CustomerFilter =
   | "all"
   | "pending"
   | "open_os"
+  | "overdue_os"
   | "active"
   | "inactive"
   | "no_recent_contact"
@@ -769,6 +770,12 @@ export default function CustomersPage() {
         return false;
       }
       if (activeFilter === "open_os" && !profile.hasOpenServiceOrder) {
+        return false;
+      }
+      if (
+        activeFilter === "overdue_os" &&
+        !profile.serviceOrders.some(isServiceOrderOverdue)
+      ) {
         return false;
       }
       if (activeFilter === "active" && profile.customer.active !== true) {
@@ -1757,6 +1764,7 @@ export default function CustomersPage() {
             { key: "all", label: "Todos" },
             { key: "pending", label: "Com pendência" },
             { key: "open_os", label: "Com O.S. aberta" },
+            { key: "overdue_os", label: "Com O.S. atrasada" },
           ].map(item => (
             <button
               key={item.key}
