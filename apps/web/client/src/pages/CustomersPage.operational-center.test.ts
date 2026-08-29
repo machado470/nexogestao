@@ -118,6 +118,19 @@ describe("CustomersPage operational client center", () => {
     );
   });
 
+  it("shows active status separately from operational health", () => {
+    expect(source).toContain("function getCustomerActiveStatus(active: unknown)");
+    expect(source).toContain('label: "Ativo"');
+    expect(source).toContain('label: "Inativo"');
+    expect(source).toContain('label: "Status não informado"');
+    expect(source).toContain(
+      "{...getCustomerActiveStatus(profile.customer.active)}"
+    );
+    expect(source).toContain(
+      "getCustomerActiveStatus(\n                                  profile.customer.active"
+    );
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");
