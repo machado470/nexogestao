@@ -213,6 +213,23 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain('tone="accent"');
   });
 
+  it("shows the canonical last completed service in the customer hero", () => {
+    const heroStart = source.indexOf("Hero Executivo do Cliente");
+    const decisionStart = source.indexOf("Decisão e próxima ação", heroStart);
+    const heroSource = source.slice(heroStart, decisionStart);
+
+    expect(heroSource).toContain('title="Último serviço"');
+    expect(heroSource).toContain("workspaceLastCompletedServiceOrder");
+    expect(heroSource).toContain(
+      "workspaceLastCompletedServiceOrder.updatedAt ??"
+    );
+    expect(heroSource).toContain(
+      "workspaceLastCompletedServiceOrder.createdAt"
+    );
+    expect(heroSource).toContain('"Sem serviço concluído"');
+    expect(heroSource).toContain('ctaLabel="Ver O.S."');
+  });
+
   it("shows canonical total spent from the customer workspace", () => {
     expect(source).toContain(
       "const workspaceTotalSpentCents = Math.max("

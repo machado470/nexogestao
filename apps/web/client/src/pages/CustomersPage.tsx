@@ -2319,7 +2319,30 @@ export default function CustomersPage() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                  <NexoExecutiveMetric
+                    title="Último serviço"
+                    value={
+                      workspaceLastCompletedServiceOrder
+                        ? formatDateTime(
+                            workspaceLastCompletedServiceOrder.updatedAt ??
+                              workspaceLastCompletedServiceOrder.createdAt
+                          )
+                        : "Sem serviço concluído"
+                    }
+                    context={
+                      workspaceLastCompletedServiceOrder
+                        ? String(
+                            workspaceLastCompletedServiceOrder.title ??
+                              "O.S. concluída"
+                          )
+                        : "Nenhuma O.S. concluída retornada"
+                    }
+                    ctaLabel="Ver O.S."
+                    onClick={() =>
+                      navigate(`/service-orders?customerId=${activeCustomerId}`)
+                    }
+                  />
                   <NexoExecutiveMetric
                     title="Total gasto"
                     value={formatCurrency(workspaceTotalSpentCents)}
