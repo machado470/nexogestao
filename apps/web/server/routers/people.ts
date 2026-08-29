@@ -129,11 +129,13 @@ const peopleOperationalSummaryPersonSchema = z
     currentAvailabilityException: z.unknown().nullable().optional(),
     nextAvailabilityException: z.unknown().nullable().optional(),
     loadStatus: z.string().optional(),
-    operationalStatus: z.string().optional(),
-    priority: z.string().nullable().optional(),
-    interventionReason: z.string().nullable().optional(),
-    recommendedActionLabel: z.string().nullable().optional(),
-    recommendedActionTarget: z.string().nullable().optional(),
+    operationalStatus: z.enum(["NORMAL", "ATENÇÃO", "RISCO", "CRÍTICO"]),
+    priority: z.enum(["P0", "P1", "P2", "P3"]),
+    interventionReason: z.string().nullable(),
+    recommendedActionLabel: z.string().nullable(),
+    recommendedActionTarget: z
+      .enum(["PERSON", "SERVICE_ORDERS", "APPOINTMENTS", "TIMELINE"])
+      .nullable(),
     operationalSummaryText: z.string().nullable().optional(),
     capacitySummaryText: z.string().nullable().optional(),
     riskSummaryText: z.string().nullable().optional(),

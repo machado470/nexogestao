@@ -145,11 +145,11 @@ type OperationalPerson = {
   availabilityStatus: AvailabilityStatus;
   currentAvailabilityException?: AvailabilityException | null;
   nextAvailabilityException?: AvailabilityException | null;
-  operationalStatus?: AppOperationalStatus | null;
-  priority?: AppPriorityLevel | null;
-  interventionReason?: string | null;
-  recommendedActionLabel?: string | null;
-  recommendedActionTarget?: RecommendedActionTarget | null;
+  operationalStatus: AppOperationalStatus;
+  priority: AppPriorityLevel;
+  interventionReason: string | null;
+  recommendedActionLabel: string | null;
+  recommendedActionTarget: RecommendedActionTarget | null;
   operationalSummaryText?: string | null;
   capacitySummaryText?: string | null;
   riskSummaryText?: string | null;
@@ -319,59 +319,12 @@ function personStatusLabel(status: OperationalPerson["status"]) {
   return "Inativo";
 }
 
-function derivePersonOperationalStatus(
-  person: OperationalPerson
-): AppOperationalStatus {
-  if (person.operationalStatus) return person.operationalStatus;
-  if (
-    (person.status === "INACTIVE" || person.status === "SUSPENDED") &&
-    (person.openServiceOrdersCount > 0 || person.todayAppointmentsCount > 0)
-  )
-    return "CRÍTICO";
-  if (
-    person.overdueServiceOrdersCount > 0 ||
-    person.loadStatus === "OVERLOADED" ||
-    person.capacityStatus === "OVER_CAPACITY" ||
-    person.availabilityStatus === "UNAVAILABLE_NOW"
-  )
-    return "RISCO";
-  if (
-    person.loadStatus === "BUSY" ||
-    person.capacityStatus === "AT_CAPACITY" ||
-    person.availabilityStatus === "UNAVAILABLE_SOON" ||
-    person.status === "INVITED"
-  )
-    return "ATENÇÃO";
-  return "NORMAL";
-}
-
-function derivePersonPriority(
-  person: OperationalPerson
-): AppPriorityLevel | null {
-  if (person.priority) return person.priority === "P3" ? null : person.priority;
-  const status = derivePersonOperationalStatus(person);
-  if (status === "CRÍTICO") return "P0";
-  if (
-    person.overdueServiceOrdersCount > 0 ||
-    person.loadStatus === "OVERLOADED"
-  )
-    return "P1";
-  if (status === "RISCO" || status === "ATENÇÃO") return "P2";
-  return null;
-}
-
 function personPriorityLabel(priority: AppPriorityLevel) {
   if (priority === "P0") return "P0 · intervenção";
   if (priority === "P1") return "P1 · redistribuir";
   if (priority === "P2") return "P2 · acompanhar";
   return "P3 · informativo";
 }
-
-type PeopleCommandTarget = {
-  person: OperationalPerson | null;
-  people: OperationalPerson[];
-  warningSummary: AssigneeWarningSummary | null;
-};
 
 type PeopleNextBestAction = {
   title: string;
@@ -398,13 +351,17 @@ const isPersonOverloaded = (person: OperationalPerson) =>
   person.loadStatus === "OVERLOADED" ||
   person.capacityStatus === "OVER_CAPACITY";
 
-const hasNoRecentActivitySignal = (person: OperationalPerson) =>
-  !person.lastActivityAt && hasAssignedItems(person);
-
 function sortByOperationalIntervention(
   people: OperationalPerson[]
 ): OperationalPerson[] {
+  const priorityRank: Record<AppPriorityLevel, number> = {
+    P0: 0,
+    P1: 1,
+    P2: 2,
+    P3: 3,
+  };
   const score = (person: OperationalPerson) => ({
+    priority: priorityRank[person.priority],
     overdue: person.overdueServiceOrdersCount,
     overloaded: isPersonOverloaded(person) ? 1 : 0,
     unavailable: person.availabilityStatus !== "AVAILABLE" ? 1 : 0,
@@ -416,12 +373,13 @@ function sortByOperationalIntervention(
       person.openServiceOrdersCount +
       person.todayAppointmentsCount +
       person.futureAppointmentsCount,
-    healthy: derivePersonOperationalStatus(person) === "NORMAL" ? 1 : 0,
+    healthy: person.operationalStatus === "NORMAL" ? 1 : 0,
   });
   return [...people].sort((a, b) => {
     const scoreA = score(a);
     const scoreB = score(b);
     return (
+      scoreA.priority - scoreB.priority ||
       scoreB.overdue - scoreA.overdue ||
       scoreB.overloaded - scoreA.overloaded ||
       scoreB.unavailable - scoreA.unavailable ||
@@ -434,110 +392,42 @@ function sortByOperationalIntervention(
 }
 
 function pickOperationalPerson(people: OperationalPerson[]) {
-  return sortByOperationalIntervention(people).find(person =>
-    Boolean(derivePersonPriority(person) || hasNoRecentActivitySignal(person))
+  return (
+    sortByOperationalIntervention(people).find(
+      person => person.priority !== "P3"
+    ) ?? null
   );
 }
 
-function buildPeopleNextBestAction(
-  target: PeopleCommandTarget,
+function recommendedActionHandler(
+  target: RecommendedActionTarget,
+  personId: string,
   actions: {
     openPerson: (personId: string) => void;
     openServiceOrders: () => void;
     openAppointments: () => void;
     openTimeline: () => void;
-    openSettings: () => void;
-    openCreatePerson: () => void;
-    focusAttention: () => void;
-    focusOverloaded: () => void;
-    focusAvailability: () => void;
   }
-): PeopleNextBestAction {
-  const ordered = target.person
-    ? [target.person]
-    : sortByOperationalIntervention(target.people);
-  if (target.people.length === 0) {
-    return {
-      title: "Cadastrar responsáveis",
-      entity: "Equipe operacional",
-      reason: "A operação ainda não possui responsáveis ativos.",
-      impact: "Não é possível distribuir O.S., agenda e carga de trabalho.",
-      safetyNote:
-        "O Nexo apenas abre o cadastro; nenhuma pessoa é criada automaticamente.",
-      primaryActionLabel: "Nova pessoa",
-      onPrimaryAction: actions.openCreatePerson,
-      secondaryActionLabel: "Abrir Configurações",
-      onSecondaryAction: actions.openSettings,
-    };
+) {
+  if (target === "PERSON") {
+    return () => actions.openPerson(personId);
   }
-  const overduePerson = ordered.find(
-    person => person.overdueServiceOrdersCount > 0
-  );
-  if (overduePerson) {
-    return {
-      title: "Resolver atrasos atribuídos",
-      entity: overduePerson.name,
-      reason: "Existem O.S. atrasadas com responsável definido.",
-      impact: "A execução parada pode travar cobrança e receita.",
-      safetyNote:
-        "A ação navega para investigação; não altera prazo, status ou responsável automaticamente.",
-      primaryActionLabel: "Ver O.S. atrasadas",
-      onPrimaryAction: actions.openServiceOrders,
-      secondaryActionLabel: "Abrir Timeline",
-      onSecondaryAction: actions.openTimeline,
-    };
+  if (target === "SERVICE_ORDERS") {
+    return actions.openServiceOrders;
   }
-  const overloadedPerson = ordered.find(isPersonOverloaded);
-  if (overloadedPerson) {
-    return {
-      title: "Redistribuir carga",
-      entity: overloadedPerson.name,
-      reason: "Há responsáveis acima da capacidade planejada.",
-      impact: "Aumenta risco de atraso operacional.",
-      safetyNote:
-        "Use a leitura como apoio de decisão; não há automação de reatribuição nesta página.",
-      primaryActionLabel: "Filtrar sobrecarregados",
-      onPrimaryAction: actions.focusOverloaded,
-      secondaryActionLabel: "Ver atribuições",
-      onSecondaryAction: actions.openServiceOrders,
-    };
+  if (target === "APPOINTMENTS") {
+    return actions.openAppointments;
   }
-  const unavailablePerson = ordered.find(
-    person => person.availabilityStatus !== "AVAILABLE"
-  );
-  if (unavailablePerson) {
-    return {
-      title: "Revisar disponibilidade",
-      entity: unavailablePerson.name,
-      reason: "Existem responsáveis indisponíveis agora ou em breve.",
-      impact: "A agenda pode ficar descoberta.",
-      safetyNote:
-        "Ausência ou indisponibilidade é tratada como sinal de revisão, não como bloqueio automático.",
-      primaryActionLabel: "Filtrar disponíveis/indisponíveis",
-      onPrimaryAction: actions.focusAvailability,
-      secondaryActionLabel: "Ver agenda",
-      onSecondaryAction: actions.openAppointments,
-    };
-  }
-  return {
-    title: "Equipe equilibrada",
-    entity: target.person?.name ?? "Equipe operacional",
-    reason: "Nenhum responsável exige intervenção agora.",
-    impact: "Mantenha a distribuição sob acompanhamento.",
-    safetyNote:
-      "Sem pendência crítica, a recomendação é somente acompanhar; nada é executado automaticamente.",
-    primaryActionLabel: "Abrir Timeline",
-    onPrimaryAction: actions.openTimeline,
-  };
+  return actions.openTimeline;
 }
 
-function deriveTeamHealth(header: {
-  totalPeople: number;
-  activePeople: number;
-  overloadedPeople: number;
-  overdueServiceOrders: number;
-  unavailablePeople: number;
-}): { label: string; status: AppOperationalStatus; reading: string } {
+function deriveTeamHealth(
+  people: OperationalPerson[],
+  header: {
+    totalPeople: number;
+    activePeople: number;
+  }
+): { label: string; status: AppOperationalStatus; reading: string } {
   if (header.totalPeople === 0) {
     return {
       label: "Sem responsáveis operacionais",
@@ -546,35 +436,41 @@ function deriveTeamHealth(header: {
         "Cadastre responsáveis para distribuir O.S., agenda e carga de trabalho.",
     };
   }
-  if (header.overdueServiceOrders >= 5 || header.overloadedPeople >= 2) {
+
+  const criticalPeople = people.filter(
+    person => person.operationalStatus === "CRÍTICO"
+  ).length;
+  const riskPeople = people.filter(
+    person => person.operationalStatus === "RISCO"
+  ).length;
+  const attentionPeople = people.filter(
+    person => person.operationalStatus === "ATENÇÃO"
+  ).length;
+
+  if (criticalPeople > 0) {
     return {
-      label: "Equipe crítica",
+      label: "Equipe com intervenção crítica",
       status: "CRÍTICO",
-      reading: `${header.overloadedPeople} responsáveis acima da capacidade e ${header.overdueServiceOrders} O.S. atrasadas podem comprometer a execução.`,
+      reading: `${criticalPeople} responsável(is) possui(em) classificação operacional crítica.`,
     };
   }
-  if (
-    header.overdueServiceOrders > 0 ||
-    header.overloadedPeople > 0 ||
-    header.unavailablePeople > 0
-  ) {
-    const signals = [
-      header.overloadedPeople > 0
-        ? `${header.overloadedPeople} responsável(is) acima da capacidade`
-        : null,
-      header.overdueServiceOrders > 0
-        ? `${header.overdueServiceOrders} O.S. atrasada(s)`
-        : null,
-      header.unavailablePeople > 0
-        ? `${header.unavailablePeople} indisponibilidade(s)`
-        : null,
-    ].filter(Boolean);
+
+  if (riskPeople > 0) {
+    return {
+      label: "Equipe com risco operacional",
+      status: "RISCO",
+      reading: `${riskPeople} responsável(is) possui(em) classificação operacional de risco.`,
+    };
+  }
+
+  if (attentionPeople > 0) {
     return {
       label: "Equipe exige atenção",
       status: "ATENÇÃO",
-      reading: `${signals.join(" e ")} podem comprometer a execução.`,
+      reading: `${attentionPeople} responsável(is) requer(em) acompanhamento operacional.`,
     };
   }
+
   return {
     label: "Operação estável",
     status: "NORMAL",
@@ -670,10 +566,10 @@ function rankingNarrative(person: OperationalPerson) {
 }
 
 function personOperationalStateLabel(person: OperationalPerson) {
-  if (person.status !== "ACTIVE") return "Inativo";
-  if (person.availabilityStatus === "UNAVAILABLE_NOW") return "Indisponível";
-  if (isPersonOverloaded(person)) return "Sobrecarregado";
-  if (derivePersonOperationalStatus(person) !== "NORMAL") return "Atenção";
+  if (person.status !== "ACTIVE") return personStatusLabel(person.status);
+  if (person.operationalStatus === "CRÍTICO") return "Crítico";
+  if (person.operationalStatus === "RISCO") return "Risco";
+  if (person.operationalStatus === "ATENÇÃO") return "Atenção";
   return "Saudável";
 }
 
@@ -828,12 +724,12 @@ export default function PeoplePage() {
       healthyPeople: people.filter(
         person =>
           person.status === "ACTIVE" &&
-          derivePersonOperationalStatus(person) === "NORMAL"
+          person.operationalStatus === "NORMAL"
       ).length,
       attentionPeople: people.filter(
         person =>
           person.status === "ACTIVE" &&
-          derivePersonOperationalStatus(person) === "ATENÇÃO"
+          person.operationalStatus === "ATENÇÃO"
       ).length,
     }),
     [people]
@@ -843,7 +739,7 @@ export default function PeoplePage() {
     return sortByOperationalIntervention(people).filter(person => {
       if (
         peopleFilter === "attention" &&
-        derivePersonOperationalStatus(person) === "NORMAL"
+        person.operationalStatus === "NORMAL"
       )
         return false;
       if (peopleFilter === "overloaded" && person.loadStatus !== "OVERLOADED")
@@ -868,13 +764,11 @@ export default function PeoplePage() {
   const leadPerson = keyPeople[0] ?? null;
   const shouldShowSupportingPeople = people.length > 1;
   const shouldShowPeopleFilters = people.length > 3;
-  const teamHealth = deriveTeamHealth(header);
+  const teamHealth = deriveTeamHealth(people, header);
   const heroNarrative = teamHeroNarrative(people, header);
   const hasOperationalProblem =
     people.length === 0 ||
-    header.overloadedPeople > 0 ||
-    header.overdueServiceOrders > 0 ||
-    header.unavailablePeople > 0;
+    people.some(person => person.operationalStatus !== "NORMAL");
   const hasCompactTeamHealth =
     !selectedPerson &&
     !hasOperationalProblem &&
@@ -882,27 +776,82 @@ export default function PeoplePage() {
       (warningSummary.totals.shown === 0 &&
         warningSummary.totals.confirmed === 0 &&
         (!mostFrequentWarningType || mostFrequentWarningType.shown === 0)));
-  const commandTarget = useMemo(
-    () => ({ person: selectedPerson, people, warningSummary }),
-    [selectedPerson, people, warningSummary]
-  );
-  const nextBestAction = useMemo(
-    () =>
-      buildPeopleNextBestAction(commandTarget, {
-        openPerson: personId => {
-          if (personId) setSelectedPersonId(personId);
-        },
-        openServiceOrders: () => navigate("/service-orders"),
-        openAppointments: () => navigate("/appointments"),
-        openTimeline: () => navigate("/timeline"),
-        openSettings: () => navigate("/settings"),
-        openCreatePerson: () => setCreateOpen(true),
-        focusAttention: () => setPeopleFilter("attention"),
-        focusOverloaded: () => setPeopleFilter("overloaded"),
-        focusAvailability: () => setPeopleFilter("available"),
-      }),
-    [commandTarget, navigate]
-  );
+  const authoritativeActionPerson =
+    selectedPerson ?? pickOperationalPerson(people);
+
+  const nextBestAction = useMemo<PeopleNextBestAction>(() => {
+    if (people.length === 0) {
+      return {
+        title: "Cadastrar responsáveis",
+        entity: "Equipe operacional",
+        reason: "A operação ainda não possui responsáveis ativos.",
+        impact: "Cadastre uma pessoa para que a operação tenha responsável.",
+        safetyNote:
+          "A ação apenas abre o cadastro; nenhuma pessoa é criada automaticamente.",
+        primaryActionLabel: "Nova pessoa",
+        onPrimaryAction: () => setCreateOpen(true),
+        secondaryActionLabel: "Abrir Configurações",
+        onSecondaryAction: () => navigate("/settings"),
+      };
+    }
+
+    const person = authoritativeActionPerson;
+
+    if (
+      !person ||
+      !person.recommendedActionLabel ||
+      !person.recommendedActionTarget
+    ) {
+      return {
+        title: "Equipe equilibrada",
+        entity: person?.name ?? "Equipe operacional",
+        reason:
+          person?.interventionReason ??
+          "Nenhuma intervenção foi recomendada pelo resumo operacional.",
+        impact:
+          person?.operationalSummaryText ??
+          "Mantenha a operação sob acompanhamento.",
+        safetyNote:
+          "Sem recomendação operacional ativa, nenhuma mudança é executada.",
+        primaryActionLabel: "Abrir Timeline",
+        onPrimaryAction: () => navigate("/timeline"),
+      };
+    }
+
+    return {
+      title: person.recommendedActionLabel,
+      entity: person.name,
+      reason:
+        person.interventionReason ??
+        "Recomendação emitida pelo resumo operacional.",
+      impact:
+        person.operationalSummaryText ??
+        person.capacitySummaryText ??
+        "Consulte o contexto operacional antes de agir.",
+      safetyNote:
+        "A ação apenas abre o contexto indicado pelo contrato; nenhuma alteração operacional é executada automaticamente.",
+      primaryActionLabel: person.recommendedActionLabel,
+      onPrimaryAction: recommendedActionHandler(
+        person.recommendedActionTarget,
+        person.personId,
+        {
+          openPerson: personId => setSelectedPersonId(personId),
+          openServiceOrders: () => navigate("/service-orders"),
+          openAppointments: () => navigate("/appointments"),
+          openTimeline: () => navigate("/timeline"),
+        }
+      ),
+      secondaryActionLabel:
+        person.recommendedActionTarget === "TIMELINE"
+          ? undefined
+          : "Abrir Timeline",
+      onSecondaryAction:
+        person.recommendedActionTarget === "TIMELINE"
+          ? undefined
+          : () => navigate("/timeline"),
+    };
+  }, [authoritativeActionPerson, people.length, navigate]);
+
   const refresh = () => void summaryQuery.refetch();
   const submitAvailability = () =>
     selectedPersonId &&
@@ -1120,7 +1069,7 @@ export default function PeoplePage() {
                       </div>
                     </div>
                     <AppOperationalStatusBadge
-                      status={derivePersonOperationalStatus(person)}
+                      status={person.operationalStatus}
                     />
                   </div>
                   <div>
@@ -1414,7 +1363,7 @@ export default function PeoplePage() {
           ) : !summaryQuery.isLoading ? (
             <div className="space-y-3" data-testid="people-workload-list">
               {filteredPeople.map(person => {
-                const operationalStatus = derivePersonOperationalStatus(person);
+                const operationalStatus = person.operationalStatus;
                 return (
                   <OperationalInnerCard
                     key={person.personId}
@@ -1951,8 +1900,10 @@ export default function PeoplePage() {
                         )
                   }
                   label="Saúde da equipe"
-                  tone={header.overloadedPeople > 0 ? "warning" : "success"}
-                  compact={header.overloadedPeople === 0}
+                  tone={
+                    teamHealth.status === "NORMAL" ? "success" : "warning"
+                  }
+                  compact={teamHealth.status === "NORMAL"}
                 />
               </div>
               {header.overloadedPeople === 0 &&
