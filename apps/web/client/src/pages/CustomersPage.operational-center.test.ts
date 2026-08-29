@@ -93,6 +93,18 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("Ver timeline");
   });
 
+  it("shows service-order ownership and delay in the operational wallet", () => {
+    expect(source).toContain("Responsável / atraso");
+    expect(source).toContain("activeServiceOrder");
+    expect(source).toContain("getServiceOrderResponsibleName");
+    expect(source).toContain("formatServiceOrderDelay");
+    expect(source).toContain("assignedToPersonId");
+    expect(source).toContain("Atraso:");
+    expect(source).toContain("Sem responsável");
+    expect(source).toContain("Responsável não identificado");
+    expect(source).toContain("Sem O.S. aberta");
+  });
+
   it("keeps the operational wallet command-centered with real CTAs", () => {
     expect(source).toContain("Carteira operacional");
     expect(source).toContain("Contexto / status");

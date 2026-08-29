@@ -182,6 +182,7 @@ type CustomerProfile = {
   nextActionLabel: string;
   nextActionPath: string;
   lastService?: ServiceOrder;
+  activeServiceOrder?: ServiceOrder;
   nextAppointment?: Appointment;
   contact: string;
   pendingChargeId: string | null;
@@ -292,6 +293,42 @@ function isServiceOrderOverdue(order: ServiceOrder) {
   return Boolean(deadline && deadline.getTime() < Date.now());
 }
 
+function getServiceOrderResponsibleName(
+  order: ServiceOrder | undefined,
+  people: Array<{ id: string; name: string }>
+) {
+  if (!order) return "Sem O.S. aberta";
+
+  const embeddedName = String(order.assignedTo?.name ?? "").trim();
+  if (embeddedName) return embeddedName;
+
+  const assignedToPersonId = String(order.assignedToPersonId ?? "").trim();
+  if (!assignedToPersonId) return "Sem responsável";
+
+  return (
+    people.find(person => person.id === assignedToPersonId)?.name ??
+    "Responsável não identificado"
+  );
+}
+
+function formatServiceOrderDelay(order: ServiceOrder | undefined) {
+  if (!order) return "Sem O.S. aberta";
+
+  const dueDate = toDate(
+    order.dueDate ?? order.deadline ?? order.scheduledFor ?? order.endsAt
+  );
+
+  if (!dueDate) return "Sem prazo";
+  if (!isServiceOrderOverdue(order)) return "No prazo";
+
+  const days = Math.max(
+    1,
+    Math.ceil((Date.now() - dueDate.getTime()) / 86_400_000)
+  );
+
+  return `${days} dia${days === 1 ? "" : "s"} de atraso`;
+}
+
 function isAppointmentUnconfirmed(appointment: Appointment) {
   const status = String(appointment.status ?? "").toUpperCase();
   return ["PENDING", "REQUESTED", "UNCONFIRMED", "TENTATIVE"].includes(status);
@@ -329,6 +366,7 @@ function buildCustomerProfiles(input: {
       | "nextActionLabel"
       | "nextActionPath"
       | "lastService"
+      | "activeServiceOrder"
       | "nextAppointment"
       | "contact"
       | "pendingChargeId"
@@ -421,7 +459,10 @@ function buildCustomerProfiles(input: {
         new Date(String(a.dueDate ?? a.createdAt ?? 0)).getTime() -
         new Date(String(b.dueDate ?? b.createdAt ?? 0)).getTime()
     );
-    const hasOpenServiceOrder = serviceOrders.some(isServiceOrderOpen);
+    const activeServiceOrder =
+      serviceOrders.find(isServiceOrderOverdue) ??
+      serviceOrders.find(isServiceOrderOpen);
+    const hasOpenServiceOrder = Boolean(activeServiceOrder);
     const daysWithoutContact = daysBetween(profile.lastInteractionAt);
     const status = customerStatus({
       overdue: profile.overdue,
@@ -471,6 +512,7 @@ function buildCustomerProfiles(input: {
       nextActionLabel,
       nextActionPath,
       lastService: serviceOrders[0],
+      activeServiceOrder,
       nextAppointment,
       contact: getCustomerContact(profile.customer),
       pendingChargeId,
@@ -1681,6 +1723,21 @@ export default function CustomersPage() {
                     <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">
                       {profile.riskSignal}
                     </p>
+                    {profile.activeServiceOrder ? (
+                      <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                        Responsável:{" "}
+                        {getServiceOrderResponsibleName(
+                          profile.activeServiceOrder,
+                          people
+                        )}{" "}
+                        · Atraso:{" "}
+                        {formatServiceOrderDelay(profile.activeServiceOrder)}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">
+                        Sem O.S. aberta
+                      </p>
+                    )}
                     <div className="mt-3 flex items-center justify-between gap-2">
                       <span className="text-sm font-medium text-[var(--text-primary)]">
                         {formatCurrency(profile.pendingCents)}
@@ -1696,11 +1753,12 @@ export default function CustomersPage() {
                 ))}
               </div>
               <div className="hidden max-h-[560px] overflow-y-auto md:block">
-                <AppDataTable className="min-w-[760px]">
+                <AppDataTable className="min-w-[940px]">
                   <thead>
                     <tr>
                       <th>Cliente</th>
                       <th>Contexto / status</th>
+                      <th>Responsável / atraso</th>
                       <th>Próxima ação</th>
                       <th>Financeiro</th>
                       <th className="text-right">Ações</th>
@@ -1745,6 +1803,28 @@ export default function CustomersPage() {
                             </div>
                             <p className="line-clamp-2">{profile.riskSignal}</p>
                           </div>
+                        </td>
+                        <td>
+                          {profile.activeServiceOrder ? (
+                            <div className="min-w-[170px] space-y-1 text-xs text-[var(--text-secondary)]">
+                              <p className="font-medium text-[var(--text-primary)]">
+                                {getServiceOrderResponsibleName(
+                                  profile.activeServiceOrder,
+                                  people
+                                )}
+                              </p>
+                              <p>
+                                Atraso:{" "}
+                                {formatServiceOrderDelay(
+                                  profile.activeServiceOrder
+                                )}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-[var(--text-muted)]">
+                              Sem O.S. aberta
+                            </span>
+                          )}
                         </td>
                         <td>
                           <div className="min-w-[180px] space-y-1 text-xs text-[var(--text-secondary)]">
