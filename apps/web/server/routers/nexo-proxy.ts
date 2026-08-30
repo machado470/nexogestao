@@ -426,6 +426,82 @@ const whatsappSendInput = z.object({
   serviceOrderId: z.string().optional(),
 });
 
+
+const customerOperationalBreakdownSchema = z
+  .object({
+    code: z.string(),
+    label: z.string(),
+    description: z.string(),
+    points: z.number(),
+    value: z.number(),
+    threshold: z.number().optional(),
+  })
+  .passthrough();
+
+const customerOperationalSummaryItemSchema = z
+  .object({
+    customerId: z.string(),
+    customerName: z.string(),
+    active: z.boolean(),
+    operationalStatus: z.enum([
+      "NORMAL",
+      "ATENÇÃO",
+      "RISCO",
+      "CRÍTICO",
+    ]),
+    priority: z.enum(["P0", "P1", "P2", "P3"]),
+    riskScore: z.number(),
+    riskState: z.enum([
+      "NORMAL",
+      "WARNING",
+      "RESTRICTED",
+      "SUSPENDED",
+    ]),
+    riskSignal: z.string(),
+    interventionReason: z.string().nullable(),
+    recommendedActionLabel: z.string().nullable(),
+    recommendedActionTarget: z
+      .enum([
+        "FINANCES",
+        "SERVICE_ORDERS",
+        "APPOINTMENTS",
+        "WHATSAPP",
+      ])
+      .nullable(),
+    contributors: z.array(z.string()).default([]),
+    breakdown: z
+      .array(customerOperationalBreakdownSchema)
+      .default([]),
+    factors: z.record(z.string(), z.unknown()),
+    explanation: z.array(z.string()).default([]),
+    evaluatedAt: z.string(),
+  })
+  .passthrough();
+
+const customersOperationalSummarySchema = z
+  .object({
+    evaluatedAt: z.string(),
+    portfolio: z
+      .object({
+        operationalStatus: z.enum([
+          "NORMAL",
+          "ATENÇÃO",
+          "RISCO",
+          "CRÍTICO",
+        ]),
+        totalCustomers: z.number(),
+        normalCustomers: z.number(),
+        attentionCustomers: z.number(),
+        riskCustomers: z.number(),
+        criticalCustomers: z.number(),
+      })
+      .passthrough(),
+    customers: z
+      .array(customerOperationalSummaryItemSchema)
+      .default([]),
+  })
+  .passthrough();
+
 export const nexoProxyRouter = router({
   operations: router({
     summary: protectedProcedure.output(operationsSummary).query(({ ctx }) => authedGet(ctx as CtxLike, "/internal/operations/summary")),
@@ -607,6 +683,15 @@ export const nexoProxyRouter = router({
   customers: router({
     list: protectedProcedure.input(anyInput).query(async ({ ctx, input }) => {
       return authedGet(ctx as CtxLike, "/customers", input);
+    }),
+
+    operationalSummary: protectedProcedure.query(async ({ ctx }) => {
+      const raw = await authedGet(
+        ctx as CtxLike,
+        "/customers/operational-summary"
+      );
+
+      return customersOperationalSummarySchema.parse(raw);
     }),
 
     getById: protectedProcedure

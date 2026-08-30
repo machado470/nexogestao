@@ -29,7 +29,6 @@ import {
   NexoOperationalPipeline,
   NexoExecutiveMetric,
   type OperationalFlowStageState,
-  type OperationalStateLevel,
 } from "@/components/app";
 import {
   AppDataTable,
@@ -42,8 +41,6 @@ import {
   AppRowActionsDropdown,
   AppSectionCard,
   AppStatusBadge,
-  type AppOperationalStatus,
-  type AppPriorityLevel,
 } from "@/components/app-system";
 import {
   AppFiltersBar,
@@ -57,17 +54,6 @@ import {
 } from "@/components/internal-page-system";
 import { cn } from "@/lib/utils";
 import { operationalCopy } from "@/lib/operational-semantics";
-import { aggregateOperationalHealth } from "@/lib/operational-health";
-import {
-  compareOperationalPriority,
-  getDominantOperationalAction,
-  getOperationalAttentionReason,
-} from "@/lib/operational-prioritization";
-import {
-  getAttentionSummary,
-  getVisibleAttentionItems,
-  type OperationalAttentionItem,
-} from "@/lib/operational-attention";
 
 function sanitizeCustomerTimelineText(
   value: unknown,
@@ -169,7 +155,6 @@ type CustomerFilter =
   | "overdue_os"
   | "active"
   | "inactive"
-  | "no_recent_contact"
   | "risk";
 
 type CustomerProfile = {
@@ -182,12 +167,7 @@ type CustomerProfile = {
   pending: number;
   pendingCents: number;
   lastInteractionAt: Date | null;
-  daysWithoutContact: number;
   hasOpenServiceOrder: boolean;
-  status: "Em risco" | "Com pendência" | "Saudável";
-  riskSignal: string;
-  nextActionLabel: string;
-  nextActionPath: string;
   lastService?: ServiceOrder;
   activeServiceOrder?: ServiceOrder;
   nextAppointment?: Appointment;
@@ -197,13 +177,13 @@ type CustomerProfile = {
 
 type AttentionItem = {
   key: string;
+  customerId: string;
   title: string;
   context: string;
   status: string;
   actionLabel: string;
-  actionPath: string;
-  customer?: Customer;
-  chargeId?: string | null;
+  priority: "P0" | "P1" | "P2" | "P3";
+  riskScore: number;
 };
 
 type CustomerOperationalEventType =
@@ -213,8 +193,6 @@ type CustomerOperationalEventType =
   | "CUSTOMER_CHARGE_CONTEXT_UPDATED";
 
 const pageSize = 8;
-const customerNewWindowDays = 30;
-const customerFrequentCompletedServicesThreshold = 3;
 const openServiceOrderStatuses = ["OPEN", "ASSIGNED", "IN_PROGRESS"];
 const pendingChargeStatuses = ["OVERDUE", "PENDING"];
 
@@ -274,50 +252,6 @@ function formatDateTime(value: unknown, fallback = "Não informado") {
   return date ? date.toLocaleString("pt-BR") : fallback;
 }
 
-function daysBetween(date: Date | null) {
-  if (!date) return 999;
-  const now = new Date();
-  return Math.max(
-    0,
-    Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-  );
-}
-
-function isFrequentCustomer(profile: Pick<CustomerProfile, "serviceOrders">) {
-  const completedServices = profile.serviceOrders.filter(
-    order => String(order.status ?? "").toUpperCase() === "COMPLETED"
-  ).length;
-
-  return completedServices >= customerFrequentCompletedServicesThreshold;
-}
-
-function isNewCustomer(customer: Customer) {
-  const createdAt = toDate(customer.createdAt);
-  if (!createdAt) return false;
-
-  const ageMs = Date.now() - createdAt.getTime();
-  const windowMs = customerNewWindowDays * 24 * 60 * 60 * 1000;
-
-  return ageMs >= 0 && ageMs <= windowMs;
-}
-
-function customerStatus(input: {
-  overdue: number;
-  pending: number;
-  hasOpenServiceOrder: boolean;
-  daysWithoutContact: number;
-}) {
-  if (input.overdue > 0 || input.daysWithoutContact >= 30) return "Em risco";
-  if (
-    input.pending > 0 ||
-    input.hasOpenServiceOrder ||
-    input.daysWithoutContact >= 15
-  ) {
-    return "Com pendência";
-  }
-  return "Saudável";
-}
-
 function normalizeWorkspace(input: unknown): Workspace {
   const raw = normalizeObjectPayload<any>(input) ?? {};
   return {
@@ -366,11 +300,7 @@ function isServiceOrderOpen(order: ServiceOrder) {
 }
 
 function isServiceOrderOverdue(order: ServiceOrder) {
-  if (!isServiceOrderOpen(order)) return false;
-  const deadline = toDate(
-    order.dueDate ?? order.deadline ?? order.scheduledFor ?? order.endsAt
-  );
-  return Boolean(deadline && deadline.getTime() < Date.now());
+  return order.operationalDecision?.isOverdue === true;
 }
 
 function getServiceOrderResponsibleName(
@@ -394,40 +324,18 @@ function getServiceOrderResponsibleName(
 function formatServiceOrderDelay(order: ServiceOrder | undefined) {
   if (!order) return "Sem O.S. aberta";
 
-  const dueDate = toDate(
-    order.dueDate ?? order.deadline ?? order.scheduledFor ?? order.endsAt
-  );
+  const decision = order.operationalDecision;
 
-  if (!dueDate) return "Sem prazo";
-  if (!isServiceOrderOverdue(order)) return "No prazo";
+  if (!decision) return "Prazo operacional indisponível";
+  if (!decision.isOverdue) return "No prazo";
 
-  const days = Math.max(
-    1,
-    Math.ceil((Date.now() - dueDate.getTime()) / 86_400_000)
-  );
+  const days = Number(decision.overdueDays ?? 0);
+
+  if (!Number.isFinite(days) || days <= 0) {
+    return "Em atraso";
+  }
 
   return `${days} dia${days === 1 ? "" : "s"} de atraso`;
-}
-
-function isAppointmentUnconfirmed(appointment: Appointment) {
-  const status = String(appointment.status ?? "").toUpperCase();
-  return ["PENDING", "REQUESTED", "UNCONFIRMED", "TENTATIVE"].includes(status);
-}
-
-function resolveRiskSignal(
-  profile: Pick<
-    CustomerProfile,
-    "overdue" | "pending" | "hasOpenServiceOrder" | "daysWithoutContact"
-  >
-) {
-  if (profile.overdue > 0) return `${profile.overdue} cobrança(s) vencida(s)`;
-  if (profile.daysWithoutContact >= 30)
-    return `Sem contato há ${profile.daysWithoutContact} dias`;
-  if (profile.hasOpenServiceOrder) return "O.S. aberta exige acompanhamento";
-  if (profile.pending > 0) return `${profile.pending} cobrança(s) pendente(s)`;
-  if (profile.daysWithoutContact >= 15)
-    return `Follow-up pendente há ${profile.daysWithoutContact} dias`;
-  return "Sem bloqueio operacional detectado";
 }
 
 function buildCustomerProfiles(input: {
@@ -440,11 +348,6 @@ function buildCustomerProfiles(input: {
     string,
     Omit<
       CustomerProfile,
-      | "daysWithoutContact"
-      | "status"
-      | "riskSignal"
-      | "nextActionLabel"
-      | "nextActionPath"
       | "lastService"
       | "activeServiceOrder"
       | "nextAppointment"
@@ -546,54 +449,19 @@ function buildCustomerProfiles(input: {
       order => String(order.status ?? "").toUpperCase() === "COMPLETED"
     );
     const hasOpenServiceOrder = Boolean(activeServiceOrder);
-    const daysWithoutContact = daysBetween(profile.lastInteractionAt);
-    const status = customerStatus({
-      overdue: profile.overdue,
-      pending: profile.pending,
-      hasOpenServiceOrder,
-      daysWithoutContact,
-    });
     const nextAppointment = appointments.find(item => {
       const startsAt = toDate(item.startsAt);
       return startsAt && startsAt.getTime() >= Date.now();
     });
     const pendingChargeId =
       String(charges.find(isChargePending)?.id ?? "").trim() || null;
-    const nextActionLabel =
-      profile.overdue > 0
-        ? "Cobrar agora"
-        : hasOpenServiceOrder
-          ? "Acompanhar O.S."
-          : nextAppointment
-            ? "Confirmar agenda"
-            : daysWithoutContact >= 15
-              ? "Retomar contato"
-              : "Criar próxima ação";
-    const nextActionPath =
-      profile.overdue > 0
-        ? `/finances?customerId=${profile.customerId}`
-        : hasOpenServiceOrder
-          ? `/service-orders?customerId=${profile.customerId}`
-          : nextAppointment
-            ? `/appointments?customerId=${profile.customerId}`
-            : `/whatsapp?customerId=${profile.customerId}`;
 
     return {
       ...profile,
       appointments,
       serviceOrders,
       charges,
-      daysWithoutContact,
       hasOpenServiceOrder,
-      status,
-      riskSignal: resolveRiskSignal({
-        overdue: profile.overdue,
-        pending: profile.pending,
-        hasOpenServiceOrder,
-        daysWithoutContact,
-      }),
-      nextActionLabel,
-      nextActionPath,
       lastService,
       activeServiceOrder,
       nextAppointment,
@@ -601,41 +469,6 @@ function buildCustomerProfiles(input: {
       pendingChargeId,
     } satisfies CustomerProfile;
   });
-}
-
-function getCustomerOperationalStatus(
-  profile: CustomerProfile
-): AppOperationalStatus {
-  if (profile.overdue > 0 || profile.daysWithoutContact >= 30) return "RISCO";
-  if (
-    profile.pending > 0 ||
-    profile.hasOpenServiceOrder ||
-    profile.daysWithoutContact >= 15
-  )
-    return "ATENÇÃO";
-  return "NORMAL";
-}
-
-function getCustomersOperationalStatus(
-  profiles: CustomerProfile[]
-): AppOperationalStatus {
-  const risk = profiles.filter(
-    profile => getCustomerOperationalStatus(profile) === "RISCO"
-  ).length;
-  const attention = profiles.filter(
-    profile => getCustomerOperationalStatus(profile) === "ATENÇÃO"
-  ).length;
-  if (risk >= 5) return "CRÍTICO";
-  if (risk > 0) return "RISCO";
-  if (attention > 0) return "ATENÇÃO";
-  return "NORMAL";
-}
-
-function getCustomerPriority(profile: CustomerProfile): AppPriorityLevel {
-  if (profile.overdue > 0 || profile.daysWithoutContact >= 30) return "P0";
-  if (profile.hasOpenServiceOrder || profile.pending > 0) return "P1";
-  if (profile.nextAppointment || profile.daysWithoutContact >= 15) return "P2";
-  return "P3";
 }
 
 export default function CustomersPage() {
@@ -686,6 +519,11 @@ export default function CustomersPage() {
     { page: 1, limit: 300 },
     { enabled: isAuthenticated, retry: false }
   );
+  const customersOperationalSummaryQuery =
+    trpc.nexo.customers.operationalSummary.useQuery(undefined, {
+      enabled: isAuthenticated,
+      retry: false,
+    });
   const appointmentsQuery = trpc.nexo.appointments.list.useQuery(
     { page: 1, limit: 500 },
     { enabled: isAuthenticated, retry: false }
@@ -732,9 +570,40 @@ export default function CustomersPage() {
       }),
     [appointments, charges, customers, serviceOrders]
   );
+
+  const customersOperationalSummary =
+    customersOperationalSummaryQuery.data ?? null;
+
+  const operationalSummaryByCustomerId = useMemo(
+    () =>
+      new Map(
+        (customersOperationalSummary?.customers ?? []).map(summary => [
+          summary.customerId,
+          summary,
+        ])
+      ),
+    [customersOperationalSummary]
+  );
+
+  const operationalProfiles = useMemo(
+    () =>
+      profiles.map(profile => ({
+        ...profile,
+        operationalSummary:
+          operationalSummaryByCustomerId.get(profile.customerId) ?? null,
+      })),
+    [operationalSummaryByCustomerId, profiles]
+  );
+
   const profileById = useMemo(
-    () => new Map(profiles.map(profile => [profile.customerId, profile])),
-    [profiles]
+    () =>
+      new Map(
+        operationalProfiles.map(profile => [
+          profile.customerId,
+          profile,
+        ])
+      ),
+    [operationalProfiles]
   );
 
   const workspaceQuery = trpc.nexo.customers.workspace.useQuery(
@@ -757,7 +626,7 @@ export default function CustomersPage() {
     );
     const periodEndTimestamp = parseDateFilterBoundary(periodEndValue, "end");
 
-    return profiles.filter(profile => {
+    return operationalProfiles.filter(profile => {
       if (
         activeFilter === "pending" &&
         !(profile.pending > 0 || profile.overdue > 0)
@@ -780,12 +649,11 @@ export default function CustomersPage() {
         return false;
       }
       if (
-        activeFilter === "no_recent_contact" &&
-        profile.daysWithoutContact < 15
+        activeFilter === "risk" &&
+        !["RISCO", "CRÍTICO"].includes(
+          profile.operationalSummary?.operationalStatus ?? ""
+        )
       ) {
-        return false;
-      }
-      if (activeFilter === "risk" && profile.status !== "Em risco") {
         return false;
       }
       if (minBalanceCents !== null && profile.pendingCents < minBalanceCents) {
@@ -828,8 +696,8 @@ export default function CustomersPage() {
     maxBalanceValue,
     minBalanceValue,
     periodEndValue,
+    operationalProfiles,
     periodStartValue,
-    profiles,
     searchTerm,
   ]);
 
@@ -858,146 +726,104 @@ export default function CustomersPage() {
     return filteredProfiles.slice(start, start + pageSize);
   }, [currentPage, filteredProfiles]);
 
-  const rawAttentionItems = useMemo<OperationalAttentionItem[]>(() => {
-    const items: OperationalAttentionItem[] = [];
-    for (const profile of profiles) {
-      if (profile.overdue > 0) {
-        items.push({
-          severity: "WARNING",
-          domain: "finances",
-          type: "overdue_charge",
-          dueDate: profile.charges.find(
-            charge => String(charge.status ?? "").toUpperCase() === "OVERDUE"
-          )?.dueDate,
-          amountCents: profile.pendingCents,
-          key: `${profile.customerId}-overdue`,
-          title: String(profile.customer.name ?? "Cliente sem nome"),
-          context: `${formatCurrency(profile.pendingCents)} em cobrança vencida ou pendente.`,
-          status: "Urgente",
-          actionLabel: "Cobrar",
-          actionPath: `/finances?customerId=${profile.customerId}`,
-          customer: profile.customer,
-          chargeId: profile.pendingChargeId,
-        });
-        continue;
-      }
-      if (profile.hasOpenServiceOrder) {
-        items.push({
-          severity: "ATTENTION",
-          domain: "service_orders",
-          type: "overdue_service_order",
-          isBlocked: true,
-          key: `${profile.customerId}-open-os`,
-          title: String(profile.customer.name ?? "Cliente sem nome"),
-          context: profile.activeServiceOrder
-            ? `O.S. ${String(profile.activeServiceOrder.title ?? profile.activeServiceOrder.id ?? "aberta")} em ${presentationStatusLabel(profile.activeServiceOrder.status, "em andamento")}.`
-            : "O.S. aberta exige acompanhamento.",
-          status: "Atenção",
-          actionLabel: "Ver O.S.",
-          actionPath: `/service-orders?customerId=${profile.customerId}`,
-        });
-        continue;
-      }
-      if (profile.daysWithoutContact >= 15) {
-        items.push({
-          severity: profile.daysWithoutContact >= 30 ? "CRITICAL" : "ATTENTION",
-          domain: "customers",
-          type: "no_recent_contact",
-          customerNoResponse: true,
-          key: `${profile.customerId}-silent`,
-          title: String(profile.customer.name ?? "Cliente sem nome"),
-          context: `Sem interação registrada há ${profile.daysWithoutContact} dias.`,
-          status: profile.daysWithoutContact >= 30 ? "Em risco" : "Monitorar",
-          actionLabel: "Retomar contato",
-          actionPath: `/whatsapp?customerId=${profile.customerId}`,
-          customer: profile.customer,
-        });
-      }
-    }
-    return [...items]
-      .sort((a, b) =>
-        compareOperationalPriority(
-          {
-            severity: a.severity,
-            dueDate: a.dueDate,
-            amountCents: a.amountCents,
-            isBlocked: a.isBlocked,
-            customerNoResponse: a.customerNoResponse,
-          },
-          {
-            severity: b.severity,
-            dueDate: b.dueDate,
-            amountCents: b.amountCents,
-            isBlocked: b.isBlocked,
-            customerNoResponse: b.customerNoResponse,
+  const authoritativeAttentionItems = useMemo<AttentionItem[]>(
+    () =>
+      operationalProfiles
+        .flatMap(profile => {
+          const summary = profile.operationalSummary;
+
+          if (
+            !summary ||
+            summary.operationalStatus === "NORMAL"
+          ) {
+            return [];
           }
-        )
-      )
-      .map(
-        item =>
-          ({
-            ...item,
-            context: `${String(item.context ?? "")} · ${getOperationalAttentionReason({ severity: item.severity, dueDate: item.dueDate, amountCents: item.amountCents, isBlocked: item.isBlocked, customerNoResponse: item.customerNoResponse })}`,
-          }) as AttentionItem
-      );
-  }, [profiles]);
 
-  const attentionItems = useMemo<AttentionItem[]>(
-    () => getVisibleAttentionItems(rawAttentionItems, 4) as AttentionItem[],
-    [rawAttentionItems]
+          return [
+            {
+              key: profile.customerId,
+              customerId: profile.customerId,
+              title: String(
+                profile.customer.name ?? "Cliente sem nome"
+              ),
+              context:
+                summary.interventionReason ??
+                summary.riskSignal,
+              status: `${summary.operationalStatus} · ${summary.priority}`,
+              actionLabel:
+                summary.recommendedActionLabel ??
+                "Abrir cliente",
+              priority: summary.priority,
+              riskScore: summary.riskScore,
+            },
+          ];
+        })
+        .sort((a, b) => {
+          const byPriority = a.priority.localeCompare(b.priority);
+          if (byPriority !== 0) return byPriority;
+          return b.riskScore - a.riskScore;
+        }),
+    [operationalProfiles]
   );
 
-  const attentionSummary = useMemo(
-    () => getAttentionSummary(rawAttentionItems),
-    [rawAttentionItems]
+  const attentionItems = useMemo(
+    () => authoritativeAttentionItems.slice(0, 4),
+    [authoritativeAttentionItems]
   );
+
+  const attentionSummary = useMemo(() => {
+    const hidden = Math.max(
+      0,
+      authoritativeAttentionItems.length - attentionItems.length
+    );
+
+    return {
+      hidden,
+      hiddenMessage:
+        hidden > 0
+          ? `${hidden} outra(s) atenção(ões) oficial(is) fora da visão imediata.`
+          : "",
+    };
+  }, [attentionItems.length, authoritativeAttentionItems.length]);
 
   const selectedProfile = activeCustomerId
     ? (profileById.get(String(activeCustomerId)) ?? null)
     : null;
 
-  const selectedDominantAction = useMemo(() => {
-    if (!selectedProfile) return null;
-    const candidates = [
-      ...(selectedProfile.overdue > 0
-        ? [
-            {
-              severity: "WARNING",
-              dueDate: selectedProfile.charges.find(
-                c => String(c.status ?? "").toUpperCase() === "OVERDUE"
-              )?.dueDate,
-              amountCents: selectedProfile.pendingCents,
-            },
-          ]
-        : []),
-      ...(selectedProfile.nextAppointment
-        ? [
-            {
-              severity: "ATTENTION",
-              scheduledAt:
-                selectedProfile.nextAppointment.startsAt ??
-                selectedProfile.nextAppointment.scheduledAt,
-            },
-          ]
-        : []),
-      ...(selectedProfile.hasOpenServiceOrder
-        ? [{ severity: "ATTENTION", isBlocked: true }]
-        : []),
-      ...(selectedProfile.daysWithoutContact >= 15
-        ? [
-            {
-              severity:
-                selectedProfile.daysWithoutContact >= 30
-                  ? "CRITICAL"
-                  : "ATTENTION",
-              customerNoResponse: true,
-            },
-          ]
-        : []),
-    ];
-    return getDominantOperationalAction(candidates);
-  }, [selectedProfile]);
   const selectedCustomer = selectedProfile?.customer ?? null;
+
+  const runAuthoritativeCustomerAction = (
+    profile: (typeof operationalProfiles)[number]
+  ) => {
+    const summary = profile.operationalSummary;
+    const target = summary?.recommendedActionTarget;
+
+    switch (target) {
+      case "FINANCES":
+        navigate(`/finances?customerId=${profile.customerId}`);
+        return;
+      case "SERVICE_ORDERS":
+        navigate(`/service-orders?customerId=${profile.customerId}`);
+        return;
+      case "APPOINTMENTS":
+        navigate(`/appointments?customerId=${profile.customerId}`);
+        return;
+      case "WHATSAPP":
+        openCustomerWhatsApp(
+          profile.customer,
+          profile.pendingChargeId
+        );
+        return;
+      default:
+        setActiveCustomerId(profile.customerId);
+    }
+  };
+
+  const getAuthoritativeCustomerActionLabel = (
+    profile: (typeof operationalProfiles)[number]
+  ) =>
+    profile.operationalSummary?.recommendedActionLabel ??
+    "Abrir cliente";
   const people = useMemo(
     () =>
       normalizeArrayPayload<any>(peopleQuery.data).map(person => ({
@@ -1018,24 +844,6 @@ export default function CustomersPage() {
     workspace.serviceOrders ?? selectedProfile?.serviceOrders ?? [];
   const workspaceAppointments =
     workspace.appointments ?? selectedProfile?.appointments ?? [];
-  const customerOperationalHealth = useMemo(
-    () =>
-      aggregateOperationalHealth({
-        customers: selectedCustomer ? [selectedCustomer] : [],
-        appointments: workspaceAppointments,
-        serviceOrders: workspaceServiceOrders,
-        charges: workspaceCharges,
-        timelineEvents: workspace.timeline ?? [],
-      }),
-    [
-      selectedCustomer,
-      workspaceAppointments,
-      workspaceServiceOrders,
-      workspaceCharges,
-      workspace.timeline,
-    ]
-  );
-
   const workspacePendingCents = workspaceCharges.reduce((total, charge) => {
     if (!isChargePending(charge)) return total;
     return total + Number(charge.amountCents ?? charge.amount ?? 0);
@@ -1093,9 +901,6 @@ export default function CustomersPage() {
   const workspaceOverdueServiceOrders = workspaceServiceOrders.filter(
     isServiceOrderOverdue
   );
-  const workspaceUnconfirmedAppointments = workspaceAppointments.filter(
-    isAppointmentUnconfirmed
-  );
   const selectedCustomerName = String(selectedCustomer?.name ?? "Cliente");
   const customerOfficialTimelineEvents = (workspace.timeline ?? [])
     .slice(0, 5)
@@ -1112,233 +917,22 @@ export default function CustomersPage() {
       summary: humanizeCustomerTimelineEvent(event).summary,
     }));
 
-  const customerOperationalState = (() => {
-    const multiplePendingSignals =
-      workspaceOverdueCharges.length +
-      workspacePendingCharges.length +
-      workspaceOverdueServiceOrders.length +
-      workspaceOpenServiceOrders.length +
-      (selectedProfile && selectedProfile.daysWithoutContact >= 30 ? 1 : 0);
+  const selectedOperationalSummary =
+    selectedProfile?.operationalSummary ?? null;
 
-    if (workspaceOverdueCharges.length > 0) {
-      return {
-        level: "RESTRICTED" as OperationalStateLevel,
-        reason: `${workspaceOverdueCharges.length} cobrança(s) vencida(s) somando ${formatCurrency(workspacePendingCents || selectedProfile?.pendingCents)}.`,
-        impact:
-          "Pode travar caixa, priorização de atendimento e evolução segura para novas etapas até a cobrança ser tratada.",
-        detailsLabel: "Abrir financeiro",
-        onDetails: () => navigate(`/finances?customerId=${activeCustomerId}`),
-      };
-    }
+  const selectedRecommendedActionLabel =
+    selectedOperationalSummary?.recommendedActionLabel ??
+    "Ação recomendada indisponível";
 
-    if (workspaceOverdueServiceOrders.length > 0) {
-      return {
-        level: "RESTRICTED" as OperationalStateLevel,
-        reason: `${workspaceOverdueServiceOrders.length} O.S. aberta(s) com prazo vencido nos dados disponíveis.`,
-        impact:
-          "A execução pode estar atrasando entrega, cobrança e percepção de suporte do cliente.",
-        detailsLabel: "Abrir O.S.",
-        onDetails: () =>
-          navigate(`/service-orders?customerId=${activeCustomerId}`),
-      };
-    }
+  const selectedInterventionReason =
+    selectedOperationalSummary?.interventionReason ??
+    selectedOperationalSummary?.riskSignal ??
+    "Justificativa operacional indisponível";
 
-    if (multiplePendingSignals >= 2) {
-      return {
-        level: "RESTRICTED" as OperationalStateLevel,
-        reason: `${multiplePendingSignals} sinais operacionais pedem atenção no dossiê.`,
-        impact:
-          "Há múltiplas pendências competindo entre atendimento, execução e financeiro; priorize a próxima ação antes de avançar o fluxo.",
-        detailsLabel: "Ver risco",
-        onDetails: () =>
-          navigate(
-            `/governance?customerId=${activeCustomerId}&source=customers`
-          ),
-      };
-    }
-
-    if (workspacePendingCharges.length > 0) {
-      return {
-        level: "WARNING" as OperationalStateLevel,
-        reason: `${workspacePendingCharges.length} cobrança(s) pendente(s), totalizando ${formatCurrency(workspacePendingCents || selectedProfile?.pendingCents)}.`,
-        impact:
-          "Financeiro ainda não bloqueia o cliente, mas precisa de acompanhamento para evitar vencimento e retrabalho.",
-        detailsLabel: "Abrir cobranças",
-        onDetails: () => navigate(`/finances?customerId=${activeCustomerId}`),
-      };
-    }
-
-    if (workspaceOpenServiceOrders.length > 0) {
-      return {
-        level: "WARNING" as OperationalStateLevel,
-        reason: `${workspaceOpenServiceOrders.length} O.S. aberta(s) aguardando conclusão.`,
-        impact:
-          "A execução segue ativa e deve ser acompanhada para não atrasar cobrança, pagamento ou satisfação do cliente.",
-        detailsLabel: "Acompanhar O.S.",
-        onDetails: () =>
-          navigate(`/service-orders?customerId=${activeCustomerId}`),
-      };
-    }
-
-    if (workspaceUnconfirmedAppointments.length > 0) {
-      return {
-        level: "WARNING" as OperationalStateLevel,
-        reason: `${workspaceUnconfirmedAppointments.length} agendamento(s) sem confirmação explícita.`,
-        impact:
-          "Confirmação pendente pode gerar deslocamento improdutivo, remarcação ou atraso de O.S.",
-        detailsLabel: "Ver agenda",
-        onDetails: () =>
-          navigate(`/appointments?customerId=${activeCustomerId}`),
-      };
-    }
-
-    if (selectedProfile && selectedProfile.daysWithoutContact >= 15) {
-      return {
-        level: "WARNING" as OperationalStateLevel,
-        reason: `Sem movimentação recente há ${selectedProfile.daysWithoutContact} dias.`,
-        impact:
-          "Relacionamento sem registro recente pode perder contexto, oportunidade de agendamento ou cobrança preventiva.",
-        detailsLabel: "Retomar contato",
-        onDetails: () => openCustomerWhatsApp(selectedCustomer ?? {}, null),
-      };
-    }
-
-    return {
-      level: "NORMAL" as OperationalStateLevel,
-      reason:
-        "Sem cobrança vencida, O.S. atrasada ou pendência relevante nos dados disponíveis.",
-      impact:
-        "Cliente pode seguir para revisão histórica, novo agendamento ou acompanhamento preventivo sem bloqueio operacional detectado.",
-      detailsLabel: "Revisar histórico",
-      onDetails: () =>
-        timelineAnchorRef.current?.scrollIntoView({ behavior: "smooth" }),
-    };
-  })();
-
-  const customerNextBestAction = (() => {
-    const entity = selectedCustomerName;
-    const fallbackNote =
-      "Recomendação calculada localmente com os dados já carregados na página; nenhuma ação é executada automaticamente.";
-
-    if (workspaceOverdueCharges.length > 0) {
-      return {
-        title: "Cobrar cliente",
-        entity,
-        reason: `${workspaceOverdueCharges.length} cobrança(s) vencida(s) aparecem no financeiro do cliente.`,
-        impact:
-          "Reduz risco de caixa travado e atualiza o contexto antes de novos atendimentos.",
-        safetyNote: fallbackNote,
-        primaryActionLabel: "Abrir cobrança no WhatsApp",
-        onPrimaryAction: () =>
-          openCustomerWhatsApp(
-            selectedCustomer ?? {},
-            String(
-              workspaceOverdueCharges[0]?.id ??
-                selectedProfile?.pendingChargeId ??
-                ""
-            ) || null
-          ),
-        secondaryActionLabel: "Ver financeiro",
-        onSecondaryAction: () =>
-          navigate(`/finances?customerId=${activeCustomerId}`),
-      };
-    }
-
-    if (workspaceOverdueServiceOrders.length > 0 || workspaceOpenServiceOrder) {
-      return {
-        title:
-          workspaceOverdueServiceOrders.length > 0
-            ? "Revisar O.S. atrasada"
-            : "Acompanhar O.S. aberta",
-        entity,
-        reason:
-          workspaceOverdueServiceOrders.length > 0
-            ? "Existe O.S. aberta com prazo vencido nos dados disponíveis."
-            : "Existe O.S. aberta ou em andamento para este cliente.",
-        impact:
-          "Evita que execução pendente bloqueie cobrança, pagamento e atualização da timeline oficial.",
-        safetyNote: fallbackNote,
-        primaryActionLabel: "Abrir ordem de serviço",
-        onPrimaryAction: () =>
-          navigate(`/service-orders?customerId=${activeCustomerId}`),
-        secondaryActionLabel: "Criar nova O.S.",
-        onSecondaryAction: () => setCreateServiceOrderOpen(true),
-      };
-    }
-
-    if (
-      workspaceUnconfirmedAppointments.length > 0 ||
-      workspaceNextAppointment
-    ) {
-      return {
-        title: "Confirmar agendamento",
-        entity,
-        reason:
-          workspaceUnconfirmedAppointments.length > 0
-            ? "Há agendamento sem confirmação explícita."
-            : "Existe agendamento futuro que merece confirmação preventiva.",
-        impact:
-          "Diminui remarcações e prepara a etapa de O.S. com contexto claro.",
-        safetyNote: fallbackNote,
-        primaryActionLabel: "Abrir agenda",
-        onPrimaryAction: () =>
-          navigate(`/appointments?customerId=${activeCustomerId}`),
-        secondaryActionLabel: String(selectedCustomer?.phone ?? "").trim()
-          ? "Enviar mensagem"
-          : undefined,
-        onSecondaryAction: String(selectedCustomer?.phone ?? "").trim()
-          ? () => openCustomerWhatsApp(selectedCustomer ?? {}, null)
-          : undefined,
-      };
-    }
-
-    if (selectedProfile && selectedProfile.daysWithoutContact >= 15) {
-      return {
-        title: "Enviar mensagem",
-        entity,
-        reason: `Cliente sem movimentação registrada há ${selectedProfile.daysWithoutContact} dias.`,
-        impact:
-          "Recupera contexto de relacionamento antes de criar novas atividades ou cobranças.",
-        safetyNote: fallbackNote,
-        primaryActionLabel: "Abrir WhatsApp",
-        onPrimaryAction: () =>
-          openCustomerWhatsApp(selectedCustomer ?? {}, null),
-        secondaryActionLabel: "Criar novo agendamento",
-        onSecondaryAction: () => setCreateAppointmentOpen(true),
-      };
-    }
-
-    if (!workspaceNextAppointment && workspaceAppointments.length === 0) {
-      return {
-        title: "Criar novo agendamento",
-        entity,
-        reason: "Não há agendamento futuro retornado para este cliente.",
-        impact:
-          "Mantém o relacionamento ativo e cria próximo marco operacional oficial.",
-        safetyNote: fallbackNote,
-        primaryActionLabel: "Agendar cliente",
-        onPrimaryAction: () => setCreateAppointmentOpen(true),
-        secondaryActionLabel: "Revisar histórico",
-        onSecondaryAction: () =>
-          timelineAnchorRef.current?.scrollIntoView({ behavior: "smooth" }),
-      };
-    }
-
-    return {
-      title: "Revisar histórico do cliente",
-      entity,
-      reason: "Dossiê sem pendência relevante nos dados carregados.",
-      impact:
-        "Mantém a leitura saudável apoiada na prova operacional antes de qualquer intervenção manual.",
-      safetyNote: fallbackNote,
-      primaryActionLabel: "Ver últimos eventos",
-      onPrimaryAction: () =>
-        timelineAnchorRef.current?.scrollIntoView({ behavior: "smooth" }),
-      secondaryActionLabel: "Ver financeiro",
-      onSecondaryAction: () =>
-        navigate(`/finances?customerId=${activeCustomerId}`),
-    };
-  })();
+  const runSelectedRecommendedAction = () => {
+    if (!selectedProfile || !selectedOperationalSummary) return;
+    runAuthoritativeCustomerAction(selectedProfile);
+  };
 
   const customerOperationalFlowStages = [
     {
@@ -1346,7 +940,10 @@ export default function CustomersPage() {
       label: "Cliente",
       state: selectedCustomer ? "done" : "idle",
       summary: selectedCustomer
-        ? `${selectedCustomerName} · ${selectedProfile?.status ?? "sem sinal retornado"}`
+        ? `${selectedCustomerName} · ${
+            selectedProfile?.operationalSummary?.operationalStatus ??
+            "estado indisponível"
+          }`
         : "Selecione um cliente.",
       countOrValue: selectedCustomer ? "1" : "0",
       hrefLabel: "Editar cadastro",
@@ -1357,18 +954,13 @@ export default function CustomersPage() {
     {
       id: "appointment",
       label: "Agendamento",
-      state:
-        workspaceUnconfirmedAppointments.length > 0
-          ? "warning"
-          : workspaceNextAppointment
-            ? "active"
-            : "idle",
-      summary:
-        workspaceUnconfirmedAppointments.length > 0
-          ? "Há agenda sem confirmação."
-          : workspaceNextAppointment
-            ? `Próximo em ${formatDateTime(workspaceNextAppointment.startsAt ?? workspaceNextAppointment.scheduledAt)}.`
-            : "Sem agenda futura retornada.",
+      state: workspaceNextAppointment ? "active" : "idle",
+      summary: workspaceNextAppointment
+        ? `Próximo em ${formatDateTime(
+            workspaceNextAppointment.startsAt ??
+              workspaceNextAppointment.scheduledAt
+          )}.`
+        : "Sem agenda futura retornada.",
       countOrValue: String(workspaceAppointments.length),
       hrefLabel: "Abrir agenda",
       onClick: () => navigate(`/appointments?customerId=${activeCustomerId}`),
@@ -1377,16 +969,14 @@ export default function CustomersPage() {
       id: "service-order",
       label: "O.S.",
       state:
-        workspaceOverdueServiceOrders.length > 0
-          ? "blocked"
-          : workspaceOpenServiceOrders.length > 0
-            ? "active"
-            : workspaceLastCompletedServiceOrder
-              ? "done"
-              : "idle",
+        workspaceOpenServiceOrders.length > 0
+          ? "active"
+          : workspaceLastCompletedServiceOrder
+            ? "done"
+            : "idle",
       summary:
         workspaceOverdueServiceOrders.length > 0
-          ? "O.S. aberta com prazo vencido."
+          ? "O.S. aberta com prazo vencido segundo a decisão oficial."
           : workspaceOpenServiceOrders.length > 0
             ? `${workspaceOpenServiceOrders.length} O.S. em execução.`
             : workspaceLastCompletedServiceOrder
@@ -1400,18 +990,16 @@ export default function CustomersPage() {
       id: "charge",
       label: "Cobrança",
       state:
-        workspaceOverdueCharges.length > 0
-          ? "blocked"
-          : workspacePendingCharges.length > 0
-            ? "warning"
-            : workspaceCharges.length > 0
-              ? "done"
-              : "idle",
+        workspacePendingCharges.length > 0
+          ? "active"
+          : workspaceCharges.length > 0
+            ? "done"
+            : "idle",
       summary:
         workspaceOverdueCharges.length > 0
-          ? "Cobrança vencida exige ação."
+          ? "Cobrança vencida retornada pelo financeiro."
           : workspacePendingCharges.length > 0
-            ? "Cobrança pendente em acompanhamento."
+            ? "Cobrança pendente retornada."
             : workspaceCharges.length > 0
               ? "Sem cobrança pendente retornada."
               : "Sem cobrança retornada.",
@@ -1424,21 +1012,14 @@ export default function CustomersPage() {
     {
       id: "payment",
       label: "Pagamento",
-      state:
-        workspaceOverdueCharges.length > 0
-          ? "blocked"
-          : workspacePendingCharges.length > 0
-            ? "warning"
-            : workspaceLastPayment
-              ? "done"
-              : workspaceCharges.length > 0
-                ? "idle"
-                : "idle",
+      state: workspaceLastPayment ? "done" : "idle",
       summary: workspaceLastPayment
-        ? `Último pagamento em ${formatDateTime(workspaceLastPayment.paidAt ?? workspaceLastPayment.updatedAt ?? workspaceLastPayment.createdAt)}.`
-        : workspacePendingCharges.length > 0
-          ? "Pagamento ainda pendente."
-          : "Sem pagamento retornado.",
+        ? `Último pagamento em ${formatDateTime(
+            workspaceLastPayment.paidAt ??
+              workspaceLastPayment.updatedAt ??
+              workspaceLastPayment.createdAt
+          )}.`
+        : "Sem pagamento retornado.",
       countOrValue: workspaceLastPayment
         ? formatCurrency(
             Number(
@@ -1471,6 +1052,7 @@ export default function CustomersPage() {
       const includeTimeline = options?.includeTimeline ?? false;
       const operations: Promise<unknown>[] = [
         trpcUtils.nexo.customers.list.invalidate(),
+        trpcUtils.nexo.customers.operationalSummary.invalidate(),
         trpcUtils.nexo.customers.workspace.invalidate({ id: customerId }),
         trpcUtils.nexo.appointments.list.invalidate(),
         trpcUtils.nexo.serviceOrders.list.invalidate(),
@@ -1511,6 +1093,7 @@ export default function CustomersPage() {
       };
 
       safePush(trpcUtils.nexo.customers.list.invalidate());
+      safePush(trpcUtils.nexo.customers.operationalSummary.invalidate());
       safePush(
         trpcUtils.nexo.customers.workspace.invalidate({ id: customerId })
       );
@@ -1572,15 +1155,10 @@ export default function CustomersPage() {
   }
 
   function runAttentionAction(item: AttentionItem) {
-    if (item.actionLabel.includes("Cobrar") && item.customer) {
-      openCustomerWhatsApp(item.customer, item.chargeId);
-      return;
-    }
-    if (item.actionLabel.includes("contato") && item.customer) {
-      openCustomerWhatsApp(item.customer, item.chargeId);
-      return;
-    }
-    navigate(item.actionPath);
+    const profile = profileById.get(item.customerId);
+    if (!profile) return;
+
+    runAuthoritativeCustomerAction(profile);
   }
 
   useEffect(() => {
@@ -1618,18 +1196,53 @@ export default function CustomersPage() {
     }
   }, [activeCustomerId, filteredProfiles, location, setActiveCustomerId]);
 
-  const customersOperationalStatus = hasIncompleteOperationalData
-    ? getCustomersOperationalStatus(profiles) === "NORMAL"
-      ? "ATENÇÃO"
-      : getCustomersOperationalStatus(profiles)
-    : getCustomersOperationalStatus(profiles);
+  const customersOperationalStatus =
+    customersOperationalSummary?.portfolio.operationalStatus ?? null;
 
-  const getVisibleCustomerHealth = (profile: CustomerProfile) => {
-    const status = getCustomerOperationalStatus(profile);
-    if (!hasIncompleteOperationalData || status !== "NORMAL") {
-      return { status, label: profile.status };
+  const portfolioOperationalStatusBadge = customersOperationalStatus ? (
+    <AppOperationalStatusBadge status={customersOperationalStatus} />
+  ) : (
+    <AppStatusBadge
+      label={
+        customersOperationalSummaryQuery.isLoading
+          ? "Estado operacional carregando"
+          : "Estado operacional indisponível"
+      }
+      tone="warning"
+    />
+  );
+
+  const renderAuthoritativeCustomerStatus = (
+    profile: (typeof operationalProfiles)[number]
+  ) => {
+    const summary = profile.operationalSummary;
+
+    if (!summary) {
+      return (
+        <AppStatusBadge
+          label={
+            customersOperationalSummaryQuery.isLoading
+              ? "Estado carregando"
+              : "Estado indisponível"
+          }
+          tone="warning"
+        />
+      );
     }
-    return { status: "ATENÇÃO" as const, label: "Leitura parcial" };
+
+    return (
+      <AppOperationalStatusBadge
+        status={summary.operationalStatus}
+        label={summary.riskSignal}
+      />
+    );
+  };
+
+  const renderAuthoritativeCustomerPriority = (
+    profile: (typeof operationalProfiles)[number]
+  ) => {
+    const priority = profile.operationalSummary?.priority;
+    return priority ? <AppPriorityBadge priority={priority} /> : null;
   };
 
   return (
@@ -1643,16 +1256,19 @@ export default function CustomersPage() {
         }
         contextChips={
           <>
-            <AppOperationalStatusBadge status={customersOperationalStatus} />
+            {portfolioOperationalStatusBadge}
             <AppStatusBadge
               label={`${customers.length} clientes na carteira`}
               tone="neutral"
             />
             <AppStatusBadge
               label={
-                hasIncompleteOperationalData
-                  ? "Risco em validação"
-                  : `${profiles.filter(profile => profile.status === "Em risco").length} em risco`
+                customersOperationalSummary
+                  ? `${
+                      customersOperationalSummary.portfolio.riskCustomers +
+                      customersOperationalSummary.portfolio.criticalCustomers
+                    } em risco`
+                  : "Risco operacional indisponível"
               }
               tone="warning"
             />
@@ -1694,9 +1310,9 @@ export default function CustomersPage() {
             <span>
               Clientes carregados, mas{" "}
               {unavailableAuxiliaryData.map(source => source.label).join(", ")}{" "}
-              não puderam ser consultados. Status, risco e pendências podem
-              estar incompletos; a carteira não deve ser interpretada como
-              saudável.
+              não puderam ser consultados. Estado operacional e risco
+              continuam sendo apresentados pelo resumo oficial; apenas detalhes
+              auxiliares desta página podem ficar incompletos.
             </span>
             <Button
               size="sm"
@@ -1718,7 +1334,7 @@ export default function CustomersPage() {
           <AppAlertDescription>
             Clientes carregados. Aguardando{" "}
             {pendingAuxiliaryData.map(source => source.label).join(", ")} antes
-            de concluir a leitura de saúde da carteira.
+            de completar os detalhes auxiliares da carteira.
           </AppAlertDescription>
         </AppAlert>
       ) : null}
@@ -1750,7 +1366,7 @@ export default function CustomersPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <AppOperationalStatusBadge status={customersOperationalStatus} />
+            {portfolioOperationalStatusBadge}
             {attentionItems[0] ? <AppPriorityBadge priority="P0" /> : null}
             {attentionItems[0] ? (
               <Button
@@ -1868,7 +1484,6 @@ export default function CustomersPage() {
               {[
                 { key: "active", label: "Ativos" },
                 { key: "inactive", label: "Inativos" },
-                { key: "no_recent_contact", label: "Sem contato recente" },
                 { key: "risk", label: "Em risco" },
               ].map(item => (
                 <button
@@ -2047,22 +1662,15 @@ export default function CustomersPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2">
-                        <AppOperationalStatusBadge
-                          {...getVisibleCustomerHealth(profile)}
-                        />
+                        {renderAuthoritativeCustomerStatus(profile)}
                         <AppStatusBadge
                           {...getCustomerActiveStatus(profile.customer.active)}
                         />
-                        {isNewCustomer(profile.customer) ? (
-                          <AppStatusBadge label="Novo" tone="info" />
-                        ) : null}
-                        {isFrequentCustomer(profile) ? (
-                          <AppStatusBadge label="Frequente" tone="accent" />
-                        ) : null}
                       </div>
                     </div>
                     <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">
-                      {profile.riskSignal}
+                      {profile.operationalSummary?.riskSignal ??
+                        "Sinal operacional indisponível"}
                     </p>
                     {profile.activeServiceOrder ? (
                       <p className="mt-2 text-xs text-[var(--text-secondary)]">
@@ -2109,9 +1717,12 @@ export default function CustomersPage() {
                       </span>
                       <Button
                         size="sm"
-                        onClick={() => setActiveCustomerId(profile.customerId)}
+                        onClick={event => {
+                          event.stopPropagation();
+                          runAuthoritativeCustomerAction(profile);
+                        }}
                       >
-                        {profile.nextActionLabel}
+                        {getAuthoritativeCustomerActionLabel(profile)}
                       </Button>
                     </div>
                   </article>
@@ -2158,28 +1769,16 @@ export default function CustomersPage() {
                         <td>
                           <div className="min-w-[170px] space-y-2 text-xs text-[var(--text-secondary)]">
                             <div className="flex flex-wrap gap-2">
-                              <AppOperationalStatusBadge
-                                {...getVisibleCustomerHealth(profile)}
-                              />
+                              {renderAuthoritativeCustomerStatus(profile)}
                               <AppStatusBadge
                                 {...getCustomerActiveStatus(
                                   profile.customer.active
                                 )}
                               />
-                              {isNewCustomer(profile.customer) ? (
-                                <AppStatusBadge label="Novo" tone="info" />
-                              ) : null}
-                              {isFrequentCustomer(profile) ? (
-                                <AppStatusBadge
-                                  label="Frequente"
-                                  tone="accent"
-                                />
-                              ) : null}
-                              <AppPriorityBadge
-                                priority={getCustomerPriority(profile)}
-                              />
+                              {renderAuthoritativeCustomerPriority(profile)}
                             </div>
-                            <p className="line-clamp-2">{profile.riskSignal}</p>
+                            <p className="line-clamp-2">{profile.operationalSummary?.riskSignal ??
+                        "Sinal operacional indisponível"}</p>
                           </div>
                         </td>
                         <td>
@@ -2209,7 +1808,7 @@ export default function CustomersPage() {
                         <td>
                           <div className="min-w-[180px] space-y-1 text-xs text-[var(--text-secondary)]">
                             <p className="font-medium text-[var(--text-primary)]">
-                              {profile.nextActionLabel}
+                              {getAuthoritativeCustomerActionLabel(profile)}
                             </p>
                             <p>
                               Último serviço:{" "}
@@ -2261,20 +1860,11 @@ export default function CustomersPage() {
                           <div className="flex min-w-[150px] items-center justify-end gap-2">
                             <Button
                               size="sm"
-                              onClick={() => {
-                                if (
-                                  profile.nextActionLabel.includes("Cobrar")
-                                ) {
-                                  openCustomerWhatsApp(
-                                    profile.customer,
-                                    profile.pendingChargeId
-                                  );
-                                  return;
-                                }
-                                navigate(profile.nextActionPath);
-                              }}
+                              onClick={() =>
+                                runAuthoritativeCustomerAction(profile)
+                              }
                             >
-                              {profile.nextActionLabel}
+                              {getAuthoritativeCustomerActionLabel(profile)}
                             </Button>
                             <AppRowActionsDropdown
                               triggerLabel="Mais ações"
@@ -2387,9 +1977,18 @@ export default function CustomersPage() {
                     </h2>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
                       <AppStatusBadge
-                        label={`${selectedProfile.status} · ${selectedProfile.riskSignal}`}
+                        label={`${
+                          selectedProfile.operationalSummary
+                            ?.operationalStatus ?? "Estado indisponível"
+                        } · ${
+                          selectedProfile.operationalSummary?.riskSignal ??
+                          "Sinal operacional indisponível"
+                        }`}
                         tone={
-                          selectedProfile.status === "Em risco"
+                          selectedProfile.operationalSummary &&
+                          ["RISCO", "CRÍTICO"].includes(
+                            selectedProfile.operationalSummary.operationalStatus
+                          )
                             ? "warning"
                             : "neutral"
                         }
@@ -2401,20 +2000,22 @@ export default function CustomersPage() {
                     <p className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
                       Sinal principal:{" "}
                       <span className="text-[var(--text-primary)]">
-                        {selectedProfile.riskSignal}
+                        {selectedProfile.operationalSummary?.riskSignal ??
+                          "Sinal operacional indisponível"}
                       </span>
                     </p>
                   </div>
                   <div className="min-w-[190px] rounded-lg border border-[var(--warning)]/25 bg-[var(--warning)]/10 px-3 py-2 text-xs">
                     <p className="nexo-overline">Próxima ação</p>
                     <p className="mt-0.5 font-semibold text-[var(--text-primary)]">
-                      {customerNextBestAction.title}
+                      {selectedRecommendedActionLabel}
                     </p>
                     <p className="mt-1 text-[var(--text-muted)]">
                       Última interação:{" "}
-                      {selectedProfile.lastInteractionAt
-                        ? `${selectedProfile.daysWithoutContact} dias`
-                        : "sem registro"}
+                      {formatDateTime(
+                        selectedProfile.lastInteractionAt,
+                        "sem registro"
+                      )}
                     </p>
                   </div>
                 </div>
@@ -2488,9 +2089,10 @@ export default function CustomersPage() {
                   <NexoExecutiveMetric
                     title="Comunicação"
                     value={
-                      selectedProfile.lastInteractionAt
-                        ? `${selectedProfile.daysWithoutContact} dias`
-                        : "Sem registro"
+                      formatDateTime(
+                        selectedProfile.lastInteractionAt,
+                        "Sem registro"
+                      )
                     }
                     context="Canal: WhatsApp"
                     ctaLabel="Abrir WhatsApp"
@@ -2564,73 +2166,81 @@ export default function CustomersPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="nexo-overline">Decisão e próxima ação</p>
+
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <AppStatusBadge
-                        label={customerOperationalState.level}
-                        tone={
-                          customerOperationalState.level === "NORMAL"
-                            ? "neutral"
-                            : "warning"
-                        }
-                      />
-                      <AppStatusBadge
-                        label={customerNextBestAction.title}
-                        tone="info"
-                      />
+                      {selectedOperationalSummary ? (
+                        <>
+                          <AppOperationalStatusBadge
+                            status={
+                              selectedOperationalSummary.operationalStatus
+                            }
+                          />
+                          <AppPriorityBadge
+                            priority={selectedOperationalSummary.priority}
+                          />
+                          <AppStatusBadge
+                            label={selectedRecommendedActionLabel}
+                            tone="info"
+                          />
+                        </>
+                      ) : (
+                        <AppStatusBadge
+                          label="Decisão operacional indisponível"
+                          tone="warning"
+                        />
+                      )}
                     </div>
+
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-subtle)]/45 p-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
-                          Motivo
+                          Motivo oficial
                         </p>
                         <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
-                          {customerOperationalState.reason}
+                          {selectedInterventionReason}
                         </p>
                         <p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
-                          Impacto: {customerOperationalState.impact}
+                          Sinal:{" "}
+                          {selectedOperationalSummary?.riskSignal ??
+                            "Sinal operacional indisponível"}
                         </p>
                       </div>
+
                       <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-subtle)]/45 p-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
-                          Decisão
+                          Decisão oficial
                         </p>
                         <p className="mt-1 text-lg font-black text-[var(--text-primary)]">
-                          {customerOperationalState.level === "NORMAL"
-                            ? "Acompanhar com segurança"
-                            : customerNextBestAction.title}
+                          {selectedRecommendedActionLabel}
                         </p>
                         <p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
-                          Ação recomendada: {customerNextBestAction.reason}
+                          Risco:{" "}
+                          {selectedOperationalSummary
+                            ? `${selectedOperationalSummary.riskState} · score ${selectedOperationalSummary.riskScore}`
+                            : "indisponível"}
                         </p>
                       </div>
                     </div>
+
                     <p className="mt-2 text-xs text-[var(--text-muted)]">
-                      {customerNextBestAction.safetyNote}
+                      {selectedOperationalSummary
+                        ? `Avaliação oficial em ${formatDateTime(
+                            selectedOperationalSummary.evaluatedAt
+                          )}.`
+                        : "O resumo operacional oficial não está disponível para este cliente."}
                     </p>
                   </div>
+
                   <div className="flex min-w-[220px] flex-col gap-2">
                     <Button
                       size="sm"
-                      onClick={customerNextBestAction.onPrimaryAction}
+                      disabled={
+                        !selectedOperationalSummary ||
+                        !selectedOperationalSummary.recommendedActionLabel
+                      }
+                      onClick={runSelectedRecommendedAction}
                     >
-                      {customerNextBestAction.primaryActionLabel}
-                    </Button>
-                    {customerNextBestAction.secondaryActionLabel &&
-                    customerNextBestAction.onSecondaryAction ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={customerNextBestAction.onSecondaryAction}
-                      >
-                        {customerNextBestAction.secondaryActionLabel}
-                      </Button>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={customerOperationalState.onDetails}
-                    >
-                      {customerOperationalState.detailsLabel}
+                      {selectedRecommendedActionLabel}
                     </Button>
                   </div>
                 </div>
@@ -2695,18 +2305,20 @@ export default function CustomersPage() {
                     },
                     {
                       title: "Comunicação",
-                      value: selectedProfile.lastInteractionAt
-                        ? `${selectedProfile.daysWithoutContact} dias`
-                        : "Sem registro",
+                      value: formatDateTime(
+                        selectedProfile.lastInteractionAt,
+                        "Sem registro"
+                      ),
                       context: "Canal: WhatsApp",
                     },
                     {
                       title: "Saúde do cliente",
                       value:
-                        customerOperationalState.level === "NORMAL"
-                          ? "Saudável"
-                          : selectedProfile.status,
-                      context: selectedProfile.riskSignal,
+                        selectedProfile.operationalSummary
+                          ?.operationalStatus ?? "Indisponível",
+                      context:
+                        selectedProfile.operationalSummary?.riskSignal ??
+                        "Sinal operacional indisponível",
                     },
                   ].map(item => (
                     <div

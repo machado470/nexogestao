@@ -15,6 +15,6 @@ describe('WhatsAppService prioridade autoritativa', () => {
     const res = await svc.listConversations('org1', {})
     expect(res.items[0].priority).toBe('NORMAL')
     expect(res.items[0].inboxPosition).toBe(1)
-    expect(res.items[0].nextAction).toBeUndefined()
+    expect(res.items[0]).not.toHaveProperty("nextAction")
   })
 })
