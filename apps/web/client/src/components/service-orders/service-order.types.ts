@@ -96,6 +96,20 @@ export type ServiceOrder = {
   createdAt?: string;
   updatedAt?: string;
   financialSummary?: FinancialSummary | null;
+  operationalDecision: {
+    isOverdue: boolean;
+    overdueDays: number;
+    isStalled: boolean;
+    chargeOverdue: boolean;
+    operationalStatus: "NORMAL" | "ATENÇÃO" | "RISCO";
+    priority: "P0" | "P1" | "P2" | "P3";
+    riskLabel: string;
+    nextAction: {
+      type: "start" | "complete" | "charge" | "edit" | "select";
+      label: string;
+      reason: string;
+    };
+  };
 };
 
 export type ServiceOrdersPagination = {

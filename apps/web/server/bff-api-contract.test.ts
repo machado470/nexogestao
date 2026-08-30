@@ -93,6 +93,17 @@ describe("BFF↔API contract - lote 1", () => {
     );
   });
 
+  it("serviceOrders.list preserva a decisão operacional oficial sem aceitar tenant do client", async () => {
+    const operationalDecision = { isOverdue: true, overdueDays: 3, isStalled: false, chargeOverdue: false, operationalStatus: "RISCO", priority: "P0", riskLabel: "Atrasada", nextAction: { type: "start", label: "Iniciar agora", reason: "Atrasada sem execução" } };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "so-1", operationalDecision }] }), { status: 200 }));
+    const caller = appRouter.createCaller({ req: makeReq(), res: makeRes(), user: { token: "trusted-user-token", validated: true, organizationId: "org-trusted" } } as any);
+    await expect(caller.nexo.serviceOrders.list({ page: 1, limit: 20, orgId: "org-forged" } as any)).resolves.toEqual([{ id: "so-1", operationalDecision }]);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/service-orders?page=1&limit=20");
+    expect(String(url)).not.toContain("orgId");
+    expect(options).toEqual(expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer trusted-user-token" }) }));
+  });
+
   it("timeline.listByOrg preserva cursor/filtro e normaliza o envelope oficial", async () => {
     const event = {
       id: "event-1",

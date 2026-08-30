@@ -1,5 +1,22 @@
 import { Logger } from '@nestjs/common'
-import { ServiceOrdersService } from './service-orders.service'
+import { ServiceOrdersService, resolveServiceOrderOperationalDecision } from './service-orders.service'
+
+describe('ServiceOrdersService operational decision contract', () => {
+  const financialSummary = { hasCharge: false, chargeId: null, chargeStatus: null, chargeAmountCents: null, chargeDueDate: null, paidAt: null } as const
+
+  it('owns overdue threshold, priority and next action on the API', () => {
+    expect(resolveServiceOrderOperationalDecision({ status: 'OPEN', assignedToPersonId: 'person-1', dueDate: new Date('2026-08-27T00:00:00Z'), financialSummary, now: new Date('2026-08-30T12:00:00Z') })).toEqual(expect.objectContaining({
+      isOverdue: true, overdueDays: 4, operationalStatus: 'RISCO', priority: 'P0', riskLabel: 'Atrasada',
+      nextAction: { type: 'start', label: 'Iniciar agora', reason: 'Atrasada sem execução' },
+    }))
+  })
+
+  it('uses the official financial summary for the charge decision', () => {
+    expect(resolveServiceOrderOperationalDecision({ status: 'DONE', assignedToPersonId: 'person-1', financialSummary, now: new Date('2026-08-30T12:00:00Z') })).toEqual(expect.objectContaining({
+      operationalStatus: 'RISCO', priority: 'P0', nextAction: { type: 'charge', label: 'Gerar cobrança', reason: 'Concluída sem cobrança' },
+    }))
+  })
+})
 
 describe('ServiceOrdersService notification failure isolation', () => {
   it('continues the operational flow after persisting the order once', async () => {
