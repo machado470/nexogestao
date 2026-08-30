@@ -19,3 +19,13 @@ describe('OrganizationSettingsController', () => {
     expect(service.updateOrganizationSettings).toHaveBeenCalledWith('org-authenticated', payload)
   })
 })
+
+
+describe('OrganizationSettingsController administrative summary', () => {
+  it('deriva o tenant exclusivamente da sessão', async () => {
+    const service = { getAdministrativeSummary: jest.fn().mockResolvedValue({ sections: [] }) } as any
+    const controller = new OrganizationSettingsController(service)
+    await controller.getAdministrativeSummary({ user: { orgId: 'org-authenticated' } })
+    expect(service.getAdministrativeSummary).toHaveBeenCalledWith('org-authenticated')
+  })
+})

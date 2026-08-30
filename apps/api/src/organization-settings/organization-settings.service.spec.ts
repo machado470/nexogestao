@@ -59,3 +59,15 @@ describe('OrganizationSettingsService', () => {
     )
   })
 })
+
+
+describe('OrganizationSettingsService administrative summary', () => {
+  it('produz decisões oficiais com evidência isolada pelo tenant', async () => {
+    const prisma = { $transaction: jest.fn().mockResolvedValue([{ ...organization, createdAt: new Date(), executionConfig: null }, [{ id: 'admin-1', email: 'a@nexo.test', role: 'ADMIN', active: true, inviteExpiresAt: null, createdAt: new Date(), person: null }]]), organization: { findUnique: jest.fn() }, user: { findMany: jest.fn() } } as any
+    const result = await new OrganizationSettingsService(prisma).getAdministrativeSummary('org-1')
+    expect(prisma.organization.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'org-1' } }))
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { orgId: 'org-1' } }))
+    expect(result.sections.find((item) => item.key === 'permissions')?.state).toBe('CONFIGURED')
+    expect(result.integrations).toMatchObject({ available: false, state: 'NOT_EVALUATED' })
+  })
+})

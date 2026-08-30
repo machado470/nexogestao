@@ -15,7 +15,7 @@ describe("SettingsPage organization settings contract", () => {
 
   it("carrega name após reload sem fallback ambíguo para organizationName", () => {
     expect(settingsPageSource).toContain(
-      'setName(String(settings.name ?? ""))'
+      'setName(String(settings?.name ?? ""))'
     );
     expect(settingsPageSource).not.toContain("organizationName");
   });
@@ -36,5 +36,37 @@ describe("SettingsPage operational control center contract", () => {
     expect(settingsPageSource).toContain("<OperationalSectionGrid");
     expect(settingsPageSource).toContain("<OperationalActionPanel");
     expect(settingsPageSource).toContain("<OperationalPriorityItem");
+  });
+});
+
+describe("SettingsPage authoritative administrative contract", () => {
+  it("consome somente o resumo administrativo para diagnóstico", () => {
+    expect(settingsPageSource).toContain(
+      "settings.administrativeSummary.useQuery"
+    );
+    expect(settingsPageSource).not.toContain("integrations.readiness");
+    expect(settingsPageSource).not.toContain("invites.members");
+  });
+
+  it.each([
+    "configured(readiness",
+    "hasAnySettingValue",
+    "statusFromConfigured",
+    "stripeReady",
+    "whatsappReady",
+    "permissionsConfigured",
+    "integrationsConfigured",
+    "sectionCards",
+    "members.length",
+  ])("não reintroduz decisão paralela: %s", forbidden => {
+    expect(settingsPageSource).not.toContain(forbidden);
+  });
+
+  it("não inventa timezone saudável e preserva retry", () => {
+    expect(settingsPageSource).toContain(
+      'setTimezone(String(settings?.timezone ?? ""))'
+    );
+    expect(settingsPageSource).toContain("summaryQuery.refetch()");
+    expect(settingsPageSource).toContain("Sua sessão continua ativa");
   });
 });

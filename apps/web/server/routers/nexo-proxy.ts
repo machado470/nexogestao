@@ -992,6 +992,10 @@ export const nexoProxyRouter = router({
       return authedGet(ctx as CtxLike, "/organization-settings");
     }),
 
+    administrativeSummary: protectedProcedure.query(async ({ ctx }) => {
+      return authedGet(ctx as CtxLike, "/organization-settings/administrative-summary");
+    }),
+
     update: protectedProcedure
       .input(
         z.object({
