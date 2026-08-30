@@ -18,6 +18,26 @@ const criticalPages = [
 ];
 
 describe("Operational page guardrails", () => {
+  it("proíbe a reintrodução do motor financeiro paralelo", () => {
+    const finance = readFileSync("client/src/pages/FinancesPage.tsx", "utf8");
+    for (const forbidden of [
+      "computeDaysOverdue",
+      "computeDaysUntilDue",
+      "getFinanceOperationalStatus",
+      "getChargePriority",
+      "getChargeRisk",
+      "getChargePrimaryAction",
+      "aggregateOperationalHealth",
+      "compareOperationalPriority",
+      "Date.now()",
+      "new Date()",
+    ])
+      expect(finance).not.toContain(forbidden);
+    expect(finance).toContain("finance.charges.stats.useQuery");
+    expect(finance).toContain("finance.operationalQueue.useQuery");
+    expect(finance).not.toMatch(/\borgId\s*:/);
+    expect(finance).not.toMatch(/\brole\s*:/);
+  });
   it("evita placeholders rasos nas páginas críticas", () => {
     for (const file of criticalPages) {
       const source = readFileSync(file, "utf8");
