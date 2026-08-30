@@ -40,8 +40,8 @@ function daysBetweenUtc(from: Date, to: Date) {
   return Math.max(0, Math.floor((Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()) - Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate())) / dayMs))
 }
 
-function asRiskLevel(value: unknown): CollectionRiskLevel {
-  return value === 'WARNING' || value === 'RESTRICTED' || value === 'SUSPENDED' ? value : 'NORMAL'
+function asRiskLevel(value: unknown): CollectionRiskLevel | null {
+  return value === 'NORMAL' || value === 'WARNING' || value === 'RESTRICTED' || value === 'SUSPENDED' ? value : null
 }
 
 function metadataValue(metadata: unknown, key: string): unknown {
@@ -286,7 +286,7 @@ export class FinanceService {
       if (message.customerId && !lastWhatsappByCustomer.has(message.customerId)) lastWhatsappByCustomer.set(message.customerId, message)
     }
 
-    const riskByCustomer = new Map<string, CollectionRiskLevel>()
+    const riskByCustomer = new Map<string, CollectionRiskLevel | null>()
     for (const event of riskEvents as any[]) {
       if (!event.customerId || riskByCustomer.has(event.customerId)) continue
       riskByCustomer.set(event.customerId, asRiskLevel(metadataValue(event.metadata, 'nextState') ?? metadataValue(event.metadata, 'riskLevel')))
@@ -304,29 +304,31 @@ export class FinanceService {
       const lastWhatsappDate = lastWhatsappByCustomer.get(charge.customerId)?.createdAt ?? lastWhatsappByCustomer.get(charge.customerId)?.sentAt ?? null
       const lastContactDate = [lastTimelineDate, lastWhatsappDate].filter(Boolean).sort((a: Date, b: Date) => b.getTime() - a.getTime())[0] ?? null
       const lastChargeReminderDate = lastReminderByCharge.get(charge.id)?.createdAt ?? null
-      const riskLevel = riskByCustomer.get(charge.customerId) ?? 'NORMAL'
+      const riskLevel = riskByCustomer.get(charge.customerId) ?? null
+      const riskScore = riskLevel ? riskWeight[riskLevel] : 0
       const noRecentContact = !lastContactDate || daysBetweenUtc(new Date(lastContactDate), now) >= 3
 
       let recommendedAction: CollectionAction = 'WAIT_FOR_DUE_DATE'
       if (charge.amountCents <= 0 || !charge.customerId) recommendedAction = 'REVIEW_CHARGE'
-      else if (isOverdue && (daysOverdue >= 7 || riskWeight[riskLevel] >= 2)) recommendedAction = 'CALL_CUSTOMER'
+      else if (isOverdue && (daysOverdue >= 7 || riskScore >= 2)) recommendedAction = 'CALL_CUSTOMER'
       else if (isOverdue && !lastChargeReminderDate) recommendedAction = 'SEND_PAYMENT_LINK'
       else if (isOverdue && noRecentContact) recommendedAction = 'SEND_REMINDER'
       else if (daysOverdue === 0 && dueDate.getTime() <= now.getTime() + 2 * 24 * 60 * 60 * 1000) recommendedAction = 'SEND_REMINDER'
 
-      const priority: CollectionPriority = isOverdue && (charge.amountCents >= 100000 || daysOverdue >= 7 || riskWeight[riskLevel] >= 2) ? 'HIGH' : isOverdue || riskLevel === 'WARNING' ? 'MEDIUM' : 'LOW'
+      const priority: CollectionPriority = isOverdue && (charge.amountCents >= 100000 || daysOverdue >= 7 || riskScore >= 2) ? 'HIGH' : isOverdue || riskLevel === 'WARNING' ? 'MEDIUM' : 'LOW'
       const priorityReason = isOverdue
         ? `${daysOverdue} dia(s) de atraso, ${charge.amountCents} centavos em aberto, risco ${riskLevel}`
         : `Cobrança a vencer em ${Math.max(0, daysBetweenUtc(now, dueDate))} dia(s), risco ${riskLevel}`
       const recommendedActionTarget = recommendedAction === 'CALL_CUSTOMER' || recommendedAction === 'SEND_REMINDER' || recommendedAction === 'SEND_PAYMENT_LINK' ? 'CUSTOMER' : 'CHARGE'
-      const summary = { priority, priorityReason, daysOverdue, lastPaymentDate, lastContactDate, lastChargeReminderDate, riskLevel, recommendedAction, recommendedActionTarget }
-      return { ...charge, financialOperationalSummary: summary, nextBestCollectionAction: recommendedAction }
+      const paidAmountCents = (charge.payments ?? []).reduce((total: number, payment: any) => total + Number(payment.amountCents ?? 0), 0)
+      const summary = { priority, priorityReason, daysOverdue, lastPaymentDate, lastContactDate, lastChargeReminderDate, riskLevel, recommendedAction, recommendedActionTarget, evaluatedAt: now }
+      return { ...charge, paidAmountCents, balanceCents: Math.max(0, charge.amountCents - paidAmountCents), financialOperationalSummary: summary, nextBestCollectionAction: recommendedAction }
     }).sort((a: any, b: any) => {
       const sa = a.financialOperationalSummary
       const sb = b.financialOperationalSummary
       return (sb.daysOverdue > 0 ? 1 : 0) - (sa.daysOverdue > 0 ? 1 : 0)
         || b.amountCents - a.amountCents
-        || riskWeight[sb.riskLevel as CollectionRiskLevel] - riskWeight[sa.riskLevel as CollectionRiskLevel]
+        || (sb.riskLevel ? riskWeight[sb.riskLevel as CollectionRiskLevel] : 0) - (sa.riskLevel ? riskWeight[sa.riskLevel as CollectionRiskLevel] : 0)
         || (sa.lastContactDate ? 1 : 0) - (sb.lastContactDate ? 1 : 0)
         || priorityWeight[sb.priority as CollectionPriority] - priorityWeight[sa.priority as CollectionPriority]
     }).slice(0, limit)
@@ -401,6 +403,8 @@ export class FinanceService {
         where,
         include: {
           customer: true,
+          serviceOrder: true,
+          payments: { select: { amountCents: true, paidAt: true, method: true } },
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -409,8 +413,19 @@ export class FinanceService {
       this.prisma.charge.count({ where }),
     ])
 
+    const evaluatedAt = new Date()
     return {
-      items,
+      items: items.map((charge) => {
+        const paidAmountCents = charge.payments.reduce((total, payment) => total + payment.amountCents, 0)
+        const daysOverdue = charge.status === 'OVERDUE' ? daysBetweenUtc(charge.dueDate, evaluatedAt) : null
+        return {
+          ...charge,
+          paidAmountCents,
+          balanceCents: Math.max(0, charge.amountCents - paidAmountCents),
+          daysOverdue,
+          evaluatedAt,
+        }
+      }),
       meta: {
         page,
         limit,
@@ -1349,7 +1364,11 @@ export class FinanceService {
       }),
     ])
 
+    const overdueCount = overdue._count._all ?? 0
+    const pendingCount = pending._count._all ?? 0
     return {
+      evaluatedAt: new Date(),
+      operationalState: overdueCount >= 5 ? 'CRITICAL' : overdueCount > 0 ? 'RISK' : pendingCount > 0 ? 'ATTENTION' : 'NORMAL',
       pending: {
         count: pending._count._all ?? 0,
         amountCents: pending._sum.amountCents ?? 0,
