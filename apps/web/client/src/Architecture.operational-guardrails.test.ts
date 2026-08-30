@@ -26,19 +26,13 @@ describe("Operational page guardrails", () => {
     }
   });
 
-  it("mantém timeline paginada sem auto-fetch infinito", () => {
+  it("mantém timeline limitada sem auto-fetch infinito ou filtros decisórios", () => {
     const timeline = readFileSync("client/src/pages/TimelinePage.tsx", "utf8");
-    expect(timeline).toContain("const PAGE_SIZE = 12");
-    expect(timeline).toContain(
-      "const [currentPage, setCurrentPage] = useState(1)"
-    );
-    expect(timeline).toContain(
-      "disabled={!hasMore || timelineQuery.isFetching}"
-    );
-    expect(timeline).toContain(
-      'const [entityFilter, setEntityFilter] = useState("all")'
-    );
-    expect(timeline).toContain("severityFilter");
+    expect(timeline).toContain("const PAGE_SIZE = 50");
+    expect(timeline).toContain("{ limit: PAGE_SIZE }");
+    expect(timeline).not.toContain("fetchNextPage");
+    expect(timeline).not.toContain("eventSeverity");
+    expect(timeline).not.toContain("Date.now()");
     expect(timeline).not.toContain("setLimit(limit + 120)");
   });
 
@@ -166,24 +160,15 @@ describe("Operational page guardrails", () => {
       /import\s*\{[^}]*\bButton\b[^}]*\}\s*from\s*["']@\/components\/design-system["']/s;
 
     for (const file of pageFiles) {
-      const source = readFileSync(
-        `client/src/pages/${file}`,
-        "utf8"
-      );
+      const source = readFileSync(`client/src/pages/${file}`, "utf8");
 
       expect(source).not.toMatch(legacyButtonImport);
     }
 
-    const settings = readFileSync(
-      "client/src/pages/SettingsPage.tsx",
-      "utf8"
-    );
+    const settings = readFileSync("client/src/pages/SettingsPage.tsx", "utf8");
 
-    expect(settings).not.toContain(
-      "OperationalTopCard lint contract"
-    );
+    expect(settings).not.toContain("OperationalTopCard lint contract");
   });
-
 
   it("evita NexoStatusBadge legado", () => {
     const sourceFiles = readdirSync("client/src", {
@@ -199,7 +184,6 @@ describe("Operational page guardrails", () => {
     }
   });
 
-
   it("evita wrappers legados de botão nos componentes ativos", () => {
     const componentFiles = readdirSync("client/src/components", {
       recursive: true,
@@ -211,37 +195,25 @@ describe("Operational page guardrails", () => {
     for (const file of componentFiles) {
       if (!file.endsWith(".tsx")) continue;
 
-      const source = readFileSync(
-        `client/src/components/${file}`,
-        "utf8"
-      );
+      const source = readFileSync(`client/src/components/${file}`, "utf8");
 
       expect(source).not.toMatch(legacyButtonImport);
     }
   });
-
 
   it("proíbe retorno do design-system legado", () => {
     const sourceFiles = readdirSync("client/src", {
       recursive: true,
     }) as string[];
 
-    expect(sourceFiles).not.toContain(
-      "components/design-system.tsx"
-    );
+    expect(sourceFiles).not.toContain("components/design-system.tsx");
 
     for (const file of sourceFiles) {
       if (!file.endsWith(".tsx")) continue;
 
-      const source = readFileSync(
-        `client/src/${file}`,
-        "utf8"
-      );
+      const source = readFileSync(`client/src/${file}`, "utf8");
 
-      expect(source).not.toContain(
-        "@/components/design-system"
-      );
+      expect(source).not.toContain("@/components/design-system");
     }
   });
-
 });

@@ -5,6 +5,7 @@ import { TimelineQueryDto } from './dto/timeline-query.dto'
 import { WebhookDispatcher } from '../webhooks/webhook.dispatcher'
 import { Prisma } from '@prisma/client'
 import { timelineEventFilterValues } from './timeline-events'
+import { presentTimelineEvent } from './timeline.presenter'
 
 type TimelineLogInput = {
   orgId: string
@@ -23,7 +24,9 @@ type TimelineTransactionClient = Pick<
   'person' | 'customer' | 'timelineEvent'
 >
 
-function pickActorUserId(metadata?: Record<string, unknown> | null): string | null {
+function pickActorUserId(
+  metadata?: Record<string, unknown> | null,
+): string | null {
   if (!metadata) return null
 
   const v1 = metadata.actorUserId
@@ -35,7 +38,9 @@ function pickActorUserId(metadata?: Record<string, unknown> | null): string | nu
   return s ? s : null
 }
 
-function pickActorPersonId(metadata?: Record<string, unknown> | null): string | null {
+function pickActorPersonId(
+  metadata?: Record<string, unknown> | null,
+): string | null {
   if (!metadata) return null
   const v = metadata.actorPersonId
   if (typeof v !== 'string') return null
@@ -56,9 +61,9 @@ function pickString(
 
 function getEventOrigin(metadata?: Record<string, unknown> | null): string {
   const raw =
-    pickString(metadata ?? null, 'origin')
-    ?? pickString(metadata ?? null, 'source')
-    ?? pickString(metadata ?? null, 'eventType')
+    pickString(metadata ?? null, 'origin') ??
+    pickString(metadata ?? null, 'source') ??
+    pickString(metadata ?? null, 'eventType')
   return raw ?? 'unknown_origin'
 }
 
@@ -86,11 +91,11 @@ export class TimelineService {
         action: params.input.action,
         actionId: pickString(metadata, 'actionId'),
         entityId:
-          params.input.chargeId
-          ?? params.input.serviceOrderId
-          ?? params.input.appointmentId
-          ?? pickString(metadata, 'entityId')
-          ?? null,
+          params.input.chargeId ??
+          params.input.serviceOrderId ??
+          params.input.appointmentId ??
+          pickString(metadata, 'entityId') ??
+          null,
         customerId: params.customerId,
       }),
     )
@@ -140,8 +145,7 @@ export class TimelineService {
     }
 
     const resolvedCustomerId =
-      input.customerId ??
-      pickString(input.metadata ?? null, 'customerId')
+      input.customerId ?? pickString(input.metadata ?? null, 'customerId')
 
     let customerId: string | null = null
 
@@ -169,12 +173,10 @@ export class TimelineService {
       pickString(input.metadata ?? null, 'executionId')
 
     const appointmentId =
-      input.appointmentId ??
-      pickString(input.metadata ?? null, 'appointmentId')
+      input.appointmentId ?? pickString(input.metadata ?? null, 'appointmentId')
 
     const chargeId =
-      input.chargeId ??
-      pickString(input.metadata ?? null, 'chargeId')
+      input.chargeId ?? pickString(input.metadata ?? null, 'chargeId')
 
     const requestId = this.requestContext.requestId
 
@@ -258,7 +260,9 @@ export class TimelineService {
       throw new Error('TimelineService.logInTransaction(): orgId é obrigatório')
     }
     if (!String(input.action || '').trim()) {
-      throw new Error('TimelineService.logInTransaction(): action é obrigatória')
+      throw new Error(
+        'TimelineService.logInTransaction(): action é obrigatória',
+      )
     }
 
     let personId = input.personId ?? null
@@ -315,12 +319,12 @@ export class TimelineService {
         description: input.description ?? null,
         customerId,
         serviceOrderId:
-          input.serviceOrderId
-          ?? pickString(input.metadata ?? null, 'serviceOrderId')
-          ?? pickString(input.metadata ?? null, 'executionId'),
+          input.serviceOrderId ??
+          pickString(input.metadata ?? null, 'serviceOrderId') ??
+          pickString(input.metadata ?? null, 'executionId'),
         appointmentId:
-          input.appointmentId
-          ?? pickString(input.metadata ?? null, 'appointmentId'),
+          input.appointmentId ??
+          pickString(input.metadata ?? null, 'appointmentId'),
         chargeId:
           input.chargeId ?? pickString(input.metadata ?? null, 'chargeId'),
         metadata,
@@ -371,7 +375,7 @@ export class TimelineService {
       cursorId = parsedCursorId || null
     }
 
-    return this.prisma.timelineEvent.findMany({
+    const events = await this.prisma.timelineEvent.findMany({
       where: {
         orgId,
         ...(actionValues.length > 0 ? { action: { in: actionValues } } : {}),
@@ -380,19 +384,23 @@ export class TimelineService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take,
       ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
+      include: { person: { select: { name: true } } },
     })
+    return events.map(presentTimelineEvent)
   }
 
   async listByPersonInOrg(orgId: string, personId: string) {
-    return this.prisma.timelineEvent.findMany({
+    const events = await this.prisma.timelineEvent.findMany({
       where: { orgId, personId },
       orderBy: { createdAt: 'desc' },
       take: 100,
+      include: { person: { select: { name: true } } },
     })
+    return events.map(presentTimelineEvent)
   }
 
   async listByCustomerInOrg(orgId: string, customerId: string, limit = 100) {
-    return this.prisma.timelineEvent.findMany({
+    const events = await this.prisma.timelineEvent.findMany({
       where: {
         orgId,
         OR: [
@@ -403,11 +411,17 @@ export class TimelineService {
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(Math.max(limit, 1), 300),
+      include: { person: { select: { name: true } } },
     })
+    return events.map(presentTimelineEvent)
   }
 
-  async listByServiceOrderInOrg(orgId: string, serviceOrderId: string, limit = 100) {
-    return this.prisma.timelineEvent.findMany({
+  async listByServiceOrderInOrg(
+    orgId: string,
+    serviceOrderId: string,
+    limit = 100,
+  ) {
+    const events = await this.prisma.timelineEvent.findMany({
       where: {
         orgId,
         OR: [
@@ -419,6 +433,8 @@ export class TimelineService {
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(Math.max(limit, 1), 300),
+      include: { person: { select: { name: true } } },
     })
+    return events.map(presentTimelineEvent)
   }
 }
