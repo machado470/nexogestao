@@ -303,7 +303,8 @@ export class WhatsAppController {
       provider: provider.getProviderName(),
       status: readiness.mode === 'mock' ? 'configured_mock' : readiness.isReady ? 'configured' : 'misconfigured',
       missingEnv: readiness.missingEnv,
-      queueAvailable: true,
+      queueAvailable: this.whatsapp.isQueueAvailable(),
+      evaluatedAt: new Date().toISOString(),
     }
   }
 

@@ -107,13 +107,13 @@ export class WhatsAppService {
     const appointmentMap = new Map(appointmentsByCustomer.map((g) => [g.customerId, g._count._all]))
     const serviceOrderMap = new Map(serviceOrdersByCustomer.map((g) => [g.customerId, g._count._all]))
     return {
-      items: sliced.map((item) => ({
+      items: sliced.map((item, index) => ({
       ...item,
-      priority: this.calculateInboxPriority(item, {
-        hasPendingCharge: (pendingMap.get(item.customerId ?? '') ?? 0) > 0,
-        hasOverdueCharge: (overdueMap.get(item.customerId ?? '') ?? 0) > 0,
-        failedMessageCount: failedMap.get(item.id) ?? 0,
-      }),
+      inboxPosition: index + 1,
+      evaluatedAt: item.updatedAt,
+      ownership: item.assignedUserId ? { userId: item.assignedUserId, name: null, locked: true } : null,
+      priority: item.priority,
+      priorityReason: item.priorityReason ?? null,
       lastMessage: item.lastMessageAt,
       noResponseSince: item.lastInboundAt && (!item.lastOutboundAt || item.lastInboundAt > item.lastOutboundAt) ? item.lastInboundAt : null,
       noResponseMinutes: item.lastInboundAt && (!item.lastOutboundAt || item.lastInboundAt > item.lastOutboundAt) ? Math.floor((Date.now() - item.lastInboundAt.getTime()) / 60000) : null,
@@ -134,12 +134,13 @@ export class WhatsAppService {
           priorityReason: (item as any).priorityReason ?? null,
         },
       },
-      nextAction: this.resolveNextAction({
-        failedMessageCount: failedMap.get(item.id) ?? 0,
-        hasPendingCharge: (pendingMap.get(item.customerId ?? '') ?? 0) > 0 || (overdueMap.get(item.customerId ?? '') ?? 0) > 0,
-        hasUpcomingAppointment: (appointmentMap.get(item.customerId ?? '') ?? 0) > 0,
-        hasActiveServiceOrder: (serviceOrderMap.get(item.customerId ?? '') ?? 0) > 0,
-      }),
+
+      operationalStatus: item.status === WhatsAppConversationStatus.FAILED || (failedMap.get(item.id) ?? 0) > 0
+        ? 'Falha oficial'
+        : item.status === WhatsAppConversationStatus.WAITING_CUSTOMER
+          ? 'Aguardando cliente'
+          : item.status === WhatsAppConversationStatus.RESOLVED ? 'Resolvida' : 'Em atendimento',
+      governanceSignal: (item as any).metadata?.governanceSignal ?? null,
       flags: {
         hasPendingCharge: (pendingMap.get(item.customerId ?? '') ?? 0) > 0 || (overdueMap.get(item.customerId ?? '') ?? 0) > 0,
         hasNoResponse: item.status === WhatsAppConversationStatus.WAITING_CUSTOMER,
@@ -169,9 +170,16 @@ export class WhatsAppService {
     if (!conv?.customerId) return null
     if (!this.contextService) return null
     const context = await this.contextService.getOperationalContext(orgId, conv.customerId)
+    const intelligence = this.toConversationIntelligence(conv)
     return {
       ...context,
-      intelligence: this.toConversationIntelligence(conv),
+      intelligence,
+      officialActions: this.buildOfficialConversationActions(conv, intelligence),
+      governanceSignal: (conv as any).metadata?.governanceSignal ?? null,
+      governanceAlert: (conv as any).metadata?.governanceSignal?.communicationFailure
+        ? 'Sinal oficial de governança: falha de comunicação'
+        : null,
+      evaluatedAt: (intelligence.explanation as any)?.generatedAt ?? conv.updatedAt,
     }
   }
 
@@ -198,6 +206,40 @@ export class WhatsAppService {
       intelligenceVersion: conversation.intelligenceVersion ?? 1,
     }
   }
+
+  private buildOfficialConversationActions(conversation: any, intelligence: any) {
+    const suggestions = Array.isArray(intelligence.suggestedActions) ? intelligence.suggestedActions : []
+    const definitions: Record<string, { key: string; group: string; groupId: string }> = {
+      SEND_PAYMENT_LINK: { key: 'send-payment-link', group: 'Financeiro', groupId: 'finance' },
+      CONFIRM_APPOINTMENT: { key: 'confirm-appointment', group: 'Agenda', groupId: 'agenda' },
+      RESCHEDULE_APPOINTMENT: { key: 'reschedule-appointment', group: 'Agenda', groupId: 'agenda' },
+      SEND_SERVICE_UPDATE: { key: 'update-service', group: 'Ordem de serviço', groupId: 'serviceOrder' },
+      ESCALATE_TO_OPERATOR: { key: 'create-assisted-execution', group: 'Execução assistida', groupId: 'execution' },
+      MARK_RESOLVED: { key: 'mark-resolved', group: 'Execução assistida', groupId: 'execution' },
+      REPLY_WITH_TEMPLATE: { key: 'quick-template', group: 'Comunicação', groupId: 'communication' },
+    }
+    const evaluated = suggestions.flatMap((suggestion: any, index: number) => {
+      const definition = definitions[String(suggestion?.action ?? '')]
+      if (!definition) return []
+      const target = suggestion.relatedEntity ?? { entityType: 'GENERAL', entityId: null }
+      return [{ ...definition, action: suggestion.action, label: suggestion.label, description: suggestion.reason,
+        reason: suggestion.reason, availability: index === 0 ? 'primary' : 'secondary', disabled: false, target,
+        requiresHumanApproval: true, logicalKey: `whatsapp:${conversation.id}:${suggestion.action}:${target.entityId ?? 'general'}` }]
+    })
+    const evaluatedTypes = new Set(evaluated.map((action: any) => action.action))
+    const unavailable = Object.entries(definitions).filter(([action]) => !evaluatedTypes.has(action)).map(([action, definition]) => ({
+      ...definition, action, label: action.replaceAll('_', ' '), description: 'A API não disponibilizou esta ação na avaliação atual.',
+      reason: 'Indisponível na avaliação oficial atual', availability: 'unavailable', disabled: true, target: null,
+      requiresHumanApproval: true, logicalKey: null,
+    }))
+    return [...evaluated, ...unavailable, {
+      key: 'attach-file', group: 'Comunicação', groupId: 'communication', action: null, label: 'Anexar arquivo',
+      description: 'Capacidade futura ainda não liberada pela API.', reason: 'Em breve', availability: 'upcoming',
+      disabled: true, target: null, requiresHumanApproval: false, logicalKey: null,
+    }]
+  }
+
+  isQueueAvailable() { return this.queueService.isEnabled() }
 
   async sendManualMessage(orgId: string, userId: string | null, input: any) {
     const content = String(input.content ?? '').trim()

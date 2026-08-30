@@ -854,9 +854,9 @@ export const nexoProxyRouter = router({
   }),
 
   whatsapp: router({
-    listConversations: protectedProcedure.input(anyInput).query(async ({ ctx, input }) => {
-      return authedGet(ctx as CtxLike, '/whatsapp/conversations', input ?? {});
-    }),
+    listConversations: protectedProcedure
+      .input(z.object({ status: z.enum(['OPEN', 'WAITING_CUSTOMER', 'WAITING_OPERATOR', 'PENDING', 'RESOLVED', 'FAILED']).optional(), priority: z.enum(['LOW', 'NORMAL', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(), contextType: z.enum(['CUSTOMER', 'CHARGE', 'APPOINTMENT', 'SERVICE_ORDER', 'PAYMENT', 'GENERAL']).optional(), customerId: z.string().min(1).optional(), search: z.string().trim().max(120).optional(), cursor: z.string().min(1).optional(), limit: z.number().int().min(1).max(200).optional(), onlyUnread: z.boolean().optional() }).optional())
+      .query(async ({ ctx, input }) => authedGet(ctx as CtxLike, '/whatsapp/conversations', input ?? {})),
 
     getConversation: protectedProcedure
       .input(z.object({ id: z.string().min(1) }))

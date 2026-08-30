@@ -35,12 +35,6 @@ import { trpc } from "@/lib/trpc";
 import { useOperationalMemoryState } from "@/hooks/useOperationalMemory";
 import { cn } from "@/lib/utils";
 import { presentationStatusLabel } from "@/lib/presentation-status";
-import {
-  priorityRank,
-  resolveInboxPriority,
-  type GovernanceSignal,
-  type InboxPriority,
-} from "@/lib/whatsappInboxPriority";
 import { Button } from "@/components/ui/button";
 import { AppPageShell, AppSkeleton } from "@/components/app-system";
 import { OperationalInnerCard } from "@/components/operational";
@@ -163,25 +157,44 @@ type WhatsAppComposerActionPalette = {
   groupedActions: Record<ComposerActionGroupName, ComposerActionDescriptor[]>;
 };
 
-type WhatsAppComposerActionContext = {
-  hasSuggestedAction: boolean;
-  hasPendingAssistedExecution?: boolean;
-  hasOpenCharge?: boolean;
-  hasPendingCharge?: boolean;
-  canSendPaymentLink?: boolean;
-  chargeStatus?: string | null;
-  chargeDaysOverdue?: number | null;
-  hasUpcomingAppointment?: boolean;
-  appointmentStatus?: string | null;
-  hasActiveServiceOrder?: boolean;
-  serviceOrderStatus?: string | null;
-  canResolveConversation?: boolean;
+type OfficialComposerAction = ComposerActionDescriptor & {
+  action: WhatsAppSuggestedAction | null;
+  target?: { entityType: string; entityId: string | null } | null;
+  requiresHumanApproval: boolean;
+  logicalKey?: string | null;
 };
 
-function normalizeContextStatus(value?: string | null) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase();
+/** Presentation-only projection of actions evaluated by the API. */
+export function presentOfficialWhatsAppActions(
+  actions: OfficialComposerAction[] = []
+): WhatsAppComposerActionPalette {
+  const groupedActions = Object.fromEntries(
+    (
+      [
+        "Comunicação",
+        "Financeiro",
+        "Agenda",
+        "Ordem de serviço",
+        "Execução assistida",
+      ] as ComposerActionGroupName[]
+    ).map(group => [group, actions.filter(action => action.group === group)])
+  ) as unknown as Record<ComposerActionGroupName, ComposerActionDescriptor[]>;
+  return {
+    primaryActions: actions.filter(action => action.availability === "primary"),
+    secondaryActions: actions.filter(
+      action => action.availability === "secondary"
+    ),
+    unavailableActions: actions.filter(
+      action => action.availability === "unavailable"
+    ),
+    upcomingActions: actions.filter(
+      action => action.availability === "upcoming"
+    ),
+    recommendedActions: actions.filter(
+      action => action.availability === "primary"
+    ),
+    groupedActions,
+  };
 }
 
 function resolveComposerErrorMessage(error: unknown) {
@@ -194,316 +207,6 @@ function resolveComposerErrorMessage(error: unknown) {
     return "Sessão expirada. Faça login novamente para enviar mensagens.";
   }
   return rawMessage;
-}
-
-function cloneRecommendedAction(
-  action: ComposerActionDescriptor,
-  description: string,
-  label = action.label
-): ComposerActionDescriptor {
-  return {
-    ...action,
-    label,
-    description,
-    availability: "primary",
-  };
-}
-
-export function getRecommendedWhatsAppComposerActions(
-  context: Required<
-    Pick<
-      WhatsAppComposerActionContext,
-      | "hasSuggestedAction"
-      | "hasPendingAssistedExecution"
-      | "hasOpenCharge"
-      | "hasPendingCharge"
-      | "canSendPaymentLink"
-      | "hasUpcomingAppointment"
-      | "hasActiveServiceOrder"
-      | "canResolveConversation"
-    >
-  > &
-    Pick<
-      WhatsAppComposerActionContext,
-      | "chargeStatus"
-      | "chargeDaysOverdue"
-      | "appointmentStatus"
-      | "serviceOrderStatus"
-    >,
-  groupedActions: Record<ComposerActionGroupName, ComposerActionDescriptor[]>
-): ComposerActionDescriptor[] {
-  const actionByKey = new Map(
-    Object.values(groupedActions)
-      .flat()
-      .map(action => [action.key, action])
-  );
-  const chargeStatus = normalizeContextStatus(context.chargeStatus);
-  const appointmentStatus = normalizeContextStatus(context.appointmentStatus);
-  const serviceOrderStatus = normalizeContextStatus(context.serviceOrderStatus);
-  const hasOverdueCharge =
-    (context.chargeDaysOverdue ?? 0) > 0 ||
-    ["OVERDUE", "VENCIDA", "ATRASADA"].includes(chargeStatus);
-  const hasChargeToCollect =
-    context.hasOpenCharge &&
-    (context.hasPendingCharge ||
-      hasOverdueCharge ||
-      ["PENDING", "OPEN", "ABERTA", "PENDENTE"].includes(chargeStatus));
-  const hasAppointmentToConfirm =
-    context.hasUpcomingAppointment &&
-    !["CONFIRMED", "CONFIRMADO", "CANCELLED", "CANCELED", "CANCELADO"].includes(
-      appointmentStatus
-    );
-  const hasServiceOrderNeedingUpdate =
-    context.hasActiveServiceOrder &&
-    ![
-      "DONE",
-      "COMPLETED",
-      "CONCLUIDA",
-      "CONCLUÍDA",
-      "CANCELLED",
-      "CANCELED",
-    ].includes(serviceOrderStatus);
-
-  const recommended: ComposerActionDescriptor[] = [];
-  const add = (key: string, description: string, label?: string) => {
-    const action = actionByKey.get(key);
-    if (!action || action.disabled) return;
-    recommended.push(cloneRecommendedAction(action, description, label));
-  };
-
-  if (context.hasPendingAssistedExecution) {
-    add(
-      "create-assisted-execution",
-      "Há uma execução pendente para revisar antes de continuar.",
-      "Revisar execução assistida"
-    );
-  }
-
-  if (hasOverdueCharge) {
-    add("send-charge", "Cobrança vencida neste atendimento.");
-    add("send-payment-link", "Link disponível para resolver a cobrança agora.");
-  } else if (hasChargeToCollect) {
-    add("send-charge", "Cobrança pendente vinculada ao cliente.");
-    add("send-payment-link", "Link disponível para resolver a cobrança agora.");
-  }
-
-  if (hasAppointmentToConfirm) {
-    add(
-      "confirm-appointment",
-      "Agendamento pendente no contexto desta conversa."
-    );
-  }
-
-  if (hasServiceOrderNeedingUpdate) {
-    add("update-service", "O.S. ativa ou atrasada vinculada ao cliente.");
-  }
-
-  return recommended;
-}
-
-export function buildWhatsAppComposerActionGroups({
-  hasSuggestedAction,
-  hasPendingAssistedExecution = false,
-  hasOpenCharge = true,
-  hasPendingCharge = hasOpenCharge,
-  canSendPaymentLink = true,
-  chargeStatus = null,
-  chargeDaysOverdue = null,
-  hasUpcomingAppointment = true,
-  appointmentStatus = null,
-  hasActiveServiceOrder = true,
-  serviceOrderStatus = null,
-  canResolveConversation = hasSuggestedAction,
-}: WhatsAppComposerActionContext): WhatsAppComposerActionPalette {
-  const groupedActions: Record<
-    ComposerActionGroupName,
-    ComposerActionDescriptor[]
-  > = {
-    Comunicação: [
-      {
-        key: "quick-template",
-        label: "Template rápido",
-        group: "Comunicação",
-        groupId: "communication",
-        description: "Preencher uma resposta padronizada.",
-      },
-      {
-        key: "attach-file",
-        label: "Anexar arquivo",
-        group: "Comunicação",
-        groupId: "communication",
-        description: "Enviar mídia ou documento nesta conversa.",
-        disabled: true,
-        reason: "Em breve",
-        availability: "upcoming",
-      },
-      {
-        key: "audio-message",
-        label: "Áudio / mensagem de voz",
-        group: "Comunicação",
-        groupId: "communication",
-        description: "Gravar ou enviar áudio pelo WhatsApp.",
-        disabled: true,
-        reason: "Em breve",
-        availability: "upcoming",
-      },
-    ],
-    Financeiro: [
-      {
-        key: "send-charge",
-        label: "Enviar cobrança",
-        group: "Financeiro",
-        groupId: "finance",
-        description: "Enviar a cobrança aberta do cliente.",
-        disabled: !hasOpenCharge,
-        reason: hasOpenCharge ? undefined : "Sem cobrança",
-      },
-      {
-        key: "send-payment-link",
-        label: "Enviar link de pagamento",
-        group: "Financeiro",
-        groupId: "finance",
-        description: "Compartilhar o checkout já disponível.",
-        disabled: !hasOpenCharge || !canSendPaymentLink,
-        reason: !hasOpenCharge
-          ? "Sem cobrança"
-          : canSendPaymentLink
-            ? undefined
-            : "Sem link",
-      },
-      {
-        key: "payment-reminder",
-        label: "Lembrete de pagamento",
-        group: "Financeiro",
-        groupId: "finance",
-        description: "Preparar lembrete com dados da cobrança.",
-        disabled: !hasOpenCharge,
-        reason: hasOpenCharge ? undefined : "Sem cobrança",
-      },
-    ],
-    Agenda: [
-      {
-        key: "confirm-appointment",
-        label: "Confirmar agendamento",
-        group: "Agenda",
-        groupId: "agenda",
-        description: "Preencher confirmação com data e horário.",
-        disabled: !hasUpcomingAppointment,
-        reason: hasUpcomingAppointment ? undefined : "Sem agenda",
-      },
-      {
-        key: "appointment-reminder",
-        label: "Lembrete de agendamento",
-        group: "Agenda",
-        groupId: "agenda",
-        description: "Preparar lembrete do próximo atendimento.",
-        disabled: !hasUpcomingAppointment,
-        reason: hasUpcomingAppointment ? undefined : "Sem agenda",
-      },
-    ],
-    "Ordem de serviço": [
-      {
-        key: "update-service",
-        label: "Atualizar serviço",
-        group: "Ordem de serviço",
-        groupId: "serviceOrder",
-        description: "Preencher status da O.S. ativa.",
-        disabled: !hasActiveServiceOrder,
-        reason: hasActiveServiceOrder ? undefined : "Sem O.S.",
-      },
-      {
-        key: "link-service-order",
-        label: "Vincular O.S.",
-        group: "Ordem de serviço",
-        groupId: "serviceOrder",
-        description: "Abrir a O.S. ativa ou localizar cadastro.",
-        disabled: !hasActiveServiceOrder,
-        reason: hasActiveServiceOrder ? undefined : "Sem O.S.",
-      },
-    ],
-    "Execução assistida": [
-      {
-        key: "create-assisted-execution",
-        label: hasPendingAssistedExecution
-          ? "Revisar execução assistida"
-          : "Criar execução assistida",
-        group: "Execução assistida",
-        groupId: "execution",
-        description: hasPendingAssistedExecution
-          ? "Abrir workflow pendente desta conversa."
-          : "Revisar e aprovar a ação sugerida.",
-        disabled: !hasSuggestedAction && !hasPendingAssistedExecution,
-        reason:
-          hasSuggestedAction || hasPendingAssistedExecution
-            ? undefined
-            : "Sem ação sugerida",
-      },
-      {
-        key: "mark-resolved",
-        label: "Marcar conversa como resolvida",
-        group: "Execução assistida",
-        groupId: "execution",
-        description: "Encerrar esta conversa via execução assistida.",
-        disabled: !canResolveConversation,
-        reason: canResolveConversation ? undefined : "Conversa resolvida",
-      },
-    ],
-  };
-
-  const recommendedActions = getRecommendedWhatsAppComposerActions(
-    {
-      hasSuggestedAction,
-      hasPendingAssistedExecution,
-      hasOpenCharge,
-      hasPendingCharge,
-      canSendPaymentLink,
-      chargeStatus,
-      chargeDaysOverdue,
-      hasUpcomingAppointment,
-      appointmentStatus,
-      hasActiveServiceOrder,
-      serviceOrderStatus,
-      canResolveConversation,
-    },
-    groupedActions
-  );
-  const recommendedKeys = new Set(recommendedActions.map(action => action.key));
-  const allActions = Object.values(groupedActions).flat();
-  const fallbackPrimaryAction = allActions.find(
-    action =>
-      action.key === "quick-template" && !recommendedKeys.has(action.key)
-  );
-  const primaryActions = recommendedActions.length
-    ? recommendedActions
-    : fallbackPrimaryAction
-      ? [
-          {
-            ...fallbackPrimaryAction,
-            availability: "primary" as const,
-            description:
-              "Começar com uma resposta padronizada ou mensagem livre.",
-          },
-        ]
-      : [];
-  const primaryKeys = new Set(primaryActions.map(action => action.key));
-  const contextualActions = allActions.filter(
-    action => !primaryKeys.has(action.key)
-  );
-
-  return {
-    primaryActions,
-    secondaryActions: contextualActions
-      .filter(action => !action.disabled)
-      .map(action => ({ ...action, availability: "secondary" as const })),
-    unavailableActions: contextualActions
-      .filter(action => action.disabled && action.availability !== "upcoming")
-      .map(action => ({ ...action, availability: "unavailable" as const })),
-    upcomingActions: contextualActions
-      .filter(action => action.availability === "upcoming")
-      .map(action => ({ ...action, availability: "upcoming" as const })),
-    recommendedActions,
-    groupedActions,
-  };
 }
 
 type Customer = {
@@ -524,8 +227,14 @@ type Conversation = {
   lastMessageAt?: string | null;
   status: WhatsAppConversationStatus;
   contextType: ContextType;
-  priority: WhatsAppPriority;
-  governanceSignal?: GovernanceSignal | null;
+  priority: WhatsAppPriority | null;
+  priorityReason?: string | null;
+  inboxPosition?: number | null;
+  governanceSignal?: {
+    communicationFailure?: boolean;
+    failedMessageCount?: number;
+    lastFailedAt?: string | null;
+  } | null;
   failedMessageCount?: number;
   lastFailedAt?: string | null;
   hasNoResponse?: boolean;
@@ -582,9 +291,18 @@ export type WhatsAppContext = {
   suggestedAction?: {
     type?: string;
     label?: string;
+    reason?: string;
     entityType?: string;
     entityId?: string | null;
   } | null;
+  officialActions?: OfficialComposerAction[];
+  governanceSignal?: {
+    communicationFailure?: boolean;
+    failedMessageCount?: number;
+    lastFailedAt?: string | null;
+  } | null;
+  evaluatedAt?: string | null;
+  governanceAlert?: string | null;
 };
 
 const FILTERS: Array<{
@@ -694,45 +412,13 @@ export function getMessageDeliveryPresentation(message: ChatMessage) {
 }
 
 function mapConversation(item: any): Conversation {
-  const customerName = item?.customer?.name ?? item?.title ?? "Sem nome";
-  const hasPendingCharge = Boolean(item?.flags?.hasPendingCharge);
-  const hasUpcomingAppointment = Boolean(
-    item?.flags?.hasUpcomingAppointment ?? item?.contextType === "APPOINTMENT"
-  );
-  const hasActiveServiceOrder = Boolean(
-    item?.flags?.hasActiveServiceOrder ?? item?.contextType === "SERVICE_ORDER"
-  );
-  const governanceSignal = (item?.metadata?.governanceSignal ??
-    null) as GovernanceSignal | null;
-  const hasFailedDelivery =
-    item?.status === "FAILED" ||
-    Boolean(governanceSignal?.communicationFailure);
-  const hasNoResponse = Boolean(
-    item?.flags?.hasNoResponse ?? item?.status === "WAITING_CUSTOMER"
-  );
-  const operationalStatus = hasFailedDelivery
-    ? "Falha"
-    : hasNoResponse
-      ? "Aguardando resposta"
-      : hasPendingCharge || hasUpcomingAppointment || hasActiveServiceOrder
-        ? "Com pendência"
-        : "Resolvido";
-  const backendPriority =
-    item?.priority === "NORMAL" ? "MEDIUM" : item?.priority;
-  const priority =
-    backendPriority ??
-    resolveInboxPriority({
-      hasFailedDelivery,
-      hasPendingCharge,
-      isAwaitingReply: hasNoResponse,
-      isResolved: String(item?.status ?? "") === "RESOLVED",
-      governanceSignal,
-    });
+  const governanceSignal =
+    item?.governanceSignal ?? item?.metadata?.governanceSignal ?? null;
   return {
     id: String(item?.id ?? ""),
     conversationId: String(item?.id ?? ""),
     customerId: item?.customerId ?? item?.customer?.id ?? null,
-    name: String(customerName),
+    name: String(item?.customer?.name ?? item?.title ?? "Sem nome"),
     phone: item?.phone ?? item?.customer?.phone ?? null,
     title: item?.title ?? null,
     lastMessage: String(
@@ -741,34 +427,26 @@ function mapConversation(item: any): Conversation {
     lastMessageAt: item?.lastMessageAt ?? null,
     status: (item?.status ?? "OPEN") as WhatsAppConversationStatus,
     contextType: (item?.contextType ?? "GENERAL") as ContextType,
-    priority,
+    priority: item?.priority === "NORMAL" ? "MEDIUM" : (item?.priority ?? null),
+    priorityReason: item?.priorityReason ?? null,
+    inboxPosition: Number.isInteger(item?.inboxPosition)
+      ? item.inboxPosition
+      : null,
     unreadCount: Number(item?.unreadCount ?? 0),
     contextId: item?.contextId ?? null,
-    operationalStatus,
+    operationalStatus: item?.operationalStatus ?? "Não informado",
     contextHint: item?.title ?? item?.lastMessagePreview ?? null,
-    hasPendingCharge,
-    hasUpcomingAppointment,
-    hasActiveServiceOrder,
-    hasFailedDelivery,
+    hasPendingCharge: item?.flags?.hasPendingCharge === true,
+    hasUpcomingAppointment: item?.flags?.hasUpcomingAppointment === true,
+    hasActiveServiceOrder: item?.flags?.hasActiveServiceOrder === true,
+    hasFailedDelivery: item?.flags?.hasFailure === true,
     governanceSignal,
-    failedMessageCount: governanceSignal?.failedMessageCount ?? undefined,
+    failedMessageCount: item?.failedMessageCount,
     lastFailedAt: governanceSignal?.lastFailedAt ?? null,
-    hasNoResponse,
+    hasNoResponse: item?.flags?.hasNoResponse === true,
     isVirtual: false,
-    customer: item?.customer
-      ? {
-          id: item?.customer?.id ? String(item.customer.id) : undefined,
-          name: item?.customer?.name ? String(item.customer.name) : undefined,
-          phone: item?.customer?.phone
-            ? String(item.customer.phone)
-            : undefined,
-        }
-      : null,
-    responsibleName:
-      item?.assignedTo?.name ??
-      item?.responsible?.name ??
-      item?.responsibleName ??
-      null,
+    customer: item?.customer ?? null,
+    responsibleName: item?.ownership?.name ?? null,
   };
 }
 
@@ -865,12 +543,6 @@ function getOperationalStatus(conversation: Conversation) {
   return "Sem conversa ativa";
 }
 
-function priorityScore(conversation: Conversation) {
-  if (!conversation.conversationId) return 900;
-  const rank = priorityRank(conversation.priority as InboxPriority);
-  return rank * 100;
-}
-
 function getConversationBadges(conversation: Conversation) {
   const badges: string[] = [];
   if (conversation.hasFailedDelivery) badges.push("Falha");
@@ -900,98 +572,23 @@ function getPriorityLabel(priority?: WhatsAppPriority | null) {
   if (priority === "CRITICAL") return "Crítica";
   if (priority === "HIGH") return "Alta";
   if (priority === "MEDIUM") return "Média";
-  return "Baixa";
+  if (priority === "LOW") return "Baixa";
+  return "Não classificada";
 }
 
-function getPrimaryCommunicationAction(conversation?: Conversation | null) {
-  if (!conversation) return "Selecionar conversa";
-  if (!conversation.phone) return "Bloqueado: sem telefone";
-  if (conversation.hasFailedDelivery) return "Reenviar falha";
-  if (conversation.hasPendingCharge) return "Enviar cobrança";
-  if (conversation.hasUpcomingAppointment) return "Confirmar agenda";
-  if (conversation.hasActiveServiceOrder) return "Atualizar O.S.";
-  if (conversation.status !== "RESOLVED") return "Resolver conversa";
-  return "Acompanhar histórico";
-}
-
-function buildSuggestedAction(
-  conversation?: Conversation,
-  context?: WhatsAppContext | null
-) {
-  if (!conversation) return null;
-  if (conversation.hasFailedDelivery)
-    return { key: "retry", label: "Reenviar mensagem" };
-  if (conversation.hasPendingCharge && conversation.hasNoResponse) {
-    return {
-      key: "charge",
-      label: context?.openCharge?.paymentLink
-        ? "Enviar link de pagamento"
-        : "Enviar lembrete de cobrança",
-      executableAction: (context?.openCharge?.paymentLink
-        ? "SEND_PAYMENT_LINK"
-        : "REPLY_WITH_TEMPLATE") as WhatsAppSuggestedAction,
-    };
-  }
-  if (
-    context?.nextAppointment?.id &&
-    String(context?.nextAppointment?.status ?? "").toUpperCase() !== "CONFIRMED"
-  ) {
-    return {
-      key: "appointment",
-      label: "Confirmar agendamento",
-      executableAction: "CONFIRM_APPOINTMENT" as WhatsAppSuggestedAction,
-    };
-  }
-  if (context?.activeServiceOrder?.id) {
-    return {
-      key: "service",
-      label: "Enviar atualização da O.S.",
-      executableAction: "SEND_SERVICE_UPDATE" as WhatsAppSuggestedAction,
-    };
-  }
-  return {
-    key: "resolve",
-    label: "Marcar conversa como resolvida",
-    executableAction: "MARK_RESOLVED" as WhatsAppSuggestedAction,
-  };
-}
-
-function buildActionPayload(
-  action: WhatsAppSuggestedAction,
-  context?: WhatsAppContext | null
-) {
-  const entity = resolveEntityFromContext(context);
-  return {
-    entityType: entity.entityType,
-    entityId: entity.entityId,
-    customerName: context?.customer?.name,
-    paymentLink: context?.openCharge?.paymentLink,
-    chargeAmount: context?.openCharge?.amount,
-    chargeDueDate: context?.openCharge?.dueDate,
-    appointmentDate: context?.nextAppointment?.scheduledAt,
-    appointmentTime: context?.nextAppointment?.scheduledAt,
-    serviceOrderNumber: context?.activeServiceOrder?.number,
-    templateKey:
-      action === "REPLY_WITH_TEMPLATE"
-        ? context?.openCharge?.id
-          ? "payment_reminder"
-          : "manual_followup"
-        : undefined,
-  };
-}
-
-function timeAgoLabel(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const minutes = Math.max(
-    1,
-    Math.floor((Date.now() - date.getTime()) / 60000)
+function getOfficialSuggestedAction(context?: WhatsAppContext | null) {
+  const primary = context?.officialActions?.find(
+    action => action.availability === "primary"
   );
-  if (minutes < 60) return `${minutes} min atrás`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h atrás`;
-  return `${Math.floor(hours / 24)}d atrás`;
+  if (!primary?.action) return null;
+  return {
+    key: primary.key,
+    label: primary.label,
+    reason: primary.reason,
+    executableAction: primary.action,
+    target: primary.target ?? null,
+    logicalKey: primary.logicalKey ?? null,
+  };
 }
 
 function buildTemplateText(template: string, context?: WhatsAppContext | null) {
@@ -1338,17 +935,7 @@ function ExecutionChatColumn({
   onRequestSuggestedExecution,
   onResolveConversation,
   onReviewAssistedExecution,
-  hasOpenCharge,
-  hasPendingCharge,
-  canSendPaymentLink,
-  chargeStatus,
-  chargeDaysOverdue,
-  hasUpcomingAppointment,
-  appointmentStatus,
-  hasActiveServiceOrder,
-  serviceOrderStatus,
-  canResolveConversation,
-  hasPendingAssistedExecution,
+  officialActions,
   suggestedActionLabel,
   governanceAlert,
   onRunSuggestedAction,
@@ -1376,17 +963,7 @@ function ExecutionChatColumn({
   onRequestSuggestedExecution: () => void;
   onResolveConversation: () => void;
   onReviewAssistedExecution: () => void;
-  hasOpenCharge: boolean;
-  hasPendingCharge: boolean;
-  canSendPaymentLink: boolean;
-  chargeStatus?: string | null;
-  chargeDaysOverdue?: number | null;
-  hasUpcomingAppointment: boolean;
-  appointmentStatus?: string | null;
-  hasActiveServiceOrder: boolean;
-  serviceOrderStatus?: string | null;
-  canResolveConversation: boolean;
-  hasPendingAssistedExecution: boolean;
+  officialActions: OfficialComposerAction[];
   suggestedActionLabel?: string | null;
   governanceAlert?: string | null;
   onRunSuggestedAction: () => void;
@@ -1408,20 +985,7 @@ function ExecutionChatColumn({
       upcomingActions,
       recommendedActions,
       groupedActions,
-    } = buildWhatsAppComposerActionGroups({
-      hasSuggestedAction: Boolean(suggestedActionLabel),
-      hasPendingAssistedExecution,
-      hasOpenCharge,
-      hasPendingCharge,
-      canSendPaymentLink,
-      chargeStatus,
-      chargeDaysOverdue,
-      hasUpcomingAppointment,
-      appointmentStatus,
-      hasActiveServiceOrder,
-      serviceOrderStatus,
-      canResolveConversation,
-    });
+    } = presentOfficialWhatsAppActions(officialActions);
     const iconByKey: Record<string, ReactNode> = {
       "quick-template": <MessageCircleMore className="size-4" />,
       "attach-file": <Paperclip className="size-4" />,
@@ -1450,9 +1014,8 @@ function ExecutionChatColumn({
       "update-service": () =>
         onFillTemplate("Atualização de O.S.", "SERVICE_UPDATE"),
       "link-service-order": onOpenServiceOrder,
-      "create-assisted-execution": hasPendingAssistedExecution
-        ? onReviewAssistedExecution
-        : onRequestSuggestedExecution,
+      "review-assisted-execution": onReviewAssistedExecution,
+      "create-assisted-execution": onRequestSuggestedExecution,
       "mark-resolved": onResolveConversation,
     };
     const withRuntime = (
@@ -1478,16 +1041,7 @@ function ExecutionChatColumn({
       ) as Record<ComposerActionGroupName, WhatsAppComposerAction[]>,
     };
   }, [
-    appointmentStatus,
-    canResolveConversation,
-    canSendPaymentLink,
-    chargeDaysOverdue,
-    chargeStatus,
-    hasActiveServiceOrder,
-    hasOpenCharge,
-    hasPendingAssistedExecution,
-    hasPendingCharge,
-    hasUpcomingAppointment,
+    officialActions,
     onFillTemplate,
     onOpenServiceOrder,
     onRequestSuggestedExecution,
@@ -1495,8 +1049,6 @@ function ExecutionChatColumn({
     onReviewAssistedExecution,
     onSendCharge,
     onSendPaymentReminder,
-    serviceOrderStatus,
-    suggestedActionLabel,
   ]);
 
   const renderComposerAction = (
@@ -1703,7 +1255,7 @@ function ExecutionChatColumn({
         </div>
       </header>
 
-      {suggestedActionLabel || governanceAlert ? (
+      {hasConversation ? (
         <div className="mx-5 mt-3 rounded-xl border border-[color-mix(in_srgb,var(--warning)_18%,transparent)] bg-[color-mix(in_srgb,var(--warning)_10%,var(--app-surface))] px-3 py-2 text-xs">
           {suggestedActionLabel ? (
             <button
@@ -1713,7 +1265,11 @@ function ExecutionChatColumn({
             >
               {suggestedActionLabel}
             </button>
-          ) : null}
+          ) : (
+            <span className="font-medium text-app-muted">
+              Sem recomendação oficial
+            </span>
+          )}
           {governanceAlert ? (
             <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
               {governanceAlert}
@@ -2398,7 +1954,7 @@ export default function WhatsAppPage() {
             lastMessageAt: null,
             status: "OPEN",
             contextType: "GENERAL",
-            priority: "LOW",
+            priority: null,
             unreadCount: 0,
             contextId: String(customer.id),
             operationalStatus: "Sem conversa ativa",
@@ -2444,7 +2000,7 @@ export default function WhatsAppPage() {
       lastMessageAt: null,
       status: "OPEN",
       contextType: "GENERAL",
-      priority: "LOW",
+      priority: null,
       unreadCount: 0,
       contextId: String(customer.id),
       operationalStatus: "Sem conversa ativa",
@@ -2493,44 +2049,36 @@ export default function WhatsAppPage() {
   );
   const filteredRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
-    return allInboxRows
-      .filter(item => {
-        const searchable = [
-          item.customer?.name ?? item.name,
-          item.customer?.phone ?? item.phone ?? "",
-          item.title ?? "",
-          item.phone ?? "",
-          item.lastMessage,
-          item.contextHint ?? "",
-          item.operationalStatus ?? "",
-        ]
-          .join(" ")
-          .toLowerCase();
-        const matchesSearch = !query || searchable.includes(query);
-        if (!matchesSearch) return false;
-        if (priorityFilter !== "ALL" && item.priority !== priorityFilter)
-          return false;
-        if (responsibleFilter === "UNASSIGNED" && item.responsibleName)
-          return false;
-        if (
-          responsibleFilter !== "ALL" &&
-          responsibleFilter !== "UNASSIGNED" &&
-          item.responsibleName !== responsibleFilter
-        )
-          return false;
-        if (activeFilter === "all") return true;
-        if (activeFilter === "waiting_customer")
-          return item.status === "WAITING_CUSTOMER";
-        if (activeFilter === "resolved") return item.status === "RESOLVED";
-        return true;
-      })
-      .sort((a, b) => {
-        const scoreDiff = priorityScore(a) - priorityScore(b);
-        if (scoreDiff !== 0) return scoreDiff;
-        const aDate = new Date(a.lastMessageAt ?? 0).getTime();
-        const bDate = new Date(b.lastMessageAt ?? 0).getTime();
-        return bDate - aDate;
-      });
+    return allInboxRows.filter(item => {
+      const searchable = [
+        item.customer?.name ?? item.name,
+        item.customer?.phone ?? item.phone ?? "",
+        item.title ?? "",
+        item.phone ?? "",
+        item.lastMessage,
+        item.contextHint ?? "",
+        item.operationalStatus ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = !query || searchable.includes(query);
+      if (!matchesSearch) return false;
+      if (priorityFilter !== "ALL" && item.priority !== priorityFilter)
+        return false;
+      if (responsibleFilter === "UNASSIGNED" && item.responsibleName)
+        return false;
+      if (
+        responsibleFilter !== "ALL" &&
+        responsibleFilter !== "UNASSIGNED" &&
+        item.responsibleName !== responsibleFilter
+      )
+        return false;
+      if (activeFilter === "all") return true;
+      if (activeFilter === "waiting_customer")
+        return item.status === "WAITING_CUSTOMER";
+      if (activeFilter === "resolved") return item.status === "RESOLVED";
+      return true;
+    });
   }, [
     activeFilter,
     allInboxRows,
@@ -2831,69 +2379,13 @@ export default function WhatsAppPage() {
       null,
     [queryServiceOrderId, selectedCustomer?.id, serviceOrders]
   );
-  const context = useMemo(() => {
-    if (selectedConversationRecordId)
-      return (contextQuery.data ?? null) as WhatsAppContext | null;
-    if (selectedCustomer) {
-      return {
-        customer: {
-          id: String(selectedCustomer.id),
-          name: String(
-            selectedCustomer.name ?? selectedConversation?.name ?? "Sem nome"
-          ),
-          phone: selectedCustomer.phone
-            ? String(selectedCustomer.phone)
-            : undefined,
-        },
-        nextAppointment: selectedCustomerAppointment
-          ? {
-              id: String(selectedCustomerAppointment.id),
-              scheduledAt:
-                selectedCustomerAppointment.startsAt ??
-                selectedCustomerAppointment.scheduledAt,
-              status: selectedCustomerAppointment.status,
-              serviceName: selectedCustomerAppointment.serviceName ?? null,
-            }
-          : null,
-        activeServiceOrder: selectedCustomerServiceOrder
-          ? {
-              id: String(selectedCustomerServiceOrder.id),
-              number: selectedCustomerServiceOrder.number
-                ? String(selectedCustomerServiceOrder.number)
-                : null,
-              status: selectedCustomerServiceOrder.status,
-              technician: selectedCustomerServiceOrder.technicianName ?? null,
-            }
-          : null,
-        openCharge: selectedCustomerCharge
-          ? {
-              id: String(selectedCustomerCharge.id),
-              amount: Number(
-                selectedCustomerCharge.amountCents ??
-                  selectedCustomerCharge.amount ??
-                  0
-              ),
-              dueDate: selectedCustomerCharge.dueDate,
-              status: selectedCustomerCharge.status,
-              paymentLink: selectedCustomerCharge.paymentLink ?? null,
-            }
-          : null,
-      } as WhatsAppContext;
-    }
-    return null;
-  }, [
-    contextQuery.data,
-    selectedConversation?.name,
-    selectedConversationRecordId,
-    selectedCustomer,
-    selectedCustomerAppointment,
-    selectedCustomerCharge,
-    selectedCustomerServiceOrder,
-  ]);
+  const context = selectedConversationRecordId
+    ? ((contextQuery.data ?? null) as WhatsAppContext | null)
+    : null;
 
   const suggestedAction = useMemo(
-    () => buildSuggestedAction(selectedConversation, context),
-    [context, selectedConversation]
+    () => getOfficialSuggestedAction(context),
+    [context]
   );
 
   const refreshExecutionState = useCallback(async () => {
@@ -2998,11 +2490,13 @@ export default function WhatsAppPage() {
         conversationId: selectedConversationRecordId,
         suggestedAction: suggestedAction.executableAction,
         executionReason: suggestedAction.label,
-        actionPayload: buildActionPayload(
-          suggestedAction.executableAction,
-          context
-        ),
-        idempotencyKey: `whatsapp-ui:${selectedConversationRecordId}:${suggestedAction.executableAction}:${context?.openCharge?.id ?? context?.nextAppointment?.id ?? context?.activeServiceOrder?.id ?? context?.customer?.id ?? "general"}`,
+        actionPayload: suggestedAction.target
+          ? {
+              entityType: suggestedAction.target.entityType,
+              entityId: suggestedAction.target.entityId,
+            }
+          : undefined,
+        idempotencyKey: suggestedAction.logicalKey ?? undefined,
       })) as WhatsAppActionExecution;
       await refreshExecutionState();
       if (execution.status === "PENDING_APPROVAL") {
@@ -3022,24 +2516,32 @@ export default function WhatsAppPage() {
   ]);
 
   const handleResolveConversationExecution = useCallback(async () => {
-    if (!selectedConversationRecordId) {
-      toast.message("Selecione uma conversa ativa para resolver.");
+    const action = context?.officialActions?.find(
+      item => item.action === "MARK_RESOLVED" && !item.disabled
+    );
+    if (!selectedConversationRecordId || !action?.logicalKey) {
+      toast.message("A resolução não está disponível no contrato oficial.");
       return;
     }
     try {
       const execution = (await requestExecutionMutation.mutateAsync({
         conversationId: selectedConversationRecordId,
         suggestedAction: "MARK_RESOLVED",
-        executionReason: "Marcar conversa como resolvida",
-        actionPayload: buildActionPayload("MARK_RESOLVED", context),
-        idempotencyKey: `whatsapp-ui:${selectedConversationRecordId}:MARK_RESOLVED:${context?.customer?.id ?? "conversation"}`,
+        executionReason: action.reason ?? action.label,
+        actionPayload: action.target
+          ? {
+              entityType: action.target.entityType,
+              entityId: action.target.entityId,
+            }
+          : undefined,
+        idempotencyKey: action.logicalKey,
       })) as WhatsAppActionExecution;
       await refreshExecutionState();
-      if (execution.status === "PENDING_APPROVAL") {
-        toast.success("Workflow de resolução criado e aguardando aprovação.");
-        return;
-      }
-      toast.success("Conversa marcada para resolução com segurança.");
+      toast.success(
+        execution.status === "PENDING_APPROVAL"
+          ? "Workflow de resolução aguardando aprovação."
+          : "Workflow de resolução atualizado."
+      );
     } catch (error: any) {
       toast.error(error?.message ?? "Falha ao criar workflow de resolução.");
     }
@@ -3057,22 +2559,7 @@ export default function WhatsAppPage() {
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  const governanceAlert = useMemo(() => {
-    if (!selectedConversation) return null;
-    if (
-      !selectedConversation.governanceSignal?.communicationFailure &&
-      !selectedConversation.hasFailedDelivery
-    )
-      return null;
-    const parts = ["Sinal de governança: falha de comunicação"];
-    if ((selectedConversation.failedMessageCount ?? 0) > 1)
-      parts.push(
-        `${selectedConversation.failedMessageCount} falhas acumuladas`
-      );
-    const failedAgo = timeAgoLabel(selectedConversation.lastFailedAt);
-    if (failedAgo) parts.push(`última falha ${failedAgo}`);
-    return parts.join(" • ");
-  }, [selectedConversation]);
+  const governanceAlert = context?.governanceAlert ?? null;
 
   const destinationPhone = useMemo(
     () =>
@@ -3437,22 +2924,7 @@ export default function WhatsAppPage() {
               void handleResolveConversationExecution()
             }
             onReviewAssistedExecution={handleReviewAssistedExecution}
-            hasOpenCharge={Boolean(context?.openCharge?.id)}
-            hasPendingCharge={Boolean(
-              context?.openCharge?.id || selectedConversation?.hasPendingCharge
-            )}
-            canSendPaymentLink={Boolean(context?.openCharge?.paymentLink)}
-            chargeStatus={context?.openCharge?.status ?? null}
-            chargeDaysOverdue={context?.openCharge?.daysOverdue ?? null}
-            hasUpcomingAppointment={Boolean(context?.nextAppointment?.id)}
-            appointmentStatus={context?.nextAppointment?.status ?? null}
-            hasActiveServiceOrder={Boolean(context?.activeServiceOrder?.id)}
-            serviceOrderStatus={context?.activeServiceOrder?.status ?? null}
-            canResolveConversation={
-              Boolean(selectedConversationRecordId) &&
-              selectedConversation?.status !== "RESOLVED"
-            }
-            hasPendingAssistedExecution={pendingApprovals.length > 0}
+            officialActions={context?.officialActions ?? []}
             suggestedActionLabel={suggestedAction?.label ?? null}
             governanceAlert={governanceAlert}
             onRunSuggestedAction={() => {
