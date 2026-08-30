@@ -33,6 +33,13 @@ export class DashboardController {
     return this.dashboard.getAlerts(orgId)
   }
 
+  @Get('executive-pipeline')
+  @UseGuards(ActiveUserGuard)
+  @Roles('ADMIN', 'OPERADOR', 'FINANCEIRO')
+  async getExecutivePipeline(@Org() orgId: string) {
+    return this.dashboard.getExecutivePipeline(orgId)
+  }
+
   /**
    * GET /dashboard/revenue
    * Retorna dados de faturamento por período (últimos 12 meses)

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MemoryCacheService } from '../common/cache/memory-cache.service'
 import { GovernanceReadService } from '../governance/governance-read.service'
+import type { ExecutivePipelineContract, ExecutivePipelineStage } from './executive-pipeline.contract'
 
 const CACHE_TTL_METRICS = 300_000 // 5 minutos
 const CACHE_TTL_CHARTS = 900_000 // 15 minutos
@@ -19,6 +20,60 @@ export class DashboardService {
     private readonly cache: MemoryCacheService,
     private readonly governanceRead: GovernanceReadService,
   ) {}
+
+  /**
+   * Returns facts and decisions separately. Entity records provide authoritative
+   * volumes, but the domain currently has no policy that classifies the health
+   * of an aggregate pipeline stage. Consequently every decision is explicitly
+   * unavailable instead of being reconstructed from counts or entity statuses.
+   */
+  async getExecutivePipeline(orgId: string): Promise<ExecutivePipelineContract> {
+    const [customers, appointments, serviceOrders, charges, payments] = await Promise.all([
+      this.prisma.customer.aggregate({
+        where: { orgId, active: true },
+        _count: { _all: true },
+        _max: { updatedAt: true },
+      }),
+      this.prisma.appointment.aggregate({
+        where: { orgId },
+        _count: { _all: true },
+        _max: { updatedAt: true },
+      }),
+      this.prisma.serviceOrder.aggregate({
+        where: { orgId },
+        _count: { _all: true },
+        _max: { updatedAt: true },
+      }),
+      this.prisma.charge.aggregate({
+        where: { orgId },
+        _count: { _all: true },
+        _max: { updatedAt: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: { orgId },
+        _count: { _all: true },
+        _max: { paidAt: true },
+      }),
+    ])
+
+    const unavailableReason =
+      'Não existe política canônica para classificar o estado agregado desta etapa; o volume factual não determina normalidade, risco, bloqueio ou conclusão.'
+    const stage = (
+      input: Omit<ExecutivePipelineStage, 'state' | 'reason'>,
+    ): ExecutivePipelineStage => ({ ...input, state: 'unavailable', reason: unavailableReason })
+    const timestamp = (value: Date | null) => value?.toISOString() ?? null
+
+    return {
+      generatedAt: new Date().toISOString(),
+      stages: [
+        stage({ key: 'customers', label: 'Cliente', volume: customers._count._all, evidence: { source: 'CUSTOMER', description: 'Clientes ativos armazenados para o tenant autenticado.' }, referenceTimestamp: timestamp(customers._max.updatedAt), navigationTarget: '/customers' }),
+        stage({ key: 'appointments', label: 'Agendamento', volume: appointments._count._all, evidence: { source: 'APPOINTMENT', description: 'Agendamentos armazenados para o tenant autenticado.' }, referenceTimestamp: timestamp(appointments._max.updatedAt), navigationTarget: '/appointments' }),
+        stage({ key: 'service-orders', label: 'O.S.', volume: serviceOrders._count._all, evidence: { source: 'SERVICE_ORDER', description: 'Ordens de serviço armazenadas para o tenant autenticado.' }, referenceTimestamp: timestamp(serviceOrders._max.updatedAt), navigationTarget: '/service-orders' }),
+        stage({ key: 'charges', label: 'Cobrança', volume: charges._count._all, evidence: { source: 'CHARGE', description: 'Cobranças armazenadas para o tenant autenticado.' }, referenceTimestamp: timestamp(charges._max.updatedAt), navigationTarget: '/finances?view=charges' }),
+        stage({ key: 'payments', label: 'Pagamento', volume: payments._count._all, evidence: { source: 'PAYMENT', description: 'Pagamentos armazenados para o tenant autenticado.' }, referenceTimestamp: timestamp(payments._max.paidAt), navigationTarget: '/finances?view=paid' }),
+      ],
+    }
+  }
 
   async getMetrics(orgId: string) {
     return this.cache.getOrSet(

@@ -29,6 +29,7 @@ describe('DashboardController read authorization', () => {
   const dashboard = {
     getMetrics: jest.fn().mockResolvedValue({ ok: true }),
     getAlerts: jest.fn().mockResolvedValue({ ok: true }),
+    getExecutivePipeline: jest.fn().mockResolvedValue({ generatedAt: new Date().toISOString(), stages: [] }),
   }
   const prisma = {
     user: {
@@ -55,25 +56,30 @@ describe('DashboardController read authorization', () => {
   afterEach(() => jest.clearAllMocks())
   afterAll(() => app.close())
 
-  it.each(['/dashboard/metrics', '/dashboard/alerts'])('%s rejeita visitante sem chamar o service', async (path) => {
+  it.each(['/dashboard/metrics', '/dashboard/alerts', '/dashboard/executive-pipeline'])('%s rejeita visitante sem chamar o service', async (path) => {
     await request(app.getHttpServer()).get(path).expect(401)
     expect(dashboard.getMetrics).not.toHaveBeenCalled()
     expect(dashboard.getAlerts).not.toHaveBeenCalled()
+    expect(dashboard.getExecutivePipeline).not.toHaveBeenCalled()
   })
 
-  it.each(['/dashboard/metrics', '/dashboard/alerts'])('%s rejeita role desconhecida e usuário inativo', async (path) => {
+  it.each(['/dashboard/metrics', '/dashboard/alerts', '/dashboard/executive-pipeline'])('%s rejeita role desconhecida e usuário inativo', async (path) => {
     await request(app.getHttpServer()).get(path).set('x-test-role', 'UNKNOWN').expect(403)
     await request(app.getHttpServer()).get(path).set('x-test-role', 'ADMIN').set('x-test-active', 'false').expect(403)
     expect(dashboard.getMetrics).not.toHaveBeenCalled()
     expect(dashboard.getAlerts).not.toHaveBeenCalled()
+    expect(dashboard.getExecutivePipeline).not.toHaveBeenCalled()
   })
 
   it.each(roles)('permite %s nas duas leituras e ignora orgId do navegador', async (role) => {
     await request(app.getHttpServer()).get('/dashboard/metrics?orgId=org-b').set('x-test-role', role).expect(200)
     await request(app.getHttpServer()).get('/dashboard/alerts?orgId=org-b').set('x-test-role', role).expect(200)
+    await request(app.getHttpServer()).get('/dashboard/executive-pipeline?orgId=org-b&state=done').set('x-test-role', role).expect(200)
     expect(dashboard.getMetrics).toHaveBeenCalledWith('org-a')
     expect(dashboard.getAlerts).toHaveBeenCalledWith('org-a')
+    expect(dashboard.getExecutivePipeline).toHaveBeenCalledWith('org-a')
     expect(dashboard.getMetrics).not.toHaveBeenCalledWith('org-b')
     expect(dashboard.getAlerts).not.toHaveBeenCalledWith('org-b')
+    expect(dashboard.getExecutivePipeline).not.toHaveBeenCalledWith('org-b')
   })
 })

@@ -66,6 +66,32 @@ const nextBestActionSchema = z.object({
 
 const nonnegativeInteger = z.number().int().nonnegative();
 const nullableDate = z.string().nullable();
+const executivePipelineSchema = z
+  .object({
+    generatedAt: z.string().datetime(),
+    stages: z.array(
+      z.object({
+        key: z.enum(["customers", "appointments", "service-orders", "charges", "payments"]),
+        label: z.string(),
+        state: z.enum(["done", "active", "warning", "blocked", "idle", "unavailable"]),
+        volume: nonnegativeInteger,
+        reason: z.string().min(1),
+        evidence: z.object({
+          source: z.enum(["CUSTOMER", "APPOINTMENT", "SERVICE_ORDER", "CHARGE", "PAYMENT"]),
+          description: z.string().min(1),
+        }).strict(),
+        referenceTimestamp: z.string().datetime().nullable(),
+        navigationTarget: z.string().startsWith("/"),
+      }).strict()
+    ).length(5),
+  })
+  .strict()
+  .superRefine((contract, ctx) => {
+    const expected = ["customers", "appointments", "service-orders", "charges", "payments"];
+    contract.stages.forEach((stage, index) => {
+      if (stage.key !== expected[index]) ctx.addIssue({ code: "custom", path: ["stages", index, "key"], message: "Ordem canônica do pipeline inválida" });
+    });
+  });
 const customerSummarySchema = z
   .object({
     id: z.string(),
@@ -340,6 +366,13 @@ export const dashboardRouter = router({
       method: "GET",
     });
     return dashboardAlertsSchema.parse(raw);
+  }),
+
+  executivePipeline: protectedProcedure.query(async ({ ctx }) => {
+    const raw = await nexoFetch<unknown>(ctx, `/dashboard/executive-pipeline`, {
+      method: "GET",
+    });
+    return executivePipelineSchema.parse(raw);
   }),
 
   operationalState: protectedProcedure.query(async ({ ctx }) => {
