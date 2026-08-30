@@ -2877,6 +2877,7 @@ html {
       0 0 0 1px color-mix(in srgb, var(--accent-primary) 28%, transparent),
       0 18px 38px color-mix(in srgb, var(--accent-primary) 14%, transparent);
     --app-overlay-bg: #fbfdff;
+    --app-overlay-scrim: rgba(15, 23, 42, 0.38);
     --app-overlay-surface: #f5f8fc;
     --app-overlay-border: rgba(70, 102, 136, 0.3);
     --app-overlay-shadow: 0 20px 48px rgba(17, 40, 68, 0.16);
@@ -2944,10 +2945,28 @@ html {
       0 0 0 1px color-mix(in srgb, var(--accent-primary) 36%, transparent),
       0 24px 54px color-mix(in srgb, var(--accent-primary) 18%, transparent);
     --app-overlay-bg: #111d2e;
+    --app-overlay-scrim: rgba(2, 6, 23, 0.74);
     --app-overlay-surface: #152036;
     --app-overlay-border: rgba(139, 156, 192, 0.26);
     --app-overlay-shadow: 0 24px 60px rgba(2, 6, 23, 0.55);
     --app-overlay-text: #f0f4ff;
+  }
+
+  /* Official internal-app rhythm. Components consume these semantic scales;
+     pages must not introduce a private density or radius system. */
+  .app-root {
+    --app-space-1: 0.25rem;
+    --app-space-2: 0.5rem;
+    --app-space-3: 0.75rem;
+    --app-space-4: 1rem;
+    --app-space-5: 1.25rem;
+    --app-space-6: 1.5rem;
+    --app-radius-control: 0.625rem;
+    --app-radius-card: 0.75rem;
+    --app-radius-overlay: 1rem;
+    --app-control-height: 2.5rem;
+    --app-page-inline: clamp(1rem, 2.4vw, 2rem);
+    --app-page-max: 100rem;
   }
 
   .app-root,

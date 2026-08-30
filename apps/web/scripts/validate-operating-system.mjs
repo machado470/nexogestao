@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +17,39 @@ const pages = [
 
 const errors = [];
 const warnings = [];
+
+function walkSourceFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return walkSourceFiles(path);
+    return /\.(?:ts|tsx|css)$/.test(entry.name) ? [path] : [];
+  });
+}
+
+const clientSourceFiles = walkSourceFiles(join(root, "client/src"));
+for (const absoluteFile of clientSourceFiles) {
+  const file = absoluteFile.slice(root.length + 1);
+  const source = readFileSync(absoluteFile, "utf8");
+  if (
+    /from\s+["'](?:flowbite|flowbite-react)(?:\/[^"']*)?["']|@import\s+["'][^"']*flowbite/i.test(
+      source
+    )
+  ) {
+    errors.push(
+      `${file}: importação direta do Flowbite é proibida; use componentes Nexo.`
+    );
+  }
+  if (
+    file.includes("/pages/") &&
+    /fixed\s+inset-0[^"'`]{0,160}(?:role=["']dialog["']|aria-modal=["']true["'])/s.test(
+      source
+    )
+  ) {
+    errors.push(
+      `${file}: modal improvisado detectado; componha BaseModal, FormModal ou ConfirmModal.`
+    );
+  }
+}
 
 // Motores removidos após a auditoria transversal. Esses módulos reconstruíam
 // prioridade, risco, cooldown, automação ou próxima ação a partir de fatos crus.
@@ -38,16 +71,26 @@ const forbiddenParallelEngines = [
 
 for (const file of forbiddenParallelEngines) {
   if (existsSync(join(root, file))) {
-    errors.push(`${file}: motor operacional paralelo proibido foi reintroduzido.`);
+    errors.push(
+      `${file}: motor operacional paralelo proibido foi reintroduzido.`
+    );
   }
 }
 
-const mainLayoutSource = readFileSync(join(root, "client/src/components/MainLayout.tsx"), "utf8");
+const mainLayoutSource = readFileSync(
+  join(root, "client/src/components/MainLayout.tsx"),
+  "utf8"
+);
 if (/useAutomationRunner|GlobalActionEngine/.test(mainLayoutSource)) {
-  errors.push("client/src/components/MainLayout.tsx: execução ou decisão automática global no navegador é proibida.");
+  errors.push(
+    "client/src/components/MainLayout.tsx: execução ou decisão automática global no navegador é proibida."
+  );
 }
 
-const customerWorkspaceSource = readFileSync(join(root, "client/src/components/CustomerWorkspaceModal.tsx"), "utf8");
+const customerWorkspaceSource = readFileSync(
+  join(root, "client/src/components/CustomerWorkspaceModal.tsx"),
+  "utf8"
+);
 for (const pattern of [
   "useOperationalDecisions",
   "getCustomerSeverity",
@@ -55,11 +98,17 @@ for (const pattern of [
   "overdueCharges > 0",
 ]) {
   if (customerWorkspaceSource.includes(pattern)) {
-    errors.push(`client/src/components/CustomerWorkspaceModal.tsx: decisão local proibida (${pattern}).`);
+    errors.push(
+      `client/src/components/CustomerWorkspaceModal.tsx: decisão local proibida (${pattern}).`
+    );
   }
 }
-if (!customerWorkspaceSource.includes("customers.operationalSummary.useQuery")) {
-  errors.push("client/src/components/CustomerWorkspaceModal.tsx: contrato oficial customers.operationalSummary ausente.");
+if (
+  !customerWorkspaceSource.includes("customers.operationalSummary.useQuery")
+) {
+  errors.push(
+    "client/src/components/CustomerWorkspaceModal.tsx: contrato oficial customers.operationalSummary ausente."
+  );
 }
 
 // O contexto de autoridade do BFF vem exclusivamente da sessão encaminhada.
@@ -73,8 +122,14 @@ const bffAuthorityFiles = [
 ];
 for (const file of bffAuthorityFiles) {
   const source = readFileSync(join(root, file), "utf8");
-  if (/\.input\(z\.object\(\{[^}]*\b(?:orgId|organizationId|tenantId|role)\s*:/s.test(source)) {
-    errors.push(`${file}: contrato BFF aceita contexto de tenant ou autoridade fornecido pelo cliente.`);
+  if (
+    /\.input\(z\.object\(\{[^}]*\b(?:orgId|organizationId|tenantId|role)\s*:/s.test(
+      source
+    )
+  ) {
+    errors.push(
+      `${file}: contrato BFF aceita contexto de tenant ou autoridade fornecido pelo cliente.`
+    );
   }
 }
 
@@ -219,22 +274,17 @@ const forbiddenOperationalVisualPatterns = [
   "blur-",
 ];
 function hasDirectCardClass(source) {
-  const classNamePattern =
-    /className=[{]?["'`]([^"'`]*)["'`]/g;
+  const classNamePattern = /className=[{]?["'`]([^"'`]*)["'`]/g;
 
-  return Array.from(source.matchAll(classNamePattern)).some(
-    ([, className]) =>
-      className
-        .split(/\s+/)
-        .filter(Boolean)
-        .some(token => {
-          const baseToken =
-            token.split(":").at(-1) ?? token;
+  return Array.from(source.matchAll(classNamePattern)).some(([, className]) =>
+    className
+      .split(/\s+/)
+      .filter(Boolean)
+      .some(token => {
+        const baseToken = token.split(":").at(-1) ?? token;
 
-          return /^(?:rounded-(?:xl|2xl)|p-[468])$/.test(
-            baseToken
-          );
-        })
+        return /^(?:rounded-(?:xl|2xl)|p-[468])$/.test(baseToken);
+      })
   );
 }
 
@@ -333,7 +383,9 @@ for (const file of styleScopeFiles) {
 
   if (
     hasDirectCardClass(source) &&
-    !/AppSectionCard|AppActionCard|OperationalInnerCard|NexoOperationalState|FormModal|BaseOperationalModal|ModalFlowShell/.test(source)
+    !/AppSectionCard|AppActionCard|OperationalInnerCard|NexoOperationalState|FormModal|BaseOperationalModal|ModalFlowShell/.test(
+      source
+    )
   ) {
     warnings.push(
       `${file}: possível card direto em página sem componente operacional oficial.`
@@ -377,13 +429,9 @@ for (const file of foundationScopeFiles) {
     const occurrenceCount = countTokenOccurrences(source, token);
     if (occurrenceCount === 0) continue;
 
-    const baselineCount =
-      foundationVisualTokenBaselines[file]?.[token];
+    const baselineCount = foundationVisualTokenBaselines[file]?.[token];
 
-    if (
-      baselineCount !== undefined &&
-      occurrenceCount <= baselineCount
-    ) {
+    if (baselineCount !== undefined && occurrenceCount <= baselineCount) {
       continue;
     }
 
