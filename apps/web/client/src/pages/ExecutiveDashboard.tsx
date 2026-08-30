@@ -30,7 +30,6 @@ import {
   AppPageLoadingState,
   AppPageShell,
   AppSectionBlock,
-  AppPriorityBadge,
   AppStatusBadge,
 } from "@/components/internal-page-system";
 import {
@@ -83,7 +82,6 @@ type QueueItem = {
   dueLabel: string;
   responsible: string;
   responsibleMissing: boolean;
-  priority: Severity;
   ctaLabel: string;
   path: string;
 };
@@ -173,16 +171,11 @@ type DashboardAlerts = {
  * - dashboard.alerts: alertas financeiros/O.S. e fila transversal leve.
  * - dashboard.operationalSignals: riscos e próxima ação via BFF autenticado.
  * - nexo.timeline.listByOrg: prova operacional recente; sem eventos, o dashboard declara ausência em vez de inventar tendência.
- * Tudo abaixo é cálculo de priorização no frontend, preservando contratos, rotas, API e Prisma.
+ * O cliente realiza apenas formatação, tradução visual e navegação contextual.
+ * Estado, severidade, ordem dos sinais e próxima ação permanecem autoritativos.
  */
 const fullWidthLayoutClass = "w-full min-w-0";
 const dashboardSectionClass = fullWidthLayoutClass;
-
-const severityWeight: Record<Severity, number> = {
-  critical: 3,
-  high: 2,
-  medium: 1,
-};
 
 function asRecord(value: unknown): DashboardRecord {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -221,12 +214,6 @@ function formatShortDateTime(value: unknown) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function isGovernanceAttention(level: string) {
-  return ["WARNING", "RESTRICTED", "SUSPENDED", "HIGH", "CRITICAL"].includes(
-    level.toUpperCase()
-  );
 }
 
 function describeComparison(
@@ -504,117 +491,10 @@ function fromSignal(signal: OperationalSignal): AttentionItem {
   };
 }
 
-function buildAttention(
-  alerts: DashboardAlerts,
-  signals: OperationalSignal[],
-  metrics: DashboardRecord
-) {
-  const items = signals.map(fromSignal);
-  const add = (condition: number, item: Omit<AttentionItem, "id">) => {
-    if (condition > 0)
-      items.push({ id: `${item.path}-${item.title}`, ...item });
-  };
-  add(alerts.overdueOrders?.count ?? 0, {
-    severity: "critical",
-    title: "O.S. atrasadas",
-    primaryValue: String(alerts.overdueOrders?.count ?? 0),
-    reason: `${alerts.overdueOrders?.count} ordem(ns) passaram do prazo operacional.`,
-    impact:
-      "Atrasos ativos podem comprometer as próximas janelas de atendimento.",
-    ctaLabel: "Revisar O.S. atrasadas",
-    path: "/service-orders?status=attention",
-  });
-  add(alerts.overdueCharges?.count ?? 0, {
-    severity: "critical",
-    title: "Cobranças vencidas",
-    primaryValue: String(alerts.overdueCharges?.count ?? 0),
-    reason: `${alerts.overdueCharges?.count} cobrança(s) vencida(s), somando ${formatCurrencyFromCents(alerts.overdueCharges?.totalAmountCents ?? 0)}.`,
-    impact:
-      "Recebimentos atrasados interrompem o fechamento financeiro do serviço.",
-    ctaLabel: "Cobrar carteira vencida",
-    path: "/finances?view=charges&status=overdue",
-  });
-  add(alerts.doneOrdersWithoutCharge?.count ?? 0, {
-    severity: "high",
-    title: "O.S. sem cobrança",
-    primaryValue: String(alerts.doneOrdersWithoutCharge?.count ?? 0),
-    reason: `${alerts.doneOrdersWithoutCharge?.count} O.S. concluída(s) sem cobrança vinculada.`,
-    impact: "Serviço entregue sem cobrança prolonga o ciclo até pagamento.",
-    ctaLabel: "Fechar serviços concluídos",
-    path: "/service-orders?status=done",
-  });
-  add(alerts.customersWithPending?.count ?? 0, {
-    severity: "high",
-    title: "Clientes com pendência",
-    primaryValue: String(alerts.customersWithPending?.count ?? 0),
-    reason: `${alerts.customersWithPending?.count} cliente(s) possuem cobranças pendentes ou vencidas.`,
-    impact: "Carteira sem contato aumenta risco de inadimplência e retrabalho.",
-    ctaLabel: "Abrir carteira financeira",
-    path: "/finances?view=charges",
-  });
-
-  const unconfirmedAppointments = (alerts.operationalQueue ?? []).filter(
-    item => item.type === "UNCONFIRMED_APPOINTMENT"
-  ).length;
-  add(unconfirmedAppointments, {
-    severity: "high",
-    title: "Agendamentos sem confirmação",
-    primaryValue: String(unconfirmedAppointments),
-    reason: `${unconfirmedAppointments} agendamento(s) nas próximas 48 horas ainda precisam confirmação.`,
-    impact:
-      "Agenda sem confirmação aumenta o risco de deslocamento perdido e O.S. parada.",
-    ctaLabel: "Confirmar agenda",
-    path: "/appointments?status=pending-confirmation",
-  });
-
-  const whatsappSignals = asRecord(metrics.whatsappSignals);
-  const failedMessages = readNumber(whatsappSignals, "failedMessages");
-  const customersNoResponse = readNumber(
-    whatsappSignals,
-    "customersNoResponse"
-  );
-  add(failedMessages, {
-    severity: "high",
-    title: "WhatsApp com falha",
-    primaryValue: String(failedMessages),
-    reason: `${failedMessages} mensagem(ns) falharam no canal operacional.`,
-    impact: "Confirmações, cobranças e retornos podem não chegar ao cliente.",
-    ctaLabel: "Revisar WhatsApp",
-    path: "/whatsapp",
-  });
-  add(customersNoResponse, {
-    severity: "medium",
-    title: "Clientes aguardando resposta",
-    primaryValue: String(customersNoResponse),
-    reason: `${customersNoResponse} conversa(s) estão aguardando operador.`,
-    impact:
-      "Tempo de resposta alto trava confirmação e continuidade do atendimento.",
-    ctaLabel: "Responder conversas",
-    path: "/whatsapp",
-  });
-
-  const governance = asRecord(metrics.governance);
-  const governanceLevel = readString(governance, "level").toUpperCase();
-  if (governanceLevel && isGovernanceAttention(governanceLevel)) {
-    items.push({
-      id: `governance-${governanceLevel}`,
-      severity:
-        governanceLevel === "SUSPENDED" || governanceLevel === "CRITICAL"
-          ? "critical"
-          : "high",
-      title: "Governança exige atenção",
-      reason:
-        "Há bloqueios, restrições ou aprovações que precisam ser avaliados.",
-      impact:
-        "Riscos de governança podem limitar ações assistidas e continuidade operacional.",
-      ctaLabel: "Ver governança",
-      path: "/governance",
-    });
-  }
-
-  return items
-    .sort((a, b) => severityWeight[b.severity] - severityWeight[a.severity])
-    .slice(0, 5);
+function buildAttention(signals: OperationalSignal[]) {
+  // A ordem, severidade e conteúdo vêm integralmente do contrato oficial.
+  // O cliente limita a quantidade exibida e traduz apenas o tom visual.
+  return signals.slice(0, 5).map(fromSignal);
 }
 
 function buildQueue(alerts: DashboardAlerts): QueueItem[] {
@@ -635,7 +515,6 @@ function buildQueue(alerts: DashboardAlerts): QueueItem[] {
           ) || "Prazo operacional vencido",
         responsible: readResponsible(asRecord(item)).label,
         responsibleMissing: readResponsible(asRecord(item)).missing,
-        priority: "critical",
         ctaLabel: "Destravar",
         path: `/service-orders?id=${String(item.serviceOrderId ?? item.id)}`,
       };
@@ -665,7 +544,6 @@ function buildQueue(alerts: DashboardAlerts): QueueItem[] {
           "Cliente com cobrança vencida",
         responsible: readResponsible(asRecord(item)).label,
         responsibleMissing: readResponsible(asRecord(item)).missing,
-        priority: "critical",
         ctaLabel: "Cobrar",
         path: "/finances?view=charges&status=overdue",
       };
@@ -682,7 +560,6 @@ function buildQueue(alerts: DashboardAlerts): QueueItem[] {
         dueLabel: formatShortDateTime(item.lastMessageAt),
         responsible: readResponsible(asRecord(item)).label,
         responsibleMissing: readResponsible(asRecord(item)).missing,
-        priority: "high",
         ctaLabel: "Responder cliente",
         path: "/whatsapp",
       };
@@ -698,7 +575,6 @@ function buildQueue(alerts: DashboardAlerts): QueueItem[] {
         dueLabel: formatShortDateTime(item.startsAt),
         responsible: readResponsible(asRecord(item)).label,
         responsibleMissing: readResponsible(asRecord(item)).missing,
-        priority: "high",
         ctaLabel: "Confirmar agenda",
         path: "/appointments",
       };
@@ -810,10 +686,7 @@ export default function ExecutiveDashboard() {
   const metrics = useMemo(() => asRecord(kpisQuery.data), [kpisQuery.data]);
   const alerts = useMemo(() => asAlerts(alertsQuery.data), [alertsQuery.data]);
   const signals = operationalSignalsQuery.data?.signals ?? [];
-  const attention = useMemo(
-    () => buildAttention(alerts, signals, metrics),
-    [alerts, signals, metrics]
-  );
+  const attention = useMemo(() => buildAttention(signals), [signals]);
   const queue = useMemo(() => buildQueue(alerts), [alerts]);
   const hasMissingResponsible = queue.some(item => item.responsibleMissing);
   const pendingWhatsAppApprovals = Array.isArray(
@@ -840,9 +713,7 @@ export default function ExecutiveDashboard() {
   const dashboardState = resolveExecutiveDashboardState({
     isLoading: pageLoading,
     isError: pageError,
-    backendState:
-      operationalStateQuery.data?.dashboardState ??
-      (kpisQuery.data || alertsQuery.data ? "ATTENTION" : undefined),
+    backendState: operationalStateQuery.data?.dashboardState,
   });
   const comparison = asRecord(metrics.comparison);
   const pulseComparisons: Array<[string, ComparisonKey, boolean?]> = [
@@ -864,8 +735,11 @@ export default function ExecutiveDashboard() {
   const operationStateReason = operationalStateQuery.isError
     ? "Não foi possível consultar o estado operacional."
     : (operationalStateQuery.data?.reason ??
-      "Estado operacional sem evidência disponível.");
+      "A fonte oficial não forneceu justificativa para este estado.");
 
+  // O contrato atual expõe volumes por etapa, mas não um estado oficial por
+  // etapa. Por isso o pipeline declara o estado indisponível em vez de inferir
+  // bloqueio, conclusão ou criticidade a partir das contagens.
   const flow: FlowStage[] = [
     {
       id: "customers",
@@ -874,53 +748,34 @@ export default function ExecutiveDashboard() {
       context: "clientes ativos",
       path: "/customers",
       action: "Ver clientes",
-      state: readNumber(metrics, "totalCustomers") > 0 ? "done" : "idle",
+      state: "unavailable",
     },
     {
       id: "appointments",
       label: "Agendamento",
       value: String(todayServicesCount),
-      context:
-        todayServicesCount > 0 ? "agendamentos hoje" : "sem agendamentos hoje",
+      context: "agendamentos de hoje",
       path: "/appointments",
       action: "Ver agenda",
-      state: (alerts.todayServices?.count ?? 0) > 0 ? "active" : "idle",
+      state: "unavailable",
     },
     {
       id: "service-orders",
       label: "O.S.",
       value: String(readNumber(metrics, "openServiceOrders")),
-      context:
-        overdueOrders > 0
-          ? `${overdueOrders} atrasada(s) dentro das ordens abertas`
-          : "ordens abertas",
+      context: "ordens abertas",
       path: "/service-orders",
       action: "Ver execução",
-      state:
-        overdueOrders > 0
-          ? "blocked"
-          : readNumber(metrics, "openServiceOrders") > 0
-            ? "active"
-            : "idle",
+      state: "unavailable",
     },
     {
       id: "charges",
       label: "Cobrança",
       value: String(readNumber(metrics, "chargesGenerated")),
-      context:
-        overdueCharges > 0
-          ? `${overdueCharges} vencida(s) travando recebimento`
-          : "cobranças geradas",
+      context: "cobranças geradas",
       path: "/finances?view=charges",
       action: "Ver cobranças",
-      state:
-        overdueCharges > 0
-          ? "blocked"
-          : missingCharges > 0
-            ? "warning"
-            : readNumber(metrics, "chargesGenerated") > 0
-              ? "done"
-              : "idle",
+      state: "unavailable",
     },
     {
       id: "payments",
@@ -935,56 +790,29 @@ export default function ExecutiveDashboard() {
           : "pagamentos recebidos nesta semana",
       path: "/finances?view=paid",
       action: "Ver pagamentos",
-      state:
-        readNullableNumber(metrics, "paymentsReceivedCount") === null
-          ? "idle"
-          : "done",
+      state: "unavailable",
     },
   ];
-  const bottleneck =
-    overdueCharges >= overdueOrders &&
-    overdueCharges >= missingCharges &&
-    overdueCharges > 0
-      ? {
-          label: "Cobrança → Pagamento",
-          action: "Priorizar cobranças vencidas",
-          path: "/finances?view=charges&status=overdue",
-        }
-      : overdueOrders > 0
-        ? {
-            label: "Agendamento → O.S.",
-            action: "Destravar O.S. atrasadas",
-            path: "/service-orders?status=attention",
-          }
-        : missingCharges > 0
-          ? {
-              label: "O.S. → Cobrança",
-              action: "Gerar cobranças pendentes",
-              path: "/service-orders?status=done",
-            }
-          : null;
   const operationStateMetrics = [
     {
       label: "O.S. atrasadas",
       value: alertsQuery.isError ? "—" : String(overdueOrders),
-      tone: overdueOrders > 0 ? "danger" : "neutral",
+      tone: "neutral",
     },
     {
       label: "Cobranças vencidas",
       value: alertsQuery.isError ? "—" : String(overdueCharges),
-      tone: overdueCharges > 0 ? "danger" : "neutral",
+      tone: "neutral",
     },
     {
-      label: "Riscos críticos",
-      value: operationalSignalsQuery.isError ? "—" : String(criticalCount),
-      tone: criticalCount > 0 ? "warning" : "neutral",
+      label: "Sinais exibidos",
+      value: operationalSignalsQuery.isError ? "—" : String(attention.length),
+      tone: "neutral",
     },
     {
-      label: "Gargalo",
-      value: alertsQuery.isError
-        ? "não calculado"
-        : (bottleneck?.label ?? "sem gargalo"),
-      tone: bottleneck ? "warning" : "neutral",
+      label: "Fonte do estado",
+      value: operationalStateQuery.data?.source ?? "indisponível",
+      tone: "neutral",
     },
   ] satisfies Array<{
     label: string;
@@ -1126,62 +954,37 @@ export default function ExecutiveDashboard() {
   ];
   const pulseInsights = [
     {
-      label: "Prioridade",
-      keyword: bottleneck?.label ?? "Sem gargalo",
-      Icon: ShieldAlert,
-      iconClass: bottleneck
-        ? "text-[var(--accent-primary)]"
-        : "text-[var(--text-muted)]",
-      text: bottleneck
-        ? "O próximo movimento: atacar este ponto antes de expandir a fila."
-        : "O próximo movimento: manter acompanhamento sem reação extra.",
-      trend: overdueChargesTrend,
+      label: "Receita",
+      keyword: formatCurrencyFromCents(weeklyRevenueInCents),
+      Icon: WalletCards,
+      iconClass: "text-[var(--text-muted)]",
+      text: "Recebimentos registrados na semana.",
+      trend: revenueTrend,
     },
     {
-      label: "Capacidade",
-      keyword:
-        overdueOrders > 0 ? `${overdueOrders} O.S. atrasada(s)` : "Sem atraso",
+      label: "Execução",
+      keyword: `${readNumber(metrics, "openServiceOrders")} O.S. abertas`,
       Icon: Clock3,
-      iconClass:
-        overdueOrders > 0 ? "text-[var(--danger)]" : "text-[var(--text-muted)]",
-      text:
-        overdueOrders > 0
-          ? "O que destravar: avançar as O.S. atrasadas primeiro."
-          : "O que destravar: nada crítico retornado agora.",
+      iconClass: "text-[var(--text-muted)]",
+      text: "Volume oficial de ordens em aberto.",
       trend: completedOrdersTrend,
     },
     {
       label: "Contato",
-      keyword:
-        failedMessages > 0
-          ? `${failedMessages} falha(s)`
-          : "Sem falhas retornadas",
+      keyword: `${failedMessages} falha(s)`,
       Icon: MessageSquareWarning,
-      iconClass:
-        failedMessages > 0
-          ? "text-[var(--danger)]"
-          : "text-[var(--text-muted)]",
-      text:
-        failedMessages > 0
-          ? "O que responder: priorizar contatos impactados por falha."
-          : "O que responder: sem falhas bloqueando operação.",
+      iconClass: "text-[var(--text-muted)]",
+      text: "Falhas registradas no canal oficial.",
       trend: failedMessagesTrend,
     },
     {
-      label: "Caixa",
-      keyword:
-        overdueCharges > 0
-          ? `${formatCurrencyFromCents(alerts.overdueCharges?.totalAmountCents ?? 0)} vencidos`
-          : "Sem vencimentos",
+      label: "Cobranças",
+      keyword: formatCurrencyFromCents(
+        alerts.overdueCharges?.totalAmountCents ?? 0
+      ),
       Icon: WalletCards,
-      iconClass:
-        overdueCharges > 0
-          ? "text-[var(--accent-primary)]"
-          : "text-[var(--text-muted)]",
-      text:
-        overdueCharges > 0
-          ? "O que cobrar: carteira vencida antes de novas cobranças."
-          : "O que cobrar: sem vencimentos retornados agora.",
+      iconClass: "text-[var(--text-muted)]",
+      text: "Valor vencido retornado pelo contrato.",
       trend: overdueChargesTrend,
     },
   ];
@@ -1230,12 +1033,6 @@ export default function ExecutiveDashboard() {
               {alertsQuery.isError
                 ? "O.S. atrasadas indisponíveis"
                 : `${overdueOrders} O.S. atrasadas`}
-            </AppContextChip>
-            <AppContextChip tone={bottleneck ? "warning" : "neutral"}>
-              Gargalo:{" "}
-              {alertsQuery.isError
-                ? "não calculado"
-                : (bottleneck?.label ?? "sem gargalo calculável")}
             </AppContextChip>
           </>
         }
@@ -1325,8 +1122,16 @@ export default function ExecutiveDashboard() {
               </div>
             ) : (
               <AppPageEmptyState
-                title="Nenhum alerta operacional retornado"
-                description="A leitura foi concluída sem riscos ativos. Continue acompanhando a fila operacional."
+                title={
+                  operationalSignalsQuery.isError
+                    ? "Atenção imediata indisponível"
+                    : "Nenhum sinal operacional retornado"
+                }
+                description={
+                  operationalSignalsQuery.isError
+                    ? "O contrato oficial de sinais não pôde ser consultado. Nenhum risco foi inferido a partir de KPIs ou alertas auxiliares."
+                    : "A fonte oficial não retornou sinais para esta leitura; isso não é apresentado como confirmação de operação saudável."
+                }
               />
             )}
           </AppSectionBlock>
@@ -1406,8 +1211,8 @@ export default function ExecutiveDashboard() {
             subtitle="Gargalos do fluxo Cliente → Agendamento → O.S. → Cobrança → Pagamento."
           >
             <NexoOperationalPipeline
-              title="Gargalos operacionais"
-              subtitle="Use os pontos de quebra para direcionar a próxima ação sem duplicar diagnósticos das páginas específicas."
+              title="Etapas operacionais"
+              subtitle="Volumes oficiais por etapa; o estado de cada etapa permanece indisponível até existir contrato autoritativo."
               stages={flow.map(stage => ({
                 id: stage.id,
                 label: stage.label,
@@ -1437,7 +1242,6 @@ export default function ExecutiveDashboard() {
                       >
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <AppPriorityBadge label={item.priority} />
                             <span className="font-semibold text-[var(--text-primary)]">
                               {item.type}
                             </span>

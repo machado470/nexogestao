@@ -31,7 +31,8 @@ export type OperationalFlowStageState =
   | "active"
   | "warning"
   | "blocked"
-  | "idle";
+  | "idle"
+  | "unavailable";
 
 const operationalStateTone: Record<
   OperationalStateLevel,
@@ -95,6 +96,13 @@ const flowStageTone: Record<
     container: "border-[var(--danger)]/35 bg-[var(--danger)]/8",
     icon: <Lock className="h-4 w-4 text-[var(--danger)]" />,
     rail: "bg-[var(--danger)]/70",
+  },
+  unavailable: {
+    badge: "Estado indisponível",
+    container:
+      "border-[var(--border-subtle)]/75 bg-[var(--surface-primary)]/35",
+    icon: <CircleDashed className="h-4 w-4 text-[var(--text-muted)]" />,
+    rail: "bg-[var(--border-strong)]/45",
   },
   idle: {
     badge: "Sem sinal",

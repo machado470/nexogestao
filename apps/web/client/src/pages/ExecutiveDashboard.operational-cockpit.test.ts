@@ -49,7 +49,7 @@ describe("ExecutiveDashboard decision center", () => {
 
   it("keeps zero and missing states honest without repeating noisy fallbacks", () => {
     expect(source).toContain("Sem pagamentos registrados no período.");
-    expect(source).toContain("sem agendamentos hoje");
+    expect(source).toContain("agendamentos de hoje");
     expect(source).toContain(
       "Alguns itens não retornaram responsável pela fonte atual."
     );
@@ -195,6 +195,18 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("nextBestAction.suggestedAction");
     expect(source).not.toContain("Abrir ação prioritária");
     expect(source).not.toContain("fallbackAction");
+  });
+
+  it("never reconstructs operational decisions from auxiliary counts", () => {
+    expect(source).toContain("return signals.slice(0, 5).map(fromSignal)");
+    expect(source).not.toContain("severityWeight");
+    expect(source).not.toContain(".sort((a, b)");
+    expect(source).not.toContain("const bottleneck");
+    expect(source).not.toContain('? "ATTENTION" : undefined');
+    expect(source).toContain("operationalStateQuery.data?.dashboardState");
+    expect(source).toContain('state: "unavailable"');
+    expect(source).toContain("estado de cada etapa permanece indisponível");
+    expect(source).toContain("Nenhum risco foi inferido a partir de KPIs");
   });
 
   it("does not keep the previous mocked operational fixtures", () => {
