@@ -9,8 +9,49 @@ const commandLayerSource = readFileSync(
 const embeddedTimelineSource = source.slice(
   source.indexOf("<NexoEvidenceTimeline")
 );
-
 describe("CustomersPage operational client center", () => {
+  it("follows the official operational hierarchy", () => {
+    const markers = [
+      "Centro Operacional do Cliente",
+      "Estado operacional oficial",
+      "operationalCopy.immediateAttention",
+      "Próxima ação oficial",
+      "Painel operacional do cliente",
+      'aria-label="Filtros de apresentação"',
+      "Carteira operacional",
+      "Evidências e navegação contextual",
+    ];
+    markers.forEach(marker => expect(source).toContain(marker));
+  });
+
+  it("shows unavailable decision instead of inferring normality", () => {
+    expect(source).toContain("Decisão oficial indisponível");
+    expect(source).toContain("nenhuma normalidade é inferida");
+    expect(source).toContain(
+      "Sem o contrato oficial não é possível afirmar risco, prioridade, justificativa ou próxima ação."
+    );
+  });
+
+  it("keeps only text and registration status as presentation filters", () => {
+    expect(source).toContain("Presentation-only transformation");
+    expect(source).toContain(
+      'type CustomerFilter = "all" | "active" | "inactive"'
+    );
+    expect(source).toContain("profile.customer.active !== true");
+    expect(source).toContain("profile.customer.active !== false");
+    expect(source).not.toContain("parseCurrencyFilterToCents");
+    expect(source).not.toContain("parseDateFilterBoundary");
+    expect(source).not.toContain('activeFilter === "risk"');
+  });
+
+  it("guards against local thresholds, rankings and next-action calculation", () => {
+    expect(source).not.toMatch(/riskScore\s*[-+<>=]/);
+    expect(source).not.toMatch(/sort\([^)]*priority/);
+    expect(source).not.toMatch(/sil[eê]ncio prolongado/i);
+    expect(source).toContain("summary.recommendedActionLabel");
+    expect(source).toContain("summary?.recommendedActionTarget");
+  });
+
   it("positions Clientes as the customer operational center", () => {
     expect(source).toContain("Centro Operacional do Cliente");
     expect(source).toContain("Hero Executivo do Cliente");
@@ -118,21 +159,6 @@ describe("CustomersPage operational client center", () => {
     );
   });
 
-  it("filters customers with overdue open service orders from loaded contract data", () => {
-    expect(source).toContain('| "overdue_os"');
-    expect(source).toContain(
-      '{ key: "overdue_os", label: "Com O.S. atrasada" }'
-    );
-    expect(source).toContain('activeFilter === "overdue_os"');
-    expect(source).toContain(
-      "!profile.serviceOrders.some(isServiceOrderOverdue)"
-    );
-    expect(source).toContain("function isServiceOrderOverdue(");
-    expect(source).toContain(
-      "order.operationalDecision?.isOverdue === true"
-    );
-  });
-
   it("shows active status separately from operational health", () => {
     expect(source).toContain(
       "function getCustomerActiveStatus(active: unknown)"
@@ -146,37 +172,6 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain(
       "getCustomerActiveStatus(\n                                  profile.customer.active"
     );
-  });
-
-  it("filters customers by pending balance value range", () => {
-    expect(source).toContain(
-      "function parseCurrencyFilterToCents(value: string)"
-    );
-    expect(source).toContain('"nexo.customers.balance-min.v2"');
-    expect(source).toContain('"nexo.customers.balance-max.v2"');
-    expect(source).toContain("profile.pendingCents < minBalanceCents");
-    expect(source).toContain("profile.pendingCents > maxBalanceCents");
-    expect(source).toContain('placeholder="Mín. R$"');
-    expect(source).toContain('placeholder="Máx. R$"');
-    expect(source).toContain("Saldo financeiro");
-    expect(source).toContain("Limpar intervalo de valor");
-    expect(source).toContain("Mais filtros · valor");
-  });
-
-  it("filters customers by last operational activity period", () => {
-    expect(source).toContain("function parseDateFilterBoundary(");
-    expect(source).toContain('"nexo.customers.period-start.v2"');
-    expect(source).toContain('"nexo.customers.period-end.v2"');
-    expect(source).toContain(
-      "const lastInteractionTimestamp = profile.lastInteractionAt?.getTime()"
-    );
-    expect(source).toContain("lastInteractionTimestamp < periodStartTimestamp");
-    expect(source).toContain("lastInteractionTimestamp > periodEndTimestamp");
-    expect(source).toContain("Última atividade");
-    expect(source).toContain('aria-label="Período inicial"');
-    expect(source).toContain('aria-label="Período final"');
-    expect(source).toContain("Limpar período");
-    expect(source).toContain("Mais filtros · período");
   });
 
   it("shows canonical last completed service and next appointment together", () => {
@@ -239,24 +234,16 @@ describe("CustomersPage operational client center", () => {
   it("keeps auxiliary failures non-blocking without overriding authoritative operational health", () => {
     expect(source).toContain("Leitura operacional parcial");
     expect(source).toContain("Clientes carregados, mas");
-    expect(source).toContain(
-      "Estado operacional e risco"
-    );
-    expect(source).toContain(
-      "resumo oficial"
-    );
+    expect(source).toContain("Estado operacional e risco");
+    expect(source).toContain("resumo oficial");
     expect(source).toContain("unavailableAuxiliaryData");
     expect(source).toContain("hasIncompleteOperationalData");
     expect(source).toContain('label: "cobranças"');
     expect(source).toContain('label: "ordens de serviço"');
     expect(source).toContain('label: "agendamentos"');
     expect(source).toContain("Tentar novamente");
-    expect(source).toContain(
-      "renderAuthoritativeCustomerStatus"
-    );
-    expect(source).toContain(
-      "customersOperationalSummaryQuery"
-    );
+    expect(source).toContain("renderAuthoritativeCustomerStatus");
+    expect(source).toContain("customersOperationalSummaryQuery");
     expect(source).not.toContain('label: "Leitura parcial"');
     expect(source).toContain("Financeiro indisponível");
     expect(source).toContain("O.S. indisponíveis");
@@ -266,9 +253,7 @@ describe("CustomersPage operational client center", () => {
   it("does not block already loaded customers while auxiliary data is loading", () => {
     expect(source).toContain("Complementando sinais operacionais");
     expect(source).toContain("pendingAuxiliaryData");
-    expect(source).toContain(
-      "de completar os detalhes auxiliares da carteira"
-    );
+    expect(source).toContain("de completar os detalhes auxiliares da carteira");
     expect(source).toContain('aria-live="polite"');
   });
 });
