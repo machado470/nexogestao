@@ -6,10 +6,7 @@ import { AppNextActionCard, AppSectionBlock, AppStatusBadge } from "@/components
 
 import { trpc } from "@/lib/trpc";
 import { normalizeArrayPayload, normalizeObjectPayload } from "@/lib/query-helpers";
-import { useOperationalDecisions } from "@/lib/decision-engine/useOperationalDecisions";
-import { executeDecision } from "@/lib/decision-engine/execution.handler";
 import { presentationStatusLabel } from "@/lib/presentation-status";
-import { getCustomerSeverity, getNextActionCustomer, getOperationalSeverityLabel } from "@/lib/operations/operational-intelligence";
 
 function listOf(input: unknown) {
   return normalizeArrayPayload<any>(input);
@@ -32,6 +29,10 @@ export function CustomerWorkspaceModal({ open, customerId, customerName, onOpenC
     { id: customerId ?? "" },
     { enabled: open && Boolean(customerId), retry: false }
   );
+  const operationalSummaryQuery = trpc.nexo.customers.operationalSummary.useQuery(undefined, {
+    enabled: open && Boolean(customerId),
+    retry: false,
+  });
 
   const workspace = useMemo(() => asRecord(workspaceQuery.data), [workspaceQuery.data]);
   const customer = asRecord(workspace.customer);
@@ -40,29 +41,11 @@ export function CustomerWorkspaceModal({ open, customerId, customerName, onOpenC
   const charges = listOf(workspace.charges ?? workspace.finance);
   const messages = listOf(workspace.messages ?? workspace.whatsappMessages);
   const timeline = listOf(workspace.timeline ?? workspace.events).slice(0, 8);
-  const overdueCharges = charges.filter((item) => String(item?.status ?? "").toUpperCase() === "OVERDUE").length;
-  const pendingCharges = charges.filter((item) => String(item?.status ?? "").toUpperCase() === "PENDING").length;
-  const customerSeverity = getCustomerSeverity({
-    active: customer.active !== false,
-    overdueCharges,
-    pendingCharges,
-    openServiceOrders: serviceOrders.filter((item) => !["DONE", "CANCELED"].includes(String(item?.status ?? "").toUpperCase())).length,
-  });
-  const customerRisk = overdueCharges > 0 ? "Alto" : pendingCharges > 0 ? "Moderado" : "Baixo";
-  const nextAction = getNextActionCustomer({
-    active: customer.active !== false,
-    overdueCharges,
-    pendingCharges,
-    openServiceOrders: serviceOrders.length,
-  });
+  const operationalSummary = operationalSummaryQuery.data?.customers.find(
+    item => item.customerId === customerId
+  ) ?? null;
 
   const headerName = String(customer.name ?? customerName ?? "Cliente");
-  const { decisions: customerDecisions } = useOperationalDecisions({
-    navigate,
-    customerId,
-    enabled: open && Boolean(customerId),
-  });
-
   return (
     <BaseOperationalModal
       open={open}
@@ -96,30 +79,15 @@ export function CustomerWorkspaceModal({ open, customerId, customerName, onOpenC
             <AppSectionBlock title="Estado operacional" subtitle="Saúde e risco do cliente">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <AppStatusBadge label={getOperationalSeverityLabel(customerSeverity)} />
-                  <AppStatusBadge label={`Risco ${customerRisk}`} />
+                  <AppStatusBadge label={operationalSummary?.operationalStatus ?? "Indisponível"} />
+                  <AppStatusBadge label={operationalSummary?.riskSignal ?? "Decisão oficial indisponível"} />
                   <AppStatusBadge label={customer.active === false ? "Inativo" : "Ativo"} />
                 </div>
-                {customerDecisions.length === 0 ? (
-                  <p className="text-xs text-[var(--text-muted)]">Sem decisões operacionais críticas para este cliente.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {customerDecisions.slice(0, 3).map((decision) => (
-                      <li key={decision.id} className="rounded-md border border-[var(--border-subtle)] p-2">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">{decision.title}</p>
-                        <p className="text-xs text-[var(--text-muted)]">{decision.description}</p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="mt-2 h-8"
-                          onClick={() => executeDecision(decision)}
-                        >
-                          {decision.action.label}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <p className="text-xs text-[var(--text-muted)]">
+                  {operationalSummaryQuery.isLoading
+                    ? "Consultando decisão oficial..."
+                    : operationalSummary?.interventionReason ?? "Sem recomendação oficial disponível para este cliente."}
+                </p>
               </div>
             </AppSectionBlock>
             <AppSectionBlock title="Resumo encadeado" subtitle="Cliente → execução → receita">
@@ -129,12 +97,12 @@ export function CustomerWorkspaceModal({ open, customerId, customerName, onOpenC
             </AppSectionBlock>
             <AppNextActionCard
               title="Próxima ação do cliente"
-              description={overdueCharges > 0 ? "Cobranças vencidas exigem contato imediato." : "Mantenha o fluxo ativo com a próxima etapa operacional."}
-              severity={overdueCharges > 0 ? "critical" : pendingCharges > 0 ? "high" : "medium"}
-              metadata="workspace do cliente"
+              description={operationalSummary?.interventionReason ?? "A autoridade operacional não forneceu uma recomendação."}
+              severity={operationalSummary?.operationalStatus === "CRÍTICO" ? "critical" : operationalSummary?.operationalStatus === "RISCO" ? "high" : "medium"}
+              metadata={operationalSummary ? `Prioridade oficial ${operationalSummary.priority}` : "Decisão oficial indisponível"}
               action={{
-                label: overdueCharges > 0 ? "Cobrar no WhatsApp" : nextAction.label,
-                onClick: () => navigate(overdueCharges > 0 ? `/whatsapp?customerId=${customerId ?? ""}` : `/appointments?customerId=${customerId ?? ""}`),
+                label: operationalSummary?.recommendedActionLabel ?? "Abrir clientes",
+                onClick: () => navigate(operationalSummary?.recommendedActionTarget === "FINANCES" ? "/finances" : operationalSummary?.recommendedActionTarget === "SERVICE_ORDERS" ? "/service-orders" : operationalSummary?.recommendedActionTarget === "WHATSAPP" ? `/whatsapp?customerId=${customerId ?? ""}` : operationalSummary?.recommendedActionTarget === "APPOINTMENTS" ? `/appointments?customerId=${customerId ?? ""}` : "/customers"),
               }}
             />
           </div>

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +17,66 @@ const pages = [
 
 const errors = [];
 const warnings = [];
+
+// Motores removidos após a auditoria transversal. Esses módulos reconstruíam
+// prioridade, risco, cooldown, automação ou próxima ação a partir de fatos crus.
+const forbiddenParallelEngines = [
+  "client/src/lib/decision-engine",
+  "client/src/lib/automation-engine",
+  "client/src/lib/execution/decision-engine.ts",
+  "client/src/lib/execution/rules.ts",
+  "client/src/lib/execution/prioritizer.ts",
+  "client/src/lib/execution/policy.ts",
+  "client/src/lib/execution/execution-memory.ts",
+  "client/src/lib/operational-attention.ts",
+  "client/src/lib/operational-health.ts",
+  "client/src/lib/operational-interventions.ts",
+  "client/src/hooks/useAutomationRunner.ts",
+  "client/src/hooks/useExecutionHandler.ts",
+  "client/src/components/app/GlobalActionEngine.tsx",
+];
+
+for (const file of forbiddenParallelEngines) {
+  if (existsSync(join(root, file))) {
+    errors.push(`${file}: motor operacional paralelo proibido foi reintroduzido.`);
+  }
+}
+
+const mainLayoutSource = readFileSync(join(root, "client/src/components/MainLayout.tsx"), "utf8");
+if (/useAutomationRunner|GlobalActionEngine/.test(mainLayoutSource)) {
+  errors.push("client/src/components/MainLayout.tsx: execução ou decisão automática global no navegador é proibida.");
+}
+
+const customerWorkspaceSource = readFileSync(join(root, "client/src/components/CustomerWorkspaceModal.tsx"), "utf8");
+for (const pattern of [
+  "useOperationalDecisions",
+  "getCustomerSeverity",
+  "getNextActionCustomer",
+  "overdueCharges > 0",
+]) {
+  if (customerWorkspaceSource.includes(pattern)) {
+    errors.push(`client/src/components/CustomerWorkspaceModal.tsx: decisão local proibida (${pattern}).`);
+  }
+}
+if (!customerWorkspaceSource.includes("customers.operationalSummary.useQuery")) {
+  errors.push("client/src/components/CustomerWorkspaceModal.tsx: contrato oficial customers.operationalSummary ausente.");
+}
+
+// O contexto de autoridade do BFF vem exclusivamente da sessão encaminhada.
+// Protege os contratos críticos contra org/tenant/role enviados como input.
+const bffAuthorityFiles = [
+  "server/routers/dashboard.ts",
+  "server/routers/finance.ts",
+  "server/routers/governance.ts",
+  "server/routers/people.ts",
+  "server/routers/nexo-proxy.ts",
+];
+for (const file of bffAuthorityFiles) {
+  const source = readFileSync(join(root, file), "utf8");
+  if (/\.input\(z\.object\(\{[^}]*\b(?:orgId|organizationId|tenantId|role)\s*:/s.test(source)) {
+    errors.push(`${file}: contrato BFF aceita contexto de tenant ou autoridade fornecido pelo cliente.`);
+  }
+}
 
 const modalContrastForbiddenPatterns = [
   /(?:^|\s)bg-slate-9\S*/,

@@ -32,7 +32,6 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { canAny, type Permission, type Role } from "@/lib/rbac";
 import { useIsMobile } from "@/hooks/useMobile";
 import { trpc } from "@/lib/trpc";
-import { useAutomationRunner } from "@/hooks/useAutomationRunner";
 import { useNotificationStream } from "@/hooks/useNotificationStream";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { BrandSignature } from "@/components/BrandSignature";
@@ -111,8 +110,6 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] =
     useOperationalMemoryState<boolean>(SIDEBAR_COLLAPSED_STORAGE_KEY, true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useAutomationRunner({ navigate, enabled: isAuthenticated });
 
   if (import.meta.env.DEV && import.meta.env.VITE_BOOT_DIAGNOSTICS === "true") {
     // eslint-disable-next-line no-console
