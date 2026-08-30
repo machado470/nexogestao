@@ -49,7 +49,7 @@ describe("ExecutiveDashboard decision center", () => {
 
   it("keeps zero and missing states honest without repeating noisy fallbacks", () => {
     expect(source).toContain("Sem pagamentos registrados no período.");
-    expect(source).toContain("agendamentos de hoje");
+    expect(source).toContain("Evidência: ${stage.evidence.description}");
     expect(source).toContain(
       "Alguns itens não retornaram responsável pela fonte atual."
     );
@@ -75,19 +75,15 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("/whatsapp");
   });
 
-  it("shows the real payment volume in the visual pipeline and keeps an honest unavailable state", () => {
-    ["Cliente", "Agendamento", "O.S.", "Cobrança", "Pagamento"].forEach(stage =>
-      expect(source).toContain(`label: "${stage}"`)
-    );
-    expect(source).toContain(
-      'readNullableNumber(metrics, "paymentsReceivedCount")'
-    );
-    expect(source).toContain("pagamentos recebidos nesta semana");
+  it("shows the authoritative pipeline without rebuilding stages from KPI counts", () => {
+    expect(source).toContain("executivePipelineQuery.data?.stages");
+    expect(source).toContain("label: stage.label");
+    expect(source).toContain("value: String(stage.volume)");
     expect(source).toContain(
       "Gargalos do fluxo Cliente → Agendamento → O.S. → Cobrança → Pagamento."
     );
-    expect(source).toContain("volume não disponível no contrato");
-    expect(source).not.toContain("volume não exposto pelo backend");
+    expect(source).toContain("state: stage.state");
+    expect(source).not.toContain('readNullableNumber(metrics, "paymentsReceivedCount") === null');
   });
 
   it("uses the real backend comparison and renders honest pulse readings", () => {
@@ -204,8 +200,11 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).not.toContain("const bottleneck");
     expect(source).not.toContain('? "ATTENTION" : undefined');
     expect(source).toContain("operationalStateQuery.data?.dashboardState");
-    expect(source).toContain('state: "unavailable"');
-    expect(source).toContain("estado de cada etapa permanece indisponível");
+    expect(source).toContain("trpc.dashboard.executivePipeline.useQuery");
+    expect(source).toContain("state: stage.state");
+    expect(source).toContain("value: String(stage.volume)");
+    expect(source).toContain("stage.referenceTimestamp");
+    expect(source).not.toMatch(/stage\.volume[\s\S]{0,120}\?\s*["'](?:done|active|warning|blocked|idle)["']/);
     expect(source).toContain("Nenhum risco foi inferido a partir de KPIs");
   });
 

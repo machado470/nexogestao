@@ -655,6 +655,10 @@ export default function ExecutiveDashboard() {
     enabled: isAuthenticated,
     retry: false,
   });
+  const executivePipelineQuery = trpc.dashboard.executivePipeline.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: false,
+  });
   const pendingWhatsAppApprovalsQuery =
     trpc.nexo.whatsapp.listPendingApprovals.useQuery(
       { limit: 10 },
@@ -703,6 +707,7 @@ export default function ExecutiveDashboard() {
   const unavailableSources = [
     kpisQuery.isError ? "KPIs" : null,
     alertsQuery.isError ? "alertas e fila" : null,
+    executivePipelineQuery.isError ? "pipeline executivo" : null,
     operationalStateQuery.isError ? "estado operacional" : null,
     operationalSignalsQuery.isError ? "sinais de risco" : null,
     nextBestActionQuery.isError ? "próxima melhor ação" : null,
@@ -737,62 +742,23 @@ export default function ExecutiveDashboard() {
     : (operationalStateQuery.data?.reason ??
       "A fonte oficial não forneceu justificativa para este estado.");
 
-  // O contrato atual expõe volumes por etapa, mas não um estado oficial por
-  // etapa. Por isso o pipeline declara o estado indisponível em vez de inferir
-  // bloqueio, conclusão ou criticidade a partir das contagens.
-  const flow: FlowStage[] = [
-    {
-      id: "customers",
-      label: "Cliente",
-      value: String(readNumber(metrics, "totalCustomers")),
-      context: "clientes ativos",
-      path: "/customers",
-      action: "Ver clientes",
-      state: "unavailable",
-    },
-    {
-      id: "appointments",
-      label: "Agendamento",
-      value: String(todayServicesCount),
-      context: "agendamentos de hoje",
-      path: "/appointments",
-      action: "Ver agenda",
-      state: "unavailable",
-    },
-    {
-      id: "service-orders",
-      label: "O.S.",
-      value: String(readNumber(metrics, "openServiceOrders")),
-      context: "ordens abertas",
-      path: "/service-orders",
-      action: "Ver execução",
-      state: "unavailable",
-    },
-    {
-      id: "charges",
-      label: "Cobrança",
-      value: String(readNumber(metrics, "chargesGenerated")),
-      context: "cobranças geradas",
-      path: "/finances?view=charges",
-      action: "Ver cobranças",
-      state: "unavailable",
-    },
-    {
-      id: "payments",
-      label: "Pagamento",
-      value:
-        readNullableNumber(metrics, "paymentsReceivedCount") === null
-          ? "—"
-          : String(readNullableNumber(metrics, "paymentsReceivedCount")),
-      context:
-        readNullableNumber(metrics, "paymentsReceivedCount") === null
-          ? "volume não disponível no contrato"
-          : "pagamentos recebidos nesta semana",
-      path: "/finances?view=paid",
-      action: "Ver pagamentos",
-      state: "unavailable",
-    },
-  ];
+  // Ordem, estado, razão, evidência e volume são apresentados diretamente do
+  // contrato autoritativo. O navegador não reconstrói decisões por contagens.
+  const flow: FlowStage[] = (executivePipelineQuery.data?.stages ?? []).map(
+    stage => ({
+      id: stage.key,
+      label: stage.label,
+      value: String(stage.volume),
+      context: `${stage.reason} Evidência: ${stage.evidence.description}${
+        stage.referenceTimestamp
+          ? ` Referência: ${formatEventDateTime(stage.referenceTimestamp)}.`
+          : " Referência temporal indisponível."
+      }`,
+      path: stage.navigationTarget,
+      action: `Abrir ${stage.label}`,
+      state: stage.state,
+    })
+  );
   const operationStateMetrics = [
     {
       label: "O.S. atrasadas",
@@ -1212,7 +1178,7 @@ export default function ExecutiveDashboard() {
           >
             <NexoOperationalPipeline
               title="Etapas operacionais"
-              subtitle="Volumes oficiais por etapa; o estado de cada etapa permanece indisponível até existir contrato autoritativo."
+              subtitle="Volumes, estados e justificativas recebidos do contrato autoritativo do backend."
               stages={flow.map(stage => ({
                 id: stage.id,
                 label: stage.label,
