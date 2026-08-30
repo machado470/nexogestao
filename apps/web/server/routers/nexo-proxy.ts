@@ -1028,8 +1028,8 @@ export const nexoProxyRouter = router({
       .query(async ({ ctx, input }) => normalizeWebhookEventResponse(await authedGet(ctx as CtxLike, '/whatsapp/webhook-events', input ?? {}))),
 
     getWebhookEvent: protectedProcedure
-      .input(z.object({ id: z.string().min(1), orgId: z.string().min(1).optional() }))
-      .query(async ({ ctx, input }) => normalizeWebhookEventResponse(await authedGet(ctx as CtxLike, `/whatsapp/webhook-events/${input.id}`, input.orgId ? { orgId: input.orgId } : {}))),
+      .input(z.object({ id: z.string().min(1) }).strict())
+      .query(async ({ ctx, input }) => normalizeWebhookEventResponse(await authedGet(ctx as CtxLike, `/whatsapp/webhook-events/${input.id}`))),
 
     replayWebhookEvent: protectedProcedure
       .input(z.object({ id: z.string().min(1), force: z.boolean().optional() }))
@@ -1039,9 +1039,9 @@ export const nexoProxyRouter = router({
       .input(whatsappWebhookReplayInput)
       .mutation(async ({ ctx, input }) => authedPost(ctx as CtxLike, '/whatsapp/webhook-events/replay', input)),
 
-    webhookDlqStats: protectedProcedure
-      .input(z.object({ orgId: z.string().min(1).optional() }).optional())
-      .query(async ({ ctx, input }) => authedGet(ctx as CtxLike, '/whatsapp/webhook-events/dlq/stats', input ?? {})),
+    webhookDlqStats: protectedProcedure.query(async ({ ctx }) =>
+      authedGet(ctx as CtxLike, '/whatsapp/webhook-events/dlq/stats')
+    ),
 
 
     // backward compatibility
