@@ -101,31 +101,27 @@ export function AppToolbar({ className, ...props }: ComponentProps<"div">) {
 
 export const AppFiltersBar = AppToolbar;
 
-const appSectionCardVariants = cva(
-  "nexo-card-kpi",
-  {
-    variants: {
-      variant: {
-        default:
-          "border-[var(--app-border-subtle)]/85 bg-[var(--app-surface-1)]",
-        decision:
-          "border-[var(--app-border-strong)] bg-[linear-gradient(135deg,var(--app-surface-2),var(--app-surface-1))] shadow-[var(--app-shadow-elevated)]",
-        action:
-          "border-[color-mix(in_srgb,var(--app-accent)_34%,var(--app-border-subtle))] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--app-accent)_10%,var(--app-surface-1)),var(--app-surface-1))]",
-        context: "border-[var(--app-border-subtle)] bg-[var(--app-surface-1)]",
-        evidence:
-          "border-[color-mix(in_srgb,var(--app-border-subtle)_78%,transparent)] bg-[var(--app-surface-1)] shadow-none",
-        critical:
-          "border-[var(--app-border-critical)] bg-[var(--app-surface-critical)] shadow-[var(--app-glow-critical)]",
-        warning:
-          "border-[var(--app-border-warning)] bg-[var(--app-surface-warning)]",
-        success:
-          "border-[color-mix(in_srgb,var(--app-success)_42%,var(--app-border-subtle))] bg-[var(--app-surface-success)]",
-      },
+const appSectionCardVariants = cva("nexo-card-kpi", {
+  variants: {
+    variant: {
+      default: "border-[var(--app-border-subtle)]/85 bg-[var(--app-surface-1)]",
+      decision:
+        "border-[var(--app-border-strong)] bg-[var(--app-surface-2)] shadow-[var(--app-shadow-soft)]",
+      action:
+        "border-[color-mix(in_srgb,var(--app-accent)_34%,var(--app-border-subtle))] bg-[color-mix(in_srgb,var(--app-accent)_7%,var(--app-surface-1))]",
+      context: "border-[var(--app-border-subtle)] bg-[var(--app-surface-1)]",
+      evidence:
+        "border-[color-mix(in_srgb,var(--app-border-subtle)_78%,transparent)] bg-[var(--app-surface-1)] shadow-none",
+      critical:
+        "border-[var(--app-border-critical)] bg-[var(--app-surface-critical)] shadow-[var(--app-shadow-soft)]",
+      warning:
+        "border-[var(--app-border-warning)] bg-[var(--app-surface-warning)]",
+      success:
+        "border-[color-mix(in_srgb,var(--app-success)_42%,var(--app-border-subtle))] bg-[var(--app-surface-success)]",
     },
-    defaultVariants: { variant: "default" },
-  }
-);
+  },
+  defaultVariants: { variant: "default" },
+});
 
 export function AppSectionCard({
   className,
@@ -217,10 +213,7 @@ export function AppDataTable({ className, ...props }: ComponentProps<"table">) {
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]/85 bg-[var(--surface-primary)] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.45)]">
       <table
-        className={cn(
-          "w-full min-w-full nexo-data-table text-sm",
-          className
-        )}
+        className={cn("w-full min-w-full nexo-data-table text-sm", className)}
         {...props}
       />
     </div>
@@ -244,13 +237,7 @@ export function AppStatusBadge({
   className?: string;
 }) {
   return (
-    <span
-      className={cn(
-        "nexo-badge",
-        `nexo-badge-${tone}`,
-        className
-      )}
-    >
+    <span className={cn("nexo-badge", `nexo-badge-${tone}`, className)}>
       {label}
     </span>
   );
@@ -739,7 +726,10 @@ export function NexoOperationalState({
   return (
     <AppSectionCard
       variant={config.variant}
-      className={cn("overflow-hidden shadow-none", compact ? "p-4" : "p-5 md:p-6")}
+      className={cn(
+        "overflow-hidden shadow-none",
+        compact ? "p-4" : "p-5 md:p-6"
+      )}
     >
       <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr] lg:items-stretch">
         <div className="min-w-0">
