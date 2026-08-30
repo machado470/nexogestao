@@ -282,6 +282,12 @@ function normalizeMeForProfile(raw: any) {
 }
 
 const anyInput = z.any().optional();
+const serviceOrderListInput = z.object({
+  status: z.enum(["OPEN", "ASSIGNED", "IN_PROGRESS", "DONE", "CANCELED"]).optional(),
+  customerId: z.string().optional(), assignedToPersonId: z.string().optional(),
+  from: z.string().optional(), to: z.string().optional(),
+  page: z.number().int().positive().optional(), limit: z.number().int().positive().optional(), search: z.string().optional(),
+}).optional();
 
 const operationalActionType = z.enum(["RETRY_WHATSAPP_MESSAGE", "SEND_PAYMENT_REMINDER", "RECALCULATE_RISK", "RUN_GOVERNANCE_CHECK"]);
 const operationalActionInput = z.object({
@@ -676,7 +682,7 @@ export const nexoProxyRouter = router({
   }),
 
   serviceOrders: router({
-    list: protectedProcedure.input(anyInput).query(async ({ ctx, input }) => {
+    list: protectedProcedure.input(serviceOrderListInput).query(async ({ ctx, input }) => {
       return authedGet(ctx as CtxLike, "/service-orders", input);
     }),
 

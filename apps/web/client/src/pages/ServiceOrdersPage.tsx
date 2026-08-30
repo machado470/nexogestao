@@ -86,16 +86,6 @@ function formatCurrency(cents?: number | null) {
   }).format(Number(cents) / 100);
 }
 
-function formatOverdue(dueDate: Date | null, isOverdue: boolean) {
-  if (!dueDate) return "Sem prazo";
-  if (!isOverdue) return "No prazo";
-  const days = Math.max(
-    1,
-    Math.ceil((Date.now() - dueDate.getTime()) / 86_400_000)
-  );
-  return `${days} dia${days === 1 ? "" : "s"}`;
-}
-
 function getStatusLabel(status: string) {
   if (["OPEN", "ASSIGNED"].includes(status)) return "Aberta";
   if (status === "IN_PROGRESS") return "Em andamento";
@@ -128,19 +118,6 @@ function getChargeStatus(charge: any) {
     .toUpperCase();
 }
 
-function isChargeOverdue(charge: any) {
-  const status = getChargeStatus(charge);
-  if (status === "OVERDUE") return true;
-  if (status !== "PENDING") return false;
-  const dueDate = toDate(charge?.dueDate);
-  if (!dueDate) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(dueDate);
-  due.setHours(0, 0, 0, 0);
-  return due.getTime() < today.getTime();
-}
-
 function hasPaymentEvidence(charge: any) {
   return (
     getChargeStatus(charge) === "PAID" ||
@@ -151,102 +128,6 @@ function hasPaymentEvidence(charge: any) {
 function getOperationalDateLabel(value: unknown) {
   const date = toDate(value);
   return date ? formatDate(date) : "Sem data oficial";
-}
-
-function getPrimaryAction(item: {
-  status: string;
-  isOverdue: boolean;
-  hasCharge: boolean;
-  assignedToPersonId: string;
-  linkedCharge?: any;
-}) {
-  if (item.isOverdue) {
-    return item.status === "IN_PROGRESS"
-      ? {
-          label: "Concluir ou replanejar",
-          type: "complete" as const,
-          reason: "Prazo vencido",
-        }
-      : {
-          label: "Iniciar agora",
-          type: "start" as const,
-          reason: "Atrasada sem execução",
-        };
-  }
-  if (
-    !item.assignedToPersonId &&
-    item.status !== "DONE" &&
-    item.status !== "CANCELED"
-  ) {
-    return {
-      label: "Definir responsável",
-      type: "edit" as const,
-      reason: "Sem responsável",
-    };
-  }
-  if (item.status === "DONE" && !item.hasCharge) {
-    return {
-      label: "Gerar cobrança",
-      type: "charge" as const,
-      reason: "Concluída sem cobrança",
-    };
-  }
-  if (isChargeOverdue(item.linkedCharge)) {
-    return {
-      label: "Cobrar cliente",
-      type: "select" as const,
-      reason: "Cobrança vencida vinculada",
-    };
-  }
-  if (["OPEN", "ASSIGNED"].includes(item.status)) {
-    return {
-      label: "Iniciar",
-      type: "start" as const,
-      reason: "Pronta para execução",
-    };
-  }
-  if (item.status === "IN_PROGRESS") {
-    return {
-      label: "Concluir",
-      type: "complete" as const,
-      reason: "Execução em andamento",
-    };
-  }
-  if (item.status === "DONE") {
-    return {
-      label: "Abrir detalhe",
-      type: "select" as const,
-      reason: "Execução concluída",
-    };
-  }
-  return {
-    label: "Revisar O.S.",
-    type: "select" as const,
-    reason: "Dados incompletos",
-  };
-}
-
-function getRiskLabel(item: {
-  status: string;
-  isOverdue: boolean;
-  hasCharge: boolean;
-  assignedToPersonId: string;
-  dueDate: Date | null;
-  linkedCharge?: any;
-}) {
-  if (item.isOverdue) return "Atrasada";
-  if (item.status === "DONE" && !item.hasCharge)
-    return "Alerta: concluída sem cobrança";
-  if (isChargeOverdue(item.linkedCharge)) return "Cobrança vencida vinculada";
-  if (
-    !item.assignedToPersonId &&
-    item.status !== "DONE" &&
-    item.status !== "CANCELED"
-  )
-    return "Sem responsável";
-  if (item.status === "IN_PROGRESS" && !item.dueDate)
-    return "Em risco: sem prazo";
-  return "Sem bloqueio crítico";
 }
 
 function isRawTechnicalId(value: unknown) {
@@ -319,58 +200,14 @@ function safeText(value: unknown, fallback = "—") {
   return text.length > 0 ? text : fallback;
 }
 
-function getServiceOrderOperationalStatus(item: {
-  status: string;
-  isOverdue: boolean;
-  hasCharge: boolean;
-  assignedToPersonId: string;
-  dueDate: Date | null;
-  linkedCharge?: any;
-}): AppOperationalStatus {
-  if (item.isOverdue) return "RISCO";
-  if (item.status === "DONE" && !item.hasCharge) return "RISCO";
-  if (isChargeOverdue(item.linkedCharge)) return "RISCO";
-  if (
-    !item.assignedToPersonId &&
-    item.status !== "DONE" &&
-    item.status !== "CANCELED"
-  )
+function getServiceOrdersOperationalStatus(
+  decisions: Array<{ operationalStatus: AppOperationalStatus }>
+): AppOperationalStatus {
+  if (decisions.some(item => item.operationalStatus === "RISCO"))
+    return "RISCO";
+  if (decisions.some(item => item.operationalStatus === "ATENÇÃO"))
     return "ATENÇÃO";
-  if (item.status === "IN_PROGRESS" && !item.dueDate) return "ATENÇÃO";
   return "NORMAL";
-}
-
-function getServiceOrdersOperationalStatus(counts: {
-  overdue: number;
-  doneWithoutCharge: number;
-  unassigned: number;
-}): AppOperationalStatus {
-  if (counts.overdue + counts.doneWithoutCharge >= 5) return "CRÍTICO";
-  if (counts.overdue > 0 || counts.doneWithoutCharge > 0) return "RISCO";
-  if (counts.unassigned > 0) return "ATENÇÃO";
-  return "NORMAL";
-}
-
-function getServiceOrderPriority(item: {
-  status: string;
-  isOverdue: boolean;
-  hasCharge: boolean;
-  assignedToPersonId: string;
-  dueDate: Date | null;
-  linkedCharge?: any;
-}): AppPriorityLevel {
-  if (item.isOverdue) return "P0";
-  if (item.status === "DONE" && !item.hasCharge) return "P0";
-  if (isChargeOverdue(item.linkedCharge)) return "P0";
-  if (
-    !item.assignedToPersonId &&
-    item.status !== "DONE" &&
-    item.status !== "CANCELED"
-  )
-    return "P1";
-  if (item.status === "IN_PROGRESS" && !item.dueDate) return "P1";
-  if (["OPEN", "ASSIGNED", "IN_PROGRESS"].includes(item.status)) return "P2";
-  return "P3";
 }
 
 export default function ServiceOrdersPage() {
@@ -513,21 +350,24 @@ export default function ServiceOrdersPage() {
   }, [charges]);
 
   const enrichedOrders = useMemo(() => {
-    const now = Date.now();
     return serviceOrders.map(order => {
       const id = String(order?.id ?? "");
       const status = String(order?.status ?? "").toUpperCase();
       const dueDate = toDate(order?.dueDate ?? order?.scheduledFor);
-      const isOverdue = Boolean(
-        dueDate &&
-        dueDate.getTime() < now &&
-        ["OPEN", "ASSIGNED", "IN_PROGRESS"].includes(status)
-      );
-      const isStalled = status === "IN_PROGRESS" && !dueDate;
+      const operationalDecision = order?.operationalDecision;
+      const isOverdue = Boolean(operationalDecision?.isOverdue);
+      const isStalled = Boolean(operationalDecision?.isStalled);
       const linkedCharge =
         chargeByServiceOrderId.get(id) ??
-        order?.financialSummary?.latestCharge ??
-        null;
+        (order?.financialSummary?.hasCharge
+          ? {
+              id: order.financialSummary.chargeId,
+              status: order.financialSummary.chargeStatus,
+              amountCents: order.financialSummary.chargeAmountCents,
+              dueDate: order.financialSummary.chargeDueDate,
+              paidAt: order.financialSummary.paidAt,
+            }
+          : null);
       const confirmedHasCharge =
         Boolean(order?.financialSummary?.hasCharge) ||
         Boolean(linkedCharge?.id);
@@ -537,7 +377,7 @@ export default function ServiceOrdersPage() {
       // finance outage must never create a false healthy/attention signal.
       const hasCharge = confirmedHasCharge || financialUnavailable;
       const chargeStatus = getChargeStatus(linkedCharge);
-      const chargeOverdue = isChargeOverdue(linkedCharge);
+      const chargeOverdue = Boolean(operationalDecision?.chargeOverdue);
       const chargePending = chargeStatus === "PENDING";
       const paymentConfirmed = hasPaymentEvidence(linkedCharge);
       const customerId = String(order?.customerId ?? order?.customer?.id ?? "");
@@ -582,7 +422,11 @@ export default function ServiceOrdersPage() {
         paymentConfirmed,
         isOverdue,
         isStalled,
-        overdueLabel: formatOverdue(dueDate, isOverdue),
+        overdueLabel: isOverdue
+          ? `${Number(operationalDecision?.overdueDays ?? 0)} dia${Number(operationalDecision?.overdueDays ?? 0) === 1 ? "" : "s"}`
+          : dueDate
+            ? "No prazo"
+            : "Sem prazo",
         appointmentId,
         linkedAppointment: appointmentById.get(appointmentId) ?? null,
         assignedToPersonId,
@@ -596,8 +440,16 @@ export default function ServiceOrdersPage() {
 
       return {
         ...enriched,
-        riskLabel: getRiskLabel(enriched),
-        nextAction: getPrimaryAction(enriched),
+        riskLabel: String(
+          operationalDecision?.riskLabel ?? "Contrato operacional indisponível"
+        ),
+        operationalStatus: operationalDecision?.operationalStatus ?? "ATENÇÃO",
+        priority: operationalDecision?.priority ?? "P1",
+        nextAction: operationalDecision?.nextAction ?? {
+          type: "select" as const,
+          label: "Revisar O.S.",
+          reason: "Contrato operacional indisponível",
+        },
       };
     });
   }, [
@@ -1473,7 +1325,7 @@ export default function ServiceOrdersPage() {
   }
 
   const serviceOrdersOperationalStatus =
-    getServiceOrdersOperationalStatus(counts);
+    getServiceOrdersOperationalStatus(enrichedOrders);
 
   return (
     <AppPageShell className="gap-3">
@@ -1524,14 +1376,14 @@ export default function ServiceOrdersPage() {
               <p className="nexo-overline">Hero executivo da O.S.</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <AppOperationalStatusBadge
-                  status={getServiceOrderOperationalStatus(selectedOrder)}
+                  status={selectedOrder.operationalStatus}
                   label={getStatusTone(
                     selectedOrder.status,
                     selectedOrder.isOverdue
                   )}
                 />
                 <AppPriorityBadge
-                  priority={getServiceOrderPriority(selectedOrder)}
+                  priority={selectedOrder.priority}
                   label={selectedOrder.riskLabel}
                 />
                 <AppStatusBadge
@@ -2057,11 +1909,11 @@ export default function ServiceOrdersPage() {
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <AppOperationalStatusBadge
-                              status={getServiceOrderOperationalStatus(item)}
+                              status={item.operationalStatus}
                               label={getStatusTone(item.status, item.isOverdue)}
                             />
                             <AppPriorityBadge
-                              priority={getServiceOrderPriority(item)}
+                              priority={item.priority}
                               label={item.riskLabel}
                             />
                           </div>
@@ -2204,7 +2056,7 @@ export default function ServiceOrdersPage() {
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                     <AppOperationalStatusBadge
-                      status={getServiceOrderOperationalStatus(selectedOrder)}
+                      status={selectedOrder.operationalStatus}
                       label={getStatusTone(
                         selectedOrder.status,
                         selectedOrder.isOverdue

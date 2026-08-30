@@ -151,6 +151,46 @@ type FinancialSummary = {
   paidAt: Date | null
 }
 
+export type ServiceOrderOperationalDecision = {
+  isOverdue: boolean
+  overdueDays: number
+  isStalled: boolean
+  chargeOverdue: boolean
+  operationalStatus: 'NORMAL' | 'ATENÇÃO' | 'RISCO'
+  priority: 'P0' | 'P1' | 'P2' | 'P3'
+  riskLabel: string
+  nextAction: { type: 'start' | 'complete' | 'charge' | 'edit' | 'select'; label: string; reason: string }
+}
+
+export function resolveServiceOrderOperationalDecision(input: {
+  status: ServiceOrderStatus; assignedToPersonId?: string | null; dueDate?: Date | null
+  scheduledFor?: Date | null; financialSummary: FinancialSummary; now?: Date
+}): ServiceOrderOperationalDecision {
+  const now = input.now ?? new Date()
+  const deadline = input.dueDate ?? input.scheduledFor ?? null
+  const active = ['OPEN', 'ASSIGNED', 'IN_PROGRESS'].includes(input.status)
+  const isOverdue = Boolean(deadline && active && deadline.getTime() < now.getTime())
+  const overdueDays = isOverdue && deadline ? Math.max(1, Math.ceil((now.getTime() - deadline.getTime()) / 86_400_000)) : 0
+  const isStalled = input.status === 'IN_PROGRESS' && !deadline
+  const chargeDueDate = input.financialSummary.chargeDueDate
+  const chargeOverdue = input.financialSummary.chargeStatus === 'OVERDUE' || Boolean(input.financialSummary.chargeStatus === 'PENDING' && chargeDueDate && chargeDueDate.getTime() < now.getTime())
+  const withoutOwner = !input.assignedToPersonId && active
+  const doneWithoutCharge = input.status === 'DONE' && !input.financialSummary.hasCharge
+  let nextAction: ServiceOrderOperationalDecision['nextAction']
+  if (isOverdue) nextAction = input.status === 'IN_PROGRESS' ? { type: 'complete', label: 'Concluir ou replanejar', reason: 'Prazo vencido' } : { type: 'start', label: 'Iniciar agora', reason: 'Atrasada sem execução' }
+  else if (withoutOwner) nextAction = { type: 'edit', label: 'Definir responsável', reason: 'Sem responsável' }
+  else if (doneWithoutCharge) nextAction = { type: 'charge', label: 'Gerar cobrança', reason: 'Concluída sem cobrança' }
+  else if (chargeOverdue) nextAction = { type: 'select', label: 'Cobrar cliente', reason: 'Cobrança vencida vinculada' }
+  else if (input.status === 'OPEN' || input.status === 'ASSIGNED') nextAction = { type: 'start', label: 'Iniciar', reason: 'Pronta para execução' }
+  else if (input.status === 'IN_PROGRESS') nextAction = { type: 'complete', label: 'Concluir', reason: 'Execução em andamento' }
+  else if (input.status === 'DONE') nextAction = { type: 'select', label: 'Abrir detalhe', reason: 'Execução concluída' }
+  else nextAction = { type: 'select', label: 'Revisar O.S.', reason: 'Dados incompletos' }
+  const riskLabel = isOverdue ? 'Atrasada' : doneWithoutCharge ? 'Alerta: concluída sem cobrança' : chargeOverdue ? 'Cobrança vencida vinculada' : withoutOwner ? 'Sem responsável' : isStalled ? 'Em risco: sem prazo' : 'Sem bloqueio crítico'
+  const operationalStatus = isOverdue || doneWithoutCharge || chargeOverdue ? 'RISCO' as const : withoutOwner || isStalled ? 'ATENÇÃO' as const : 'NORMAL' as const
+  const priority = isOverdue || doneWithoutCharge || chargeOverdue ? 'P0' as const : withoutOwner || isStalled ? 'P1' as const : active ? 'P2' as const : 'P3' as const
+  return { isOverdue, overdueDays, isStalled, chargeOverdue, operationalStatus, priority, riskLabel, nextAction }
+}
+
 @Injectable()
 export class ServiceOrdersService {
   private readonly logger = new Logger(ServiceOrdersService.name)
@@ -346,12 +386,11 @@ export class ServiceOrdersService {
       }
     }
 
-    return serviceOrders.map((serviceOrder) => ({
-      ...serviceOrder,
-      financialSummary: this.buildFinancialSummary(
-        chargeByServiceOrderId.get(serviceOrder.id) ?? null,
-      ),
-    }))
+    return serviceOrders.map((serviceOrder) => {
+      const financialSummary = this.buildFinancialSummary(chargeByServiceOrderId.get(serviceOrder.id) ?? null)
+      const order = serviceOrder as T & { status: ServiceOrderStatus; assignedToPersonId?: string | null; dueDate?: Date | null; scheduledFor?: Date | null }
+      return { ...serviceOrder, financialSummary, operationalDecision: resolveServiceOrderOperationalDecision({ status: order.status, assignedToPersonId: order.assignedToPersonId, dueDate: order.dueDate, scheduledFor: order.scheduledFor, financialSummary }) }
+    })
   }
 
   async list(
