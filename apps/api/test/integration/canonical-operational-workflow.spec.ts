@@ -121,6 +121,9 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
         await prisma.subscription.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.person.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.user.deleteMany({ where: { orgId: { in: orgIds } } })
+        // Official events can finish persisting while the other tenant rows are
+        // being drained, so make the organization deletion the final FK boundary.
+        await prisma.timelineEvent.deleteMany({ where: { orgId: { in: orgIds } } })
         await prisma.organization.deleteMany({ where: { id: { in: orgIds } } })
       }
     } finally {
