@@ -38,6 +38,28 @@ describe("Operational page guardrails", () => {
     expect(finance).not.toMatch(/\borgId\s*:/);
     expect(finance).not.toMatch(/\brole\s*:/);
   });
+  it("proíbe motor paralelo no inbox e composer do WhatsApp", () => {
+    const whatsapp = readFileSync("client/src/pages/WhatsAppPage.tsx", "utf8");
+    for (const forbidden of [
+      "resolveInboxPriority",
+      "priorityRank",
+      "getRecommendedWhatsAppComposerActions",
+      "buildWhatsAppComposerActionGroups",
+      "normalizeContextStatus",
+      "hasOverdueCharge",
+      "hasAppointmentToConfirm",
+      "hasServiceOrderNeedingUpdate",
+      "fallbackPrimaryAction",
+      "Date.now()",
+      "whatsapp-ui:",
+    ])
+      expect(whatsapp).not.toContain(forbidden);
+    expect(whatsapp).toContain("presentOfficialWhatsAppActions");
+    expect(whatsapp).toContain("Sem recomendação oficial");
+    expect(whatsapp).not.toMatch(/\borgId\s*:/);
+    expect(whatsapp).not.toMatch(/\brole\s*:/);
+  });
+
   it("evita placeholders rasos nas páginas críticas", () => {
     for (const file of criticalPages) {
       const source = readFileSync(file, "utf8");
