@@ -17,6 +17,7 @@ import { Org } from '../auth/decorators/org.decorator'
 import { User } from '../auth/decorators/user.decorator'
 
 import { CustomersService } from './customers.service'
+import { CustomersOperationalSummaryService } from './customers-operational-summary.service'
 import { CreateCustomerDto } from './dto/create-customer.dto'
 import { UpdateCustomerDto } from './dto/update-customer.dto'
 import { QuotasService } from '../quotas/quotas.service'
@@ -27,6 +28,7 @@ export class CustomersController {
   constructor(
     private readonly customers: CustomersService,
     private readonly quotas: QuotasService,
+    private readonly operationalSummary: CustomersOperationalSummaryService,
   ) {}
 
   @Get()
@@ -42,6 +44,12 @@ export class CustomersController {
     res.set('Content-Type', 'text/csv')
     res.attachment(`customers-${orgId}-${Date.now()}.csv`)
     return res.send(csv)
+  }
+
+  @Get('operational-summary')
+  @Roles('ADMIN', 'MANAGER', 'STAFF', 'VIEWER')
+  operationalSummaryForPortfolio(@Org() orgId: string) {
+    return this.operationalSummary.getSummary(orgId)
   }
 
   @Get(':id')

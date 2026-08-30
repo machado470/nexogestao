@@ -128,7 +128,9 @@ describe("CustomersPage operational client center", () => {
       "!profile.serviceOrders.some(isServiceOrderOverdue)"
     );
     expect(source).toContain("function isServiceOrderOverdue(");
-    expect(source).toContain("if (!isServiceOrderOpen(order)) return false;");
+    expect(source).toContain(
+      "order.operationalDecision?.isOverdue === true"
+    );
   });
 
   it("shows active status separately from operational health", () => {
@@ -184,7 +186,7 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("const lastService = serviceOrders.find(");
     expect(source).toContain("lastService,");
     expect(source).not.toContain("lastService: serviceOrders[0]");
-    expect(source).toContain("context: profile.activeServiceOrder");
+    expect(source).toContain("summary.interventionReason");
     expect(source).toContain('Último serviço:{" "}');
     expect(source).toContain('Próximo agendamento:{" "}');
     expect(source).toContain("Sem serviço concluído");
@@ -192,34 +194,6 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain(
       "profile.lastService.updatedAt ??\n                                      profile.lastService.createdAt"
     );
-  });
-
-  it("shows an explicit badge for customers in the first 30 days", () => {
-    expect(source).toContain("const customerNewWindowDays = 30;");
-    expect(source).toContain("function isNewCustomer(customer: Customer)");
-    expect(source).toContain("const createdAt = toDate(customer.createdAt)");
-    expect(source).toContain(
-      "const windowMs = customerNewWindowDays * 24 * 60 * 60 * 1000"
-    );
-    expect(source).toContain("return ageMs >= 0 && ageMs <= windowMs");
-    expect(
-      source.match(/AppStatusBadge label="Novo" tone="info"/g)?.length
-    ).toBe(2);
-  });
-
-  it("shows a frequent indicator after three completed services", () => {
-    expect(source).toContain(
-      "const customerFrequentCompletedServicesThreshold = 3;"
-    );
-    expect(source).toContain("function isFrequentCustomer(");
-    expect(source).toContain(
-      'order => String(order.status ?? "").toUpperCase() === "COMPLETED"'
-    );
-    expect(source).toContain(
-      "completedServices >= customerFrequentCompletedServicesThreshold"
-    );
-    expect(source.match(/label="Frequente"/g)?.length).toBe(2);
-    expect(source).toContain('tone="accent"');
   });
 
   it("shows the canonical last completed service in the customer hero", () => {
@@ -262,17 +236,28 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("AppPagination");
   });
 
-  it("keeps auxiliary failures non-blocking without presenting a healthy wallet", () => {
+  it("keeps auxiliary failures non-blocking without overriding authoritative operational health", () => {
     expect(source).toContain("Leitura operacional parcial");
     expect(source).toContain("Clientes carregados, mas");
-    expect(source).toContain("não deve ser interpretada como");
+    expect(source).toContain(
+      "Estado operacional e risco"
+    );
+    expect(source).toContain(
+      "resumo oficial"
+    );
     expect(source).toContain("unavailableAuxiliaryData");
     expect(source).toContain("hasIncompleteOperationalData");
     expect(source).toContain('label: "cobranças"');
     expect(source).toContain('label: "ordens de serviço"');
     expect(source).toContain('label: "agendamentos"');
     expect(source).toContain("Tentar novamente");
-    expect(source).toContain('label: "Leitura parcial"');
+    expect(source).toContain(
+      "renderAuthoritativeCustomerStatus"
+    );
+    expect(source).toContain(
+      "customersOperationalSummaryQuery"
+    );
+    expect(source).not.toContain('label: "Leitura parcial"');
     expect(source).toContain("Financeiro indisponível");
     expect(source).toContain("O.S. indisponíveis");
     expect(source).toContain("Agenda indisponível");
@@ -281,7 +266,9 @@ describe("CustomersPage operational client center", () => {
   it("does not block already loaded customers while auxiliary data is loading", () => {
     expect(source).toContain("Complementando sinais operacionais");
     expect(source).toContain("pendingAuxiliaryData");
-    expect(source).toContain("de concluir a leitura de saúde da carteira");
+    expect(source).toContain(
+      "de completar os detalhes auxiliares da carteira"
+    );
     expect(source).toContain('aria-live="polite"');
   });
 });

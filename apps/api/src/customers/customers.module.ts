@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { PrismaModule } from '../prisma/prisma.module'
 import { CustomersService } from './customers.service'
 import { CustomersController } from './customers.controller'
+import { CustomersOperationalSummaryService } from './customers-operational-summary.service'
 
 import { TimelineModule } from '../timeline/timeline.module'
 import { AuditModule } from '../audit/audit.module'
@@ -20,7 +21,10 @@ import { QuotasModule } from '../quotas/quotas.module'
     AnalyticsModule,
     QuotasModule,
   ],
-  providers: [CustomersService],
+  providers: [
+    CustomersService,
+    CustomersOperationalSummaryService,
+  ],
   controllers: [CustomersController],
   exports: [CustomersService],
 })
