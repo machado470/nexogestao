@@ -1,42 +1,28 @@
 # Timeline como prova oficial da operação
 
-A página **Timeline** é a fonte oficial de auditoria operacional do NexoGestão. Ela não é feed social e não substitui o AuditEvent técnico: sua função é provar, em linguagem operacional, o que aconteceu na rotina da organização.
+A Timeline é o **Centro de Evidências Operacionais** do NexoGestão. Ela apresenta fatos persistidos pela API; não é feed social, motor de risco ou substituto do `AuditEvent` técnico.
 
-## Contrato de prova
+## Autoridade do contrato de leitura
 
-Cada item exibido deve preservar somente dados recebidos das fontes existentes da Timeline:
+O `TimelineService` aplica o tenant recebido do `@Org()` autenticado. O presenter da API cria o contrato público e é a única camada autorizada a:
 
-- tipo do evento normalizado;
-- descrição curta operacional;
-- entidade e identificador quando a fonte informar;
-- ator/responsável quando a fonte informar;
-- data/hora do evento;
-- metadados resumidos quando existirem em formato simples.
+- normalizar aliases históricos para `eventType` canônico;
+- expor o vínculo de entidade persistido e seu alvo de navegação;
+- selecionar metadata primitiva explicitamente permitida;
+- encaminhar módulo, severidade, título, consequência e recomendação apenas quando esses valores foram oficialmente produzidos.
 
-Quando ator, módulo, entidade ou metadados não vierem da fonte, a interface deve declarar o fallback de forma explícita. A tela não deve inferir automação, reconstruir eventos ausentes ou mascarar lacunas de rastreabilidade.
+O contrato público não expõe `orgId`, IDs de autenticação, `requestId`, payloads aninhados ou segredos. O BFF autentica, valida `limit`, `action` e `cursor`, e encaminha a resposta sem reconstruir decisões.
 
-## Governança e risco
+## Limite do frontend
 
-A Timeline sustenta risco e governança porque permite responder rapidamente:
+O navegador formata o instante, traduz tipos canônicos conhecidos e filtra valores oficiais do recorte carregado. Ele não examina `action`, descrição ou metadata para deduzir módulo, severidade, risco, consequência ou recomendação; não normaliza aliases; não usa relógio local para declarar estado operacional; e não envia `orgId` ou `role`.
 
-1. qual evento ocorreu;
-2. qual módulo operacional foi afetado;
-3. qual entidade pode ser investigada;
-4. quem foi informado como ator;
-5. quais metadados justificam atenção, criticidade ou restrição.
+Eventos desconhecidos aparecem como **Evento não classificado**. Campos ausentes aparecem como **Não informado**, **Não classificado** ou **Não disponível**. Ausência de eventos nunca significa estado saudável.
 
-Eventos críticos e de alta severidade devem ser visualmente priorizados para não ficarem escondidos em ruído de baixa relevância.
+## Navegação e indisponibilidade
 
-## CTAs permitidos
+CTAs só são exibidos quando a API fornece entidade persistida com `id` e `href`. Eles apenas navegam e não executam automações. Falha da Timeline mantém a identidade autenticada visível, apresenta indisponibilidade parcial e oferece retry.
 
-A página só deve oferecer CTAs de investigação quando houver `entityType`/`entityId` ou campos equivalentes utilizáveis na fonte oficial, como `customerId`, `serviceOrderId`, `appointmentId` ou `chargeId`. Os CTAs permitidos são navegação para Cliente, O.S., Financeiro, Agendamento, WhatsApp e Governança. Eles não executam automação.
+## Metadata segura
 
-## Estados compactos
-
-A leitura operacional usa estados compactos:
-
-- saudável: eventos recentes sem criticidade detectável no recorte;
-- atenção: risco, atraso, falha ou silêncio recente;
-- crítico: evidência restritiva ou falha relevante;
-- vazio: nenhum evento oficial no recorte;
-- erro: falha de carregamento da fonte oficial.
+A API usa allowlist de chaves escalares. A metadata é secundária, recolhida em detalhe técnico, e nunca participa de classificação no cliente.
