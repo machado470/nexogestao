@@ -76,7 +76,7 @@ describe("passive manual assignee warning UI contract", () => {
 
   it("exibe o aviso no fluxo padronizado de agendamentos sem alterar o responsável enviado", () => {
     expect(appointmentPage).toContain("<AppPageShell>");
-    expect(appointmentPage).toContain("AppSectionCard");
+    expect(appointmentPage).toContain("AppSectionBlock");
     expect(appointmentPage).toContain("<AppRowActionsDropdown");
     expect(appointmentPageCompact).toContain(
       'personId={ form.assignedToPersonId === "unassigned" ? null : form.assignedToPersonId }'
@@ -91,7 +91,7 @@ describe("passive manual assignee warning UI contract", () => {
       "onWarningShown={assigneeWarningTelemetry.trackShown}"
     );
     expect(appointmentPageCompact).toContain(
-      "assigneeWarningTelemetry.trackConfirmed( assignedToPersonId,"
+      "assigneeWarningTelemetry.trackConfirmed(assignedToPersonId, editing?.id)"
     );
     expect(createAppointmentModal).toContain(
       "assigneeWarningTelemetry.trackConfirmed(payload.assignedToPersonId)"

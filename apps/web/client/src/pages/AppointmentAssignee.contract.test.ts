@@ -27,21 +27,21 @@ describe("appointment assignee UI contract", () => {
     );
     const normalizedAppointments = compact(appointments);
 
+    expect(appointments).toContain("Contexto da agenda");
+    expect(appointments).toContain("Atenção operacional oficial");
+    expect(appointments).toContain("Agenda operacional");
     expect(appointments).toContain(
-      "Controle do tempo, confirmação e preparação da execução"
+      "Disponibilidade e capacidade indisponíveis"
     );
-    expect(appointments).toContain("Radar operacional");
-    expect(appointments).toContain("Carteira operacional de agendamentos");
-    expect(appointments).toContain("Hero executivo do agendamento");
-    expect(appointments).toContain(
-      "Fonte atual não entrega resposta do cliente nesta tela"
-    );
-    expect(appointments).toContain("Sem Timeline oficial carregada");
-    expect(appointments).toContain("Decisão e próxima ação");
+    expect(appointments).toContain("Próxima ação indisponível");
+    expect(appointments).toContain("Evidências oficiais");
     expect(appointments).toContain("Abrir O.S.");
-    expect(appointments).toContain("Enviar WhatsApp");
+    expect(appointments).toContain("WhatsApp");
     expect(appointments).not.toContain("Google Calendar");
     expect(appointments).not.toContain("automático");
+    expect(appointments).not.toMatch(
+      /deriveAppointmentPriority|riskScore|hasConflict/
+    );
     expect(normalizedAppointments).toContain(
       'responsibleFilter === "all" ? { limit: 100 } : { assignedToPersonId: responsibleFilter, limit: 100 }'
     );
