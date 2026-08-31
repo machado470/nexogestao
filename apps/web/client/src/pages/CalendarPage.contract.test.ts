@@ -1,194 +1,134 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const source = () => readFileSync("client/src/pages/CalendarPage.tsx", "utf8");
-const commandLayerSource = () =>
-  readFileSync("client/src/components/app/OperationalCommandLayer.tsx", "utf8");
-const compact = (value: string) => value.replace(/\s+/g, " ").trim();
+const source = readFileSync("client/src/pages/CalendarPage.tsx", "utf8");
+const compact = source.replace(/\s+/g, " ");
 
-describe("CalendarPage operational time-control contract", () => {
-  it("posiciona calendário como centro de controle do tempo, não Google Calendar genérico", () => {
-    const calendar = source();
-
-    expect(calendar).toContain("Centro de controle do tempo da operação");
-    expect(calendar).toContain("Visão estratégica do tempo");
-    expect(calendar).toContain("distribuição, conflitos, vazios e sobrecarga");
-    expect(calendar).not.toContain("Google Calendar");
+describe("CalendarPage official temporal-exploration contract", () => {
+  it("follows the official information hierarchy", () => {
+    const labels = [
+      "Navegação temporal",
+      "Disponibilidade e capacidade oficiais",
+      "Controles de visualização",
+      "Indicadores factuais",
+      "Filtrar por texto",
+      "Grade do calendário",
+      "Detalhe do evento selecionado",
+      "Evidências e navegação contextual",
+    ];
+    labels.forEach(label => expect(source).toContain(label));
+    labels
+      .slice(1)
+      .forEach((label, index) =>
+        expect(source.indexOf(labels[index])).toBeLessThan(
+          source.indexOf(label)
+        )
+      );
   });
 
-  it("remove chips genéricos e mostra sinais reais no hero", () => {
-    const calendar = source();
-
-    expect(calendar).not.toContain("AGUARDANDO AÇÃO");
-    expect(calendar).toContain("heroSignals");
-    expect(calendar).toContain("atraso(s) detectado(s)");
-    expect(calendar).toContain("sem responsável");
-    expect(calendar).toContain("capacidade restante hoje");
-    expect(calendar).toContain("conflitos");
-    expect(calendar).toContain("Operação do tempo monitorada");
-  });
-
-  it("usa pipeline humanizado e helpers sem alterar o significado técnico", () => {
-    const calendar = source();
-    const normalized = compact(calendar);
-
-    expect(normalized).toContain(
-      "Tempo → Agendamentos → Responsáveis → Ordens de Serviço → Execução → Evidências → Governança"
+  it("preserves day, week and month views plus explicit period navigation", () => {
+    ["timeGridDay", "timeGridWeek", "dayGridMonth"].forEach(view =>
+      expect(source).toContain(view)
     );
-    for (const label of [
-      'label: "Tempo"',
-      'label: "Agendamentos"',
-      'label: "Responsáveis"',
-      'label: "Ordens de Serviço"',
-      'label: "Execução"',
-      'label: "Evidências"',
-      'label: "Governança"',
-    ]) {
-      expect(calendar).toContain(label);
-    }
-    expect(calendar).toContain("Eventos preparados para execução");
-    expect(calendar).toContain("Equipe vinculada aos eventos");
-    expect(calendar).toContain("Eventos reais derivados do calendário");
-    expect(calendar).toContain("Sinais antes de afetar o controle operacional");
+    expect(source).toContain('movePeriod("prev")');
+    expect(source).toContain('movePeriod("today")');
+    expect(source).toContain('movePeriod("next")');
+    expect(source).toContain("datesSet={onDatesSet}");
   });
 
-  it("mantém grade visual/fallback, painel lateral vivo e ficha operacional", () => {
-    const calendar = source();
-
-    expect(calendar).toContain("Calendário visual interativo");
-    expect(calendar).toContain("periodSummary");
-    expect(calendar).toContain("Ficha operacional do evento");
-    expect(calendar).toContain("Cliente");
-    expect(calendar).toContain("Serviço");
-    expect(calendar).toContain("Horário");
-    expect(calendar).toContain("Duração");
-    expect(calendar).toContain("Responsável");
-    expect(calendar).toContain("Próxima ação");
-    expect(compact(calendar)).toContain("Exibindo próximo evento crítico");
+  it("keeps filters factual and presentational", () => {
+    expect(source).toContain('aria-label="Filtrar por texto"');
+    expect(source).toContain('aria-label="Filtrar por responsável"');
+    expect(source).toContain('aria-label="Filtrar por status"');
+    expect(source).toContain("item.assignedToPersonId === teamFilter");
+    expect(source).toContain("item.status === statusFilter");
+    expect(source).toContain("includes(search)");
   });
 
-  it("usa CTAs seguros e não promete automação falsa", () => {
-    const calendar = source();
-
-    expect(calendar).toContain("Abrir agendamento");
-    expect(calendar).toContain("Revisar agenda");
-    expect(calendar).toContain("Revisar semana");
-    expect(calendar).toContain("Ver e vincular");
-    expect(calendar).toContain("Abrir Timeline oficial");
-    expect(calendar).toContain("Revisar capacidade");
-    expect(calendar).toContain("Ver conflitos");
-    expect(calendar).toContain("Ver capacidade hoje");
-    expect(calendar).not.toContain("Agendamento #");
-    expect(calendar).not.toContain("Confirmar");
-    expect(calendar).not.toContain("Executar");
-    expect(calendar).not.toContain("Automatizar");
-    expect(calendar).not.toContain("Rebalancear equipe");
-  });
-
-  it("transforma distribuição em leitura operacional", () => {
-    const calendar = source();
-
-    expect(calendar).toContain("Eventos no período");
-    expect(calendar).toContain("Preparados para executar");
-    expect(calendar).toContain("Precisam de atenção");
-    expect(calendar).toContain("Finalizados");
-    expect(calendar).toContain("Cancelados");
-    expect(calendar).toContain("Capacidade restante hoje");
-  });
-
-  it("não fabrica prova operacional nem expõe metadados técnicos na leitura principal", () => {
-    const calendar = source();
-
-    expect(calendar).toContain(
-      "Fallback seguro: eventos derivados de agendamentos com datas reais; não substitui Timeline oficial."
-    );
-    expect(calendar).toContain(".slice(0, 5)");
-    expect(calendar).toContain("tone:");
-    expect(calendar).toContain('item.status === "NO_SHOW"');
-    expect(calendar).toContain('item.status === "CANCELED"');
-    expect(calendar).not.toContain("eventType");
-    expect(calendar).not.toContain("payload");
-    expect(calendar).not.toContain("metadata");
-  });
-
-  it("compacta alertas, reordena ficha e simplifica comandos", () => {
-    const calendar = source();
-    const normalized = compact(calendar);
-
-    expect(calendar).toContain(".slice(0, 3)");
-    expect(calendar).toContain("Consequência: pode impactar O.S. e prova");
-    expect(
-      normalized.indexOf('["Próxima ação", "Abrir agendamento"]')
-    ).toBeLessThan(normalized.indexOf('"O.S."'));
-    const commandLayer = commandLayerSource();
-    expect(commandLayer).toContain("Problema");
-    expect(commandLayer).toContain("Consequência");
-    expect(commandLayer).not.toContain("Motivo:");
-    expect(commandLayer).not.toContain("Impacto esperado");
-  });
-
-  it("declara grade operacional sem fabricar disponibilidade horária", () => {
-    const calendar = source();
-
-    expect(calendar).toContain('slotMinTime="07:00:00"');
-    expect(calendar).toContain("businessHours");
-    expect(calendar).toContain("events={events}");
-    expect(calendar).toContain(
-      "não representa disponibilidade real de horário"
-    );
-    expect(calendar).not.toContain("availabilityMarkers");
-    expect(calendar).not.toContain("Janela livre calculada");
-  });
-
-  it("preserva a grade com indisponibilidade parcial e filtros acessíveis", () => {
-    const calendar = source();
-
-    expect(calendar).toContain("Indisponibilidade parcial");
-    expect(calendar).toContain("const isLoading = appointmentsQuery.isLoading");
-    expect(calendar).toContain("const hasError = appointmentsQuery.isError");
-    expect(calendar).toContain('aria-label="Período do calendário"');
-    expect(calendar).toContain('aria-label="Filtrar por responsável"');
-    expect(calendar).toContain('aria-label="Filtrar por status"');
-    expect(calendar).toContain('aria-label="Filtrar por cliente"');
-  });
-
-  it("usa capacidade configurada autoritativa sem fabricar estado ou janelas", () => {
-    const calendar = source();
-
-    expect(calendar).toContain(
-      "trpc.people.assignees.useQuery"
-    );
-    expect(calendar).not.toContain(
-      "trpc.people.operationalSummary.useQuery"
-    );
-
-    for (const field of [
-      "dailyAppointmentCapacity",
-      "todayAppointmentsCount",
+  it("reads official capacity and availability without calculating them", () => {
+    expect(source).toContain("trpc.people.operationalSummary.useQuery");
+    [
+      "availabilityStatus",
+      "capacityStatus",
       "appointmentCapacityUsagePct",
-    ]) {
-      expect(calendar).toContain(field);
-    }
-
-    expect(calendar).toContain("Capacidade restante hoje");
-
-    expect(calendar).not.toContain("activePeople * 12");
-    expect(calendar).not.toContain("owner.count >= 6");
-    expect(calendar).not.toContain(
-      "(busiestDay?.[1] ?? 0) >= 10"
+      "todayAppointmentsCount",
+      "dailyAppointmentCapacity",
+    ].forEach(field => expect(source).toContain(field));
+    expect(source).toContain(
+      "Capacidade e disponibilidade indisponíveis na fonte oficial"
     );
+    expect(source).not.toMatch(/dailyAppointmentCapacity\s*-/);
+    expect(source).not.toMatch(
+      /todayAppointmentsCount\s*\/\s*person\.dailyAppointmentCapacity/
+    );
+    expect(source).not.toContain("capacityRemaining");
+  });
 
-    expect(calendar).not.toContain("OperationalStateLevel");
-    expect(calendar).not.toContain("<OperationalStateCard");
-
-    expect(calendar).not.toContain("availabilityMarkers");
-    expect(calendar).not.toContain("Janela livre calculada");
-    expect(calendar).not.toContain("[9, 14, 16]");
-
-    expect(calendar).toContain("conflictIds");
-    expect(calendar).toContain(
-      "Conflito visual detectado no calendário"
+  it("degrades auxiliary failures as an honest partial reading", () => {
+    expect(source).toContain("Leitura parcial.");
+    expect(source).toContain("partialSources");
+    expect(source).toContain("officialCapacityQuery.isError");
+    expect(compact).toContain(
+      "A grade permanece baseada somente nos agendamentos retornados"
     );
   });
 
+  it("preserves legitimate event and contextual actions", () => {
+    [
+      "Novo agendamento",
+      "Abrir agendamento",
+      "Editar / remarcar",
+      "Confirmar no agendamento",
+      "Cancelar no agendamento",
+      "Abrir O.S.",
+      "Abrir cliente",
+      "Ver Agendamentos",
+      "Abrir Timeline oficial",
+    ].forEach(action => expect(source).toContain(action));
+  });
+
+  it("keeps time math limited to formatting, chronology and duration presentation", () => {
+    expect(source).toContain("formatDateTime");
+    expect(source).toContain("durationLabel");
+    expect(compact).toMatch(
+      /\.sort\( \(a, b\) => new Date\(a\.startsAt\)\.getTime\(\) - new Date\(b\.startsAt\)\.getTime\(\) \)/
+    );
+    expect(source).toContain(
+      "Sobreposições são organizadas apenas pelo layout visual"
+    );
+    expect(source).toContain("nowIndicator");
+    expect(source).not.toContain("Date.now");
+  });
+
+  it("has semantic guardrails against local operational decisions", () => {
+    [
+      "conflictIds",
+      "delayedIds",
+      "capacityRemaining",
+      "OperationalRiskCard",
+      "NextBestActionCard",
+      "Próxima melhor ação",
+      "Sem risco crítico",
+      "Atraso detectado",
+      "Conflito visual detectado",
+      "sobrecarreg",
+    ].forEach(forbidden => expect(source).not.toContain(forbidden));
+  });
+
+  it("uses the official visual foundation and a readable mobile list", () => {
+    [
+      "AppPageShell",
+      "AppOperationalHeader",
+      "AppSectionBlock",
+      "AppFiltersBar",
+      "AppStatusBadge",
+      "AppPageLoadingState",
+      "AppPageErrorState",
+      "AppPageEmptyState",
+      "CreateAppointmentModal",
+    ].forEach(component => expect(source).toContain(component));
+    expect(source).toContain("Agenda em lista para telas pequenas");
+    expect(source).not.toContain("flowbite");
+    expect(source).not.toMatch(/#[0-9a-f]{3,8}/i);
+  });
 });

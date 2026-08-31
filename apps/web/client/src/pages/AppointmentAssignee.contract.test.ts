@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const compact = (source: string) => source.replace(/\s+/g, " ").trim();
 
 describe("appointment assignee UI contract", () => {
-  it("envia filtro de equipe do calendário ao servidor e não cria conflito artificial para agenda sem responsável", () => {
+  it("envia filtro de equipe ao servidor e não deriva conflito operacional no calendário", () => {
     const calendar = readFileSync("client/src/pages/CalendarPage.tsx", "utf8");
 
     const normalizedCalendar = compact(calendar);
@@ -12,12 +12,12 @@ describe("appointment assignee UI contract", () => {
     expect(normalizedCalendar).toContain(
       'teamFilter === "all" ? { limit: 1000 } : { assignedToPersonId: teamFilter, limit: 1000 }'
     );
-    expect(calendar).toContain("if (!item.assignedToPersonId) return;");
-    expect(calendar).toContain("const activeAppointments = useMemo(");
-    expect(normalizedCalendar).toContain(
-      '!["CANCELED", "DONE", "NO_SHOW"].includes(item.status)'
+    expect(calendar).not.toContain("conflictIds");
+    expect(calendar).not.toContain("hasConflict");
+    expect(calendar).not.toContain("Conflito operacional");
+    expect(calendar).toContain(
+      "Sobreposições são organizadas apenas pelo layout visual da grade."
     );
-    expect(calendar).toContain("activeAppointments.forEach(item => {");
   });
 
   it("mantém agendamentos como controle operacional do tempo e entrada da execução", () => {
