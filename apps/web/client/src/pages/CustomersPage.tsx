@@ -148,14 +148,7 @@ type Workspace = {
   totalSpentCents?: number;
 };
 
-type CustomerFilter =
-  | "all"
-  | "pending"
-  | "open_os"
-  | "overdue_os"
-  | "active"
-  | "inactive"
-  | "risk";
+type CustomerFilter = "all" | "active" | "inactive";
 
 type CustomerProfile = {
   customer: Customer;
@@ -183,7 +176,6 @@ type AttentionItem = {
   status: string;
   actionLabel: string;
   priority: "P0" | "P1" | "P2" | "P3";
-  riskScore: number;
 };
 
 type CustomerOperationalEventType =
@@ -201,44 +193,6 @@ function formatCurrency(cents?: number) {
     style: "currency",
     currency: "BRL",
   }).format(Number(cents ?? 0) / 100);
-}
-
-function parseCurrencyFilterToCents(value: string) {
-  const normalized = value.trim().replace(/\s/g, "").replace(/^R\$/i, "");
-  if (!normalized) return null;
-
-  const decimalValue = normalized.includes(",")
-    ? normalized.replace(/\./g, "").replace(",", ".")
-    : normalized;
-
-  const amount = Number(decimalValue);
-  if (!Number.isFinite(amount) || amount < 0) return null;
-
-  return Math.round(amount * 100);
-}
-
-function parseDateFilterBoundary(value: string, boundary: "start" | "end") {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!match) return null;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]) - 1;
-  const day = Number(match[3]);
-
-  const date =
-    boundary === "end"
-      ? new Date(year, month, day, 23, 59, 59, 999)
-      : new Date(year, month, day, 0, 0, 0, 0);
-
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return date.getTime();
 }
 
 function toDate(value: unknown): Date | null {
@@ -483,22 +437,6 @@ export default function CustomersPage() {
       "nexo.customers.filter.v2",
       "all"
     );
-  const [minBalanceValue, setMinBalanceValue] = useOperationalMemoryState(
-    "nexo.customers.balance-min.v2",
-    ""
-  );
-  const [maxBalanceValue, setMaxBalanceValue] = useOperationalMemoryState(
-    "nexo.customers.balance-max.v2",
-    ""
-  );
-  const [periodStartValue, setPeriodStartValue] = useOperationalMemoryState(
-    "nexo.customers.period-start.v2",
-    ""
-  );
-  const [periodEndValue, setPeriodEndValue] = useOperationalMemoryState(
-    "nexo.customers.period-end.v2",
-    ""
-  );
   const [activeCustomerId, setActiveCustomerId] = useOperationalMemoryState<
     string | null
   >("nexo.customers.active-id.v2", null);
@@ -598,10 +536,7 @@ export default function CustomersPage() {
   const profileById = useMemo(
     () =>
       new Map(
-        operationalProfiles.map(profile => [
-          profile.customerId,
-          profile,
-        ])
+        operationalProfiles.map(profile => [profile.customerId, profile])
       ),
     [operationalProfiles]
   );
@@ -616,72 +551,18 @@ export default function CustomersPage() {
     [workspaceQuery.data]
   );
 
+  // Presentation-only transformation: the official decision attached to each
+  // profile is never recalculated, ranked or changed by these controls.
   const filteredProfiles = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    const minBalanceCents = parseCurrencyFilterToCents(minBalanceValue);
-    const maxBalanceCents = parseCurrencyFilterToCents(maxBalanceValue);
-    const periodStartTimestamp = parseDateFilterBoundary(
-      periodStartValue,
-      "start"
-    );
-    const periodEndTimestamp = parseDateFilterBoundary(periodEndValue, "end");
 
     return operationalProfiles.filter(profile => {
-      if (
-        activeFilter === "pending" &&
-        !(profile.pending > 0 || profile.overdue > 0)
-      ) {
+      if (activeFilter === "active" && profile.customer.active !== true)
         return false;
-      }
-      if (activeFilter === "open_os" && !profile.hasOpenServiceOrder) {
+      if (activeFilter === "inactive" && profile.customer.active !== false)
         return false;
-      }
-      if (
-        activeFilter === "overdue_os" &&
-        !profile.serviceOrders.some(isServiceOrderOverdue)
-      ) {
-        return false;
-      }
-      if (activeFilter === "active" && profile.customer.active !== true) {
-        return false;
-      }
-      if (activeFilter === "inactive" && profile.customer.active !== false) {
-        return false;
-      }
-      if (
-        activeFilter === "risk" &&
-        !["RISCO", "CRÍTICO"].includes(
-          profile.operationalSummary?.operationalStatus ?? ""
-        )
-      ) {
-        return false;
-      }
-      if (minBalanceCents !== null && profile.pendingCents < minBalanceCents) {
-        return false;
-      }
-      if (maxBalanceCents !== null && profile.pendingCents > maxBalanceCents) {
-        return false;
-      }
-
-      const lastInteractionTimestamp = profile.lastInteractionAt?.getTime();
-
-      if (
-        periodStartTimestamp !== null &&
-        (!lastInteractionTimestamp ||
-          lastInteractionTimestamp < periodStartTimestamp)
-      ) {
-        return false;
-      }
-
-      if (
-        periodEndTimestamp !== null &&
-        (!lastInteractionTimestamp ||
-          lastInteractionTimestamp > periodEndTimestamp)
-      ) {
-        return false;
-      }
-
       if (!query) return true;
+
       return [
         profile.customer.name,
         profile.customer.phone,
@@ -691,15 +572,7 @@ export default function CustomersPage() {
         .join(" ")
         .includes(query);
     });
-  }, [
-    activeFilter,
-    maxBalanceValue,
-    minBalanceValue,
-    periodEndValue,
-    operationalProfiles,
-    periodStartValue,
-    searchTerm,
-  ]);
+  }, [activeFilter, operationalProfiles, searchTerm]);
 
   const isLoading = customersQuery.isLoading && customers.length === 0;
   const hasBlockingError =
@@ -728,41 +601,25 @@ export default function CustomersPage() {
 
   const authoritativeAttentionItems = useMemo<AttentionItem[]>(
     () =>
-      operationalProfiles
-        .flatMap(profile => {
-          const summary = profile.operationalSummary;
+      operationalProfiles.flatMap(profile => {
+        const summary = profile.operationalSummary;
 
-          if (
-            !summary ||
-            summary.operationalStatus === "NORMAL"
-          ) {
-            return [];
-          }
+        if (!summary || summary.operationalStatus === "NORMAL") {
+          return [];
+        }
 
-          return [
-            {
-              key: profile.customerId,
-              customerId: profile.customerId,
-              title: String(
-                profile.customer.name ?? "Cliente sem nome"
-              ),
-              context:
-                summary.interventionReason ??
-                summary.riskSignal,
-              status: `${summary.operationalStatus} · ${summary.priority}`,
-              actionLabel:
-                summary.recommendedActionLabel ??
-                "Abrir cliente",
-              priority: summary.priority,
-              riskScore: summary.riskScore,
-            },
-          ];
-        })
-        .sort((a, b) => {
-          const byPriority = a.priority.localeCompare(b.priority);
-          if (byPriority !== 0) return byPriority;
-          return b.riskScore - a.riskScore;
-        }),
+        return [
+          {
+            key: profile.customerId,
+            customerId: profile.customerId,
+            title: String(profile.customer.name ?? "Cliente sem nome"),
+            context: summary.interventionReason ?? summary.riskSignal,
+            status: `${summary.operationalStatus} · ${summary.priority}`,
+            actionLabel: summary.recommendedActionLabel ?? "Abrir cliente",
+            priority: summary.priority,
+          },
+        ];
+      }),
     [operationalProfiles]
   );
 
@@ -809,10 +666,7 @@ export default function CustomersPage() {
         navigate(`/appointments?customerId=${profile.customerId}`);
         return;
       case "WHATSAPP":
-        openCustomerWhatsApp(
-          profile.customer,
-          profile.pendingChargeId
-        );
+        openCustomerWhatsApp(profile.customer, profile.pendingChargeId);
         return;
       default:
         setActiveCustomerId(profile.customerId);
@@ -821,9 +675,7 @@ export default function CustomersPage() {
 
   const getAuthoritativeCustomerActionLabel = (
     profile: (typeof operationalProfiles)[number]
-  ) =>
-    profile.operationalSummary?.recommendedActionLabel ??
-    "Abrir cliente";
+  ) => profile.operationalSummary?.recommendedActionLabel ?? "Abrir cliente";
   const people = useMemo(
     () =>
       normalizeArrayPayload<any>(peopleQuery.data).map(person => ({
@@ -1290,7 +1142,7 @@ export default function CustomersPage() {
           </span>
           <span className="flex items-center gap-2">
             <ShieldAlert className="h-3.5 w-3.5 text-[var(--dashboard-warning)]" />
-            Prioridade combina financeiro, O.S. e contato.
+            Prioridade e risco vêm do resumo operacional oficial.
           </span>
           <span className="flex items-center gap-2">
             <ArrowRight className="h-3.5 w-3.5 text-[var(--dashboard-info)]" />
@@ -1310,9 +1162,9 @@ export default function CustomersPage() {
             <span>
               Clientes carregados, mas{" "}
               {unavailableAuxiliaryData.map(source => source.label).join(", ")}{" "}
-              não puderam ser consultados. Estado operacional e risco
-              continuam sendo apresentados pelo resumo oficial; apenas detalhes
-              auxiliares desta página podem ficar incompletos.
+              não puderam ser consultados. Estado operacional e risco continuam
+              sendo apresentados pelo resumo oficial; apenas detalhes auxiliares
+              desta página podem ficar incompletos.
             </span>
             <Button
               size="sm"
@@ -1344,20 +1196,22 @@ export default function CustomersPage() {
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="nexo-overline">Próxima decisão da carteira</p>
+            <p className="nexo-overline">
+              Estado operacional oficial · Próxima ação oficial
+            </p>
             <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">
               {attentionItems[0]
                 ? attentionItems[0].title
-                : hasIncompleteOperationalData
-                  ? "Carteira com leitura parcial"
-                  : "Carteira sem bloqueio imediato"}
+                : !customersOperationalSummary
+                  ? "Decisão oficial indisponível"
+                  : "Nenhuma atenção oficial retornada"}
             </h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
               {attentionItems[0]
                 ? attentionItems[0].context
-                : hasIncompleteOperationalData
-                  ? "Uma ou mais fontes operacionais estão indisponíveis; não é possível concluir que a carteira está saudável."
-                  : "Os dados retornados não apontam dívida vencida, O.S. aberta ou silêncio prolongado."}
+                : !customersOperationalSummary
+                  ? "O contrato customers.operationalSummary não está disponível; nenhuma normalidade é inferida."
+                  : "O resumo operacional oficial não retornou cliente em atenção para esta carteira."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <AppStatusBadge label="Financeiro" tone="info" />
@@ -1367,7 +1221,9 @@ export default function CustomersPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {portfolioOperationalStatusBadge}
-            {attentionItems[0] ? <AppPriorityBadge priority="P0" /> : null}
+            {attentionItems[0] ? (
+              <AppPriorityBadge priority={attentionItems[0].priority} />
+            ) : null}
             {attentionItems[0] ? (
               <Button
                 size="sm"
@@ -1396,15 +1252,15 @@ export default function CustomersPage() {
       >
         {isLoading ? (
           <AppPageLoadingState description="Carregando sinais dos clientes..." />
-        ) : attentionItems.length === 0 && hasIncompleteOperationalData ? (
+        ) : !customersOperationalSummary ? (
           <AppPageEmptyState
-            title="Atenções podem estar incompletas"
-            description="Nenhuma atenção foi detectada nos dados disponíveis, mas faltam fontes auxiliares para concluir a leitura operacional."
+            title="Decisão operacional indisponível"
+            description="Sem o contrato oficial não é possível afirmar risco, prioridade, justificativa ou próxima ação."
           />
         ) : attentionItems.length === 0 ? (
           <AppPageEmptyState
-            title="Nenhum cliente em atenção imediata"
-            description="A carteira não retornou dívida, O.S. aberta ou longo silêncio nos dados disponíveis."
+            title="Nenhuma atenção oficial retornada"
+            description="O resumo operacional foi consultado e não retornou cliente em atenção; isso não é inferido a partir dos demais dados."
           />
         ) : (
           <div className="grid gap-2 lg:grid-cols-3">
@@ -1436,6 +1292,7 @@ export default function CustomersPage() {
       </AppSectionBlock>
 
       <AppFiltersBar
+        aria-label="Filtros de apresentação"
         className={cn(
           "shrink-0 gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2",
           selectedProfile ? "order-2" : undefined
@@ -1449,12 +1306,14 @@ export default function CustomersPage() {
             className="h-9 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          aria-label="Filtros de situação cadastral"
+        >
           {[
             { key: "all", label: "Todos" },
-            { key: "pending", label: "Com pendência" },
-            { key: "open_os", label: "Com O.S. aberta" },
-            { key: "overdue_os", label: "Com O.S. atrasada" },
+            { key: "active", label: "Ativos" },
+            { key: "inactive", label: "Inativos" },
           ].map(item => (
             <button
               key={item.key}
@@ -1470,121 +1329,6 @@ export default function CustomersPage() {
               {item.label}
             </button>
           ))}
-          <details className="relative">
-            <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-              {periodStartValue || periodEndValue
-                ? minBalanceValue || maxBalanceValue
-                  ? "Mais filtros · período + valor"
-                  : "Mais filtros · período"
-                : minBalanceValue || maxBalanceValue
-                  ? "Mais filtros · valor"
-                  : "Mais filtros"}
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 grid min-w-[260px] gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
-              {[
-                { key: "active", label: "Ativos" },
-                { key: "inactive", label: "Inativos" },
-                { key: "risk", label: "Em risco" },
-              ].map(item => (
-                <button
-                  key={item.key}
-                  type="button"
-                  className={cn(
-                    "h-8 rounded-md border px-3 text-left text-xs font-medium transition-colors",
-                    activeFilter === item.key
-                      ? "border-[var(--accent-primary)] bg-[var(--accent-soft)] text-[var(--accent-primary)]"
-                      : "border-[var(--border-subtle)] bg-[var(--surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  )}
-                  onClick={() => setActiveFilter(item.key as CustomerFilter)}
-                >
-                  {item.label}
-                </button>
-              ))}
-
-              <div className="border-t border-[var(--border-subtle)] pt-2">
-                <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
-                  Última atividade
-                </p>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="grid gap-1 text-[11px] text-[var(--text-muted)]">
-                    De
-                    <input
-                      type="date"
-                      value={periodStartValue}
-                      onChange={event =>
-                        setPeriodStartValue(event.target.value)
-                      }
-                      aria-label="Período inicial"
-                      className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
-                    />
-                  </label>
-
-                  <label className="grid gap-1 text-[11px] text-[var(--text-muted)]">
-                    Até
-                    <input
-                      type="date"
-                      value={periodEndValue}
-                      onChange={event => setPeriodEndValue(event.target.value)}
-                      aria-label="Período final"
-                      className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
-                    />
-                  </label>
-                </div>
-
-                {periodStartValue || periodEndValue ? (
-                  <button
-                    type="button"
-                    className="mt-2 text-xs font-medium text-[var(--accent-primary)]"
-                    onClick={() => {
-                      setPeriodStartValue("");
-                      setPeriodEndValue("");
-                    }}
-                  >
-                    Limpar período
-                  </button>
-                ) : null}
-              </div>
-
-              <div className="border-t border-[var(--border-subtle)] pt-2">
-                <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
-                  Saldo financeiro
-                </p>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    value={minBalanceValue}
-                    onChange={event => setMinBalanceValue(event.target.value)}
-                    inputMode="decimal"
-                    placeholder="Mín. R$"
-                    aria-label="Saldo mínimo"
-                    className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
-                  />
-                  <input
-                    value={maxBalanceValue}
-                    onChange={event => setMaxBalanceValue(event.target.value)}
-                    inputMode="decimal"
-                    placeholder="Máx. R$"
-                    aria-label="Saldo máximo"
-                    className="h-8 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
-                  />
-                </div>
-
-                {minBalanceValue || maxBalanceValue ? (
-                  <button
-                    type="button"
-                    className="mt-2 text-xs font-medium text-[var(--accent-primary)]"
-                    onClick={() => {
-                      setMinBalanceValue("");
-                      setMaxBalanceValue("");
-                    }}
-                  >
-                    Limpar intervalo de valor
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </details>
         </div>
         <span className="rounded-md border border-[var(--border-subtle)] px-2 py-1 text-xs text-[var(--text-muted)]">
           {filteredProfiles.length} resultado(s)
@@ -1777,8 +1521,10 @@ export default function CustomersPage() {
                               />
                               {renderAuthoritativeCustomerPriority(profile)}
                             </div>
-                            <p className="line-clamp-2">{profile.operationalSummary?.riskSignal ??
-                        "Sinal operacional indisponível"}</p>
+                            <p className="line-clamp-2">
+                              {profile.operationalSummary?.riskSignal ??
+                                "Sinal operacional indisponível"}
+                            </p>
                           </div>
                         </td>
                         <td>
@@ -2088,12 +1834,10 @@ export default function CustomersPage() {
                   />
                   <NexoExecutiveMetric
                     title="Comunicação"
-                    value={
-                      formatDateTime(
-                        selectedProfile.lastInteractionAt,
-                        "Sem registro"
-                      )
-                    }
+                    value={formatDateTime(
+                      selectedProfile.lastInteractionAt,
+                      "Sem registro"
+                    )}
                     context="Canal: WhatsApp"
                     ctaLabel="Abrir WhatsApp"
                     onClick={() =>
@@ -2314,8 +2058,8 @@ export default function CustomersPage() {
                     {
                       title: "Saúde do cliente",
                       value:
-                        selectedProfile.operationalSummary
-                          ?.operationalStatus ?? "Indisponível",
+                        selectedProfile.operationalSummary?.operationalStatus ??
+                        "Indisponível",
                       context:
                         selectedProfile.operationalSummary?.riskSignal ??
                         "Sinal operacional indisponível",
@@ -2378,6 +2122,9 @@ export default function CustomersPage() {
               ) : null}
 
               <div ref={timelineAnchorRef}>
+                <p className="nexo-overline mb-2">
+                  Evidências e navegação contextual
+                </p>
                 <NexoEvidenceTimeline
                   title="Últimos eventos oficiais"
                   subtitle="Prova operacional do cliente e histórico oficial ligado ao cliente."
