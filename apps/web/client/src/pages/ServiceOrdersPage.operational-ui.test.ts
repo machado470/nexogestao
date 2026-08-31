@@ -7,12 +7,10 @@ const page = readFileSync(resolve(__dirname, "ServiceOrdersPage.tsx"), "utf8");
 describe("ServiceOrdersPage Nexo Operating System UI contract", () => {
   it("keeps the executive hero neutral and the decision block dominant", () => {
     expect(page).toContain("Hero executivo da O.S.");
-    expect(page).toContain(
-      "border border-[var(--border-subtle)] bg-gradient-to-br"
-    );
     expect(page).toContain("Decisão e próxima ação · Próxima melhor ação");
     expect(page).toContain("border-2 border-[var(--accent-primary)]/45");
     expect(page).toContain("FAÇA AGORA:");
+    expect(page).not.toContain("bg-gradient");
   });
 
   it("humanizes timeline events and sanitizes raw technical identifiers", () => {
@@ -68,6 +66,7 @@ describe("ServiceOrdersPage Nexo Operating System UI contract", () => {
     expect(page).toContain("service-order-responsible-filter");
     expect(page).toContain("service-order-deadline-filter");
     expect(page).toContain("service-order-priority-filter");
+    expect(page).toContain('<option value="P0">Prioridade P0</option>');
     expect(page).toContain('params.get("serviceOrderId")');
     expect(page).toContain("setOpenCreate(true)");
     expect(page).toContain("Dados auxiliares parcialmente indisponíveis");
