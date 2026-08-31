@@ -43,17 +43,17 @@ export async function listOperationalNotifications(
     page: String(params.page ?? 1),
     category: params.category ?? "all",
   });
-  const raw = await nexoFetch<unknown>(source, `/v1/notifications?${query}`);
+  const raw = await nexoFetch<unknown>(source, `/notifications?${query}`);
   return notificationListSchema.parse(raw);
 }
 
 export async function countUnreadOperationalNotifications(source: unknown) {
-  const raw = await nexoFetch<unknown>(source, "/v1/notifications/unread-count");
+  const raw = await nexoFetch<unknown>(source, "/notifications/unread-count");
   return unreadSchema.parse(raw);
 }
 
 export async function markNotificationAsRead(source: unknown, id: string) {
-  const raw = await nexoFetch<unknown>(source, `/v1/notifications/${encodeURIComponent(id)}/read`, {
+  const raw = await nexoFetch<unknown>(source, `/notifications/${encodeURIComponent(id)}/read`, {
     method: "PATCH",
   });
   return markReadSchema.parse(raw);

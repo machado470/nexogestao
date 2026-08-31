@@ -42,6 +42,27 @@ const pendingFetchByToken = new Map<string, Promise<TrpcUser | null>>();
 const unavailableUntilByToken = new Map<string, number>();
 const lastLogByKey = new Map<string, number>();
 
+const validatedSessionCacheMsRaw = Number(
+  process.env.NEXO_ME_VALIDATED_CACHE_MS || 10_000
+);
+const VALIDATED_SESSION_CACHE_MS =
+  Number.isFinite(validatedSessionCacheMsRaw) &&
+  validatedSessionCacheMsRaw >= 0
+    ? validatedSessionCacheMsRaw
+    : 10_000;
+
+const validatedSessionByToken = new Map<
+  string,
+  { user: TrpcUser; expiresAt: number }
+>();
+
+export function resetNexoMeValidationStateForTests() {
+  pendingFetchByToken.clear();
+  unavailableUntilByToken.clear();
+  validatedSessionByToken.clear();
+  lastLogByKey.clear();
+}
+
 function logWithSuppression(
   key: string,
   level: "warn" | "error",
@@ -217,6 +238,15 @@ export async function fetchNexoMe(req: any) {
   if (!token) return null;
 
   const now = Date.now();
+
+  const cached = validatedSessionByToken.get(token);
+  if (cached) {
+    if (now < cached.expiresAt) {
+      return cached.user;
+    }
+    validatedSessionByToken.delete(token);
+  }
+
   const unavailableUntil = unavailableUntilByToken.get(token) ?? 0;
   if (now < unavailableUntil) {
     logWithSuppression(
@@ -361,7 +391,16 @@ export async function fetchNexoMe(req: any) {
 
   pendingFetchByToken.set(token, runner);
   try {
-    return await runner;
+    const result = await runner;
+
+    if (result && VALIDATED_SESSION_CACHE_MS > 0) {
+      validatedSessionByToken.set(token, {
+        user: result,
+        expiresAt: Date.now() + VALIDATED_SESSION_CACHE_MS,
+      });
+    }
+
+    return result;
   } finally {
     pendingFetchByToken.delete(token);
   }

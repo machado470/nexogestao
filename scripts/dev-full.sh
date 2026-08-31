@@ -513,7 +513,7 @@ main() {
 
   # 6) subir API
   log "[BOOT] iniciando API..."
-  API_PORT="$API_PORT" PORT="$API_PORT" pnpm --filter ./apps/api run dev > "$API_LOG_FILE" 2>&1 &
+  NODE_ENV=development API_PORT="$API_PORT" PORT="$API_PORT" pnpm --filter ./apps/api run dev > "$API_LOG_FILE" 2>&1 &
   API_PID=$!
 
   # 7) esperar processo vivo + porta + /health
