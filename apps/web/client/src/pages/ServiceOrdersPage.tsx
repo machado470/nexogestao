@@ -51,13 +51,8 @@ type ServiceOrdersFilter =
   | "done"
   | "without_charge";
 
-type DeadlineFilter =
-  | "all"
-  | "overdue"
-  | "today"
-  | "next_7_days"
-  | "no_deadline";
-type PriorityFilter = "all" | "0" | "1" | "2" | "3";
+type DeadlineFilter = "all" | "overdue" | "no_deadline";
+type PriorityFilter = "all" | "P0" | "P1" | "P2" | "P3";
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -443,13 +438,10 @@ export default function ServiceOrdersPage() {
         riskLabel: String(
           operationalDecision?.riskLabel ?? "Contrato operacional indisponível"
         ),
-        operationalStatus: operationalDecision?.operationalStatus ?? "ATENÇÃO",
-        priority: operationalDecision?.priority ?? "P1",
-        nextAction: operationalDecision?.nextAction ?? {
-          type: "select" as const,
-          label: "Revisar O.S.",
-          reason: "Contrato operacional indisponível",
-        },
+        decisionAvailable: Boolean(operationalDecision),
+        operationalStatus: operationalDecision?.operationalStatus ?? null,
+        priority: operationalDecision?.priority ?? null,
+        nextAction: operationalDecision?.nextAction ?? null,
       };
     });
   }, [
@@ -474,35 +466,11 @@ export default function ServiceOrdersPage() {
           : item.assignedToPersonId !== responsibleFilter)
       )
         return false;
-      if (
-        priorityFilter !== "all" &&
-        String(item.raw?.priority ?? 2) !== priorityFilter
-      )
+      if (priorityFilter !== "all" && item.priority !== priorityFilter)
         return false;
       if (deadlineFilter !== "all") {
-        const now = new Date();
-        const startToday = new Date(now);
-        startToday.setHours(0, 0, 0, 0);
-        const endToday = new Date(startToday);
-        endToday.setDate(endToday.getDate() + 1);
-        const endWeek = new Date(startToday);
-        endWeek.setDate(endWeek.getDate() + 8);
         if (deadlineFilter === "overdue" && !item.isOverdue) return false;
         if (deadlineFilter === "no_deadline" && item.dueDate) return false;
-        if (
-          deadlineFilter === "today" &&
-          (!item.dueDate ||
-            item.dueDate < startToday ||
-            item.dueDate >= endToday)
-        )
-          return false;
-        if (
-          deadlineFilter === "next_7_days" &&
-          (!item.dueDate ||
-            item.dueDate < startToday ||
-            item.dueDate >= endWeek)
-        )
-          return false;
       }
 
       if (
@@ -516,7 +484,7 @@ export default function ServiceOrdersPage() {
       if (activeFilter === "done" && item.status !== "DONE") return false;
       if (
         activeFilter === "without_charge" &&
-        (item.status !== "DONE" || item.hasCharge)
+        item.nextAction?.type !== "charge"
       )
         return false;
 
@@ -629,8 +597,7 @@ export default function ServiceOrdersPage() {
     const overdue = enrichedOrders.filter(item => item.isOverdue).length;
     const done = enrichedOrders.filter(item => item.status === "DONE").length;
     const doneWithoutCharge = enrichedOrders.filter(
-      item =>
-        item.status === "DONE" && !item.hasCharge && !item.financialUnavailable
+      item => item.nextAction?.type === "charge"
     ).length;
     const noCharge = enrichedOrders.filter(item => !item.hasCharge).length;
     const unassigned = enrichedOrders.filter(
@@ -658,37 +625,19 @@ export default function ServiceOrdersPage() {
   }, [enrichedOrders]);
 
   const immediateAttention = useMemo(() => {
-    const ranked = enrichedOrders
+    // The list contract is already the official queue. Filtering never changes
+    // its relative order and uses only the decision returned for each O.S.
+    return enrichedOrders
       .filter(
-        item =>
-          item.isOverdue ||
-          (!item.assignedToPersonId &&
-            item.status !== "DONE" &&
-            item.status !== "CANCELED") ||
-          (item.status === "DONE" && !item.hasCharge) ||
-          item.chargeOverdue ||
-          (item.status === "IN_PROGRESS" && !item.dueDate)
+        item => item.decisionAvailable && item.operationalStatus !== "NORMAL"
       )
-      .sort((a, b) => {
-        const score = (item: typeof a) => {
-          if (item.isOverdue) return 6;
-          if (!item.assignedToPersonId) return 5;
-          if (item.status === "DONE" && !item.hasCharge) return 4;
-          if (item.chargeOverdue) return 3;
-          if (item.status === "IN_PROGRESS" && !item.dueDate) return 2;
-          return 1;
-        };
-        return score(b) - score(a);
-      });
-    return ranked.slice(0, 4);
+      .slice(0, 4);
   }, [enrichedOrders]);
 
   const nextExecution = useMemo(() => {
     return (
       immediateAttention[0] ??
-      enrichedOrders.find(item => item.status === "IN_PROGRESS") ??
-      enrichedOrders.find(item => ["OPEN", "ASSIGNED"].includes(item.status)) ??
-      enrichedOrders.find(item => item.status === "DONE" && !item.hasCharge) ??
+      enrichedOrders.find(item => item.decisionAvailable) ??
       null
     );
   }, [enrichedOrders, immediateAttention]);
@@ -744,6 +693,16 @@ export default function ServiceOrdersPage() {
       };
     }
     const next = commandTarget.nextAction;
+    if (!next) {
+      return {
+        title: "Decisão operacional indisponível",
+        reason: `A API não retornou a decisão oficial para ${commandTarget.code}; nenhuma ação foi inferida.`,
+        safetyNote: "Atualize a leitura ou abra o detalhe factual da O.S.",
+        primaryActionLabel: "Atualizar leitura",
+        secondaryActionLabel: "Ver detalhes",
+        kind: "unavailable" as const,
+      };
+    }
     return {
       title: next.label,
       reason: `${next.reason}: ${commandTarget.code} · ${commandTarget.customerName}.`,
@@ -890,10 +849,9 @@ export default function ServiceOrdersPage() {
             ? "attention"
             : "missing",
         detail: target?.financialStatusLabel ?? "Sem cobrança",
-        action:
-          target?.status === "DONE" && !target.hasCharge ? "Cobrar" : undefined,
+        action: target?.nextAction?.type === "charge" ? "Cobrar" : undefined,
         onClick:
-          target?.status === "DONE" && !target.hasCharge
+          target?.nextAction?.type === "charge"
             ? () => void handleGenerateCharge(target.id)
             : undefined,
       },
@@ -1167,6 +1125,12 @@ export default function ServiceOrdersPage() {
   }
 
   function runPrimaryAction(item: NonNullable<typeof selectedOrder>) {
+    if (!item.nextAction) {
+      setActionFeedback(
+        "Decisão operacional indisponível; nenhuma ação foi inferida."
+      );
+      return;
+    }
     if (item.nextAction.type === "start") {
       void handleStart(item.id);
       return;
@@ -1319,8 +1283,8 @@ export default function ServiceOrdersPage() {
     if (anyActionPending)
       return "Cobrar indisponível: outra ação está em andamento";
     if (order.hasCharge) return "Cobrar indisponível: cobrança já vinculada";
-    if (order.status !== "DONE")
-      return "Cobrar indisponível: O.S. ainda não concluída";
+    if (order.nextAction?.type !== "charge")
+      return "Cobrar indisponível: decisão oficial não autoriza gerar cobrança";
     return "Gerar cobrança";
   }
 
@@ -1370,22 +1334,28 @@ export default function ServiceOrdersPage() {
       </AppOperationalHeader>
 
       {selectedOrder ? (
-        <AppSectionCard className="overflow-hidden border border-[var(--border-subtle)] bg-gradient-to-br from-[var(--surface-base)] via-[var(--surface-subtle)] to-[var(--surface-base)] p-0">
+        <AppSectionCard className="overflow-hidden border border-[var(--border-subtle)] bg-[var(--surface-base)] p-0">
           <div className="grid gap-0 lg:grid-cols-[1.45fr_0.55fr]">
             <div className="p-6 md:p-8">
               <p className="nexo-overline">Hero executivo da O.S.</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <AppOperationalStatusBadge
-                  status={selectedOrder.operationalStatus}
-                  label={getStatusTone(
-                    selectedOrder.status,
-                    selectedOrder.isOverdue
-                  )}
-                />
-                <AppPriorityBadge
-                  priority={selectedOrder.priority}
-                  label={selectedOrder.riskLabel}
-                />
+                {selectedOrder.decisionAvailable ? (
+                  <>
+                    <AppOperationalStatusBadge
+                      status={selectedOrder.operationalStatus!}
+                      label={getStatusTone(
+                        selectedOrder.status,
+                        selectedOrder.isOverdue
+                      )}
+                    />
+                    <AppPriorityBadge
+                      priority={selectedOrder.priority!}
+                      label={selectedOrder.riskLabel}
+                    />
+                  </>
+                ) : (
+                  <AppStatusBadge label="Decisão indisponível" tone="neutral" />
+                )}
                 <AppStatusBadge
                   label={selectedOrder.financialStatusLabel}
                   tone={selectedOrder.hasCharge ? "accent" : "warning"}
@@ -1484,7 +1454,7 @@ export default function ServiceOrdersPage() {
         </AppSectionCard>
       ) : null}
 
-      <AppSectionCard className="space-y-4 border-2 border-[var(--accent-primary)]/45 bg-gradient-to-br from-[var(--accent-soft)]/35 via-[var(--surface-base)] to-[var(--surface-subtle)] p-0">
+      <AppSectionCard className="space-y-4 border-2 border-[var(--accent-primary)]/45 bg-[var(--surface-base)] p-0">
         <div className="border-b border-[var(--accent-primary)]/20 px-5 py-4 md:px-6">
           <p className="nexo-overline">
             Decisão e próxima ação · Próxima melhor ação
@@ -1516,7 +1486,7 @@ export default function ServiceOrdersPage() {
             </p>
             <p className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
               Impacto:{" "}
-              {commandTarget?.nextAction.reason ??
+              {commandTarget?.nextAction?.reason ??
                 "Selecione ou crie uma O.S. para destravar a execução."}
             </p>
             <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
@@ -1725,8 +1695,6 @@ export default function ServiceOrdersPage() {
         >
           <option value="all">Todos os prazos</option>
           <option value="overdue">Atrasadas</option>
-          <option value="today">Vencem hoje</option>
-          <option value="next_7_days">Próximos 7 dias</option>
           <option value="no_deadline">Sem prazo</option>
         </select>
         <label className="sr-only" htmlFor="service-order-priority-filter">
@@ -1741,10 +1709,10 @@ export default function ServiceOrdersPage() {
           className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
         >
           <option value="all">Todas as prioridades</option>
-          <option value="0">Prioridade 0</option>
-          <option value="1">Prioridade 1</option>
-          <option value="2">Prioridade 2</option>
-          <option value="3">Prioridade 3</option>
+          <option value="P0">Prioridade P0</option>
+          <option value="P1">Prioridade P1</option>
+          <option value="P2">Prioridade P2</option>
+          <option value="P3">Prioridade P3</option>
         </select>
         <div className="flex flex-wrap items-center gap-2">
           {[
@@ -1813,7 +1781,7 @@ export default function ServiceOrdersPage() {
                   key={`attention-${item.id}`}
                   className={cn(
                     "rounded-lg border p-3",
-                    item.status === "DONE" && !item.hasCharge
+                    item.nextAction?.type === "charge"
                       ? "border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_8%,var(--surface-subtle))]"
                       : item.isOverdue
                         ? "border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_8%,var(--surface-subtle))]"
@@ -1908,14 +1876,26 @@ export default function ServiceOrdersPage() {
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <AppOperationalStatusBadge
-                              status={item.operationalStatus}
-                              label={getStatusTone(item.status, item.isOverdue)}
-                            />
-                            <AppPriorityBadge
-                              priority={item.priority}
-                              label={item.riskLabel}
-                            />
+                            {item.decisionAvailable ? (
+                              <>
+                                <AppOperationalStatusBadge
+                                  status={item.operationalStatus!}
+                                  label={getStatusTone(
+                                    item.status,
+                                    item.isOverdue
+                                  )}
+                                />
+                                <AppPriorityBadge
+                                  priority={item.priority!}
+                                  label={item.riskLabel}
+                                />
+                              </>
+                            ) : (
+                              <AppStatusBadge
+                                label="Decisão indisponível"
+                                tone="neutral"
+                              />
+                            )}
                           </div>
                           <div className="text-xs text-[var(--text-secondary)]">
                             <p className="font-medium text-[var(--text-primary)]">
@@ -1945,7 +1925,7 @@ export default function ServiceOrdersPage() {
                               size="sm"
                               onClick={() => runPrimaryAction(item)}
                             >
-                              {item.nextAction.label}
+                              {item.nextAction?.label ?? "Decisão indisponível"}
                             </Button>
                             <AppRowActionsDropdown
                               triggerLabel="Ações da O.S."
@@ -1983,8 +1963,7 @@ export default function ServiceOrdersPage() {
                                     void handleGenerateCharge(item.id),
                                   disabled:
                                     !capabilities.generateCharge ||
-                                    item.status !== "DONE" ||
-                                    item.hasCharge ||
+                                    item.nextAction?.type !== "charge" ||
                                     anyActionPending,
                                 },
                                 {
@@ -2055,13 +2034,20 @@ export default function ServiceOrdersPage() {
                     {selectedOrder.description}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                    <AppOperationalStatusBadge
-                      status={selectedOrder.operationalStatus}
-                      label={getStatusTone(
-                        selectedOrder.status,
-                        selectedOrder.isOverdue
-                      )}
-                    />
+                    {selectedOrder.decisionAvailable ? (
+                      <AppOperationalStatusBadge
+                        status={selectedOrder.operationalStatus!}
+                        label={getStatusTone(
+                          selectedOrder.status,
+                          selectedOrder.isOverdue
+                        )}
+                      />
+                    ) : (
+                      <AppStatusBadge
+                        label="Decisão indisponível"
+                        tone="neutral"
+                      />
+                    )}
                     <span>Responsável: {selectedOrder.responsibleName}</span>
                     <span>Prazo: {selectedOrder.dueDateLabel}</span>
                   </div>
@@ -2263,8 +2249,7 @@ export default function ServiceOrdersPage() {
                     loadingLabel="Gerando..."
                     disabled={
                       !capabilities.generateCharge ||
-                      selectedOrder.status !== "DONE" ||
-                      selectedOrder.hasCharge ||
+                      selectedOrder.nextAction?.type !== "charge" ||
                       anyActionPending
                     }
                   >
