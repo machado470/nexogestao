@@ -83,7 +83,9 @@ describe("ExecutiveDashboard decision center", () => {
       "Gargalos do fluxo Cliente → Agendamento → O.S. → Cobrança → Pagamento."
     );
     expect(source).toContain("state: stage.state");
-    expect(source).not.toContain('readNullableNumber(metrics, "paymentsReceivedCount") === null');
+    expect(source).not.toContain(
+      'readNullableNumber(metrics, "paymentsReceivedCount") === null'
+    );
   });
 
   it("uses the real backend comparison and renders honest pulse readings", () => {
@@ -118,8 +120,10 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain(
       "Itens que exigem execução, ordenados por urgência."
     );
-    expect(source).toContain("formatRelativeDelay");
-    expect(source).toContain("Cliente com cobrança vencida");
+    expect(source).toContain("Atraso confirmado pela fonte oficial");
+    expect(source).toContain("Vencimento confirmado pela fonte oficial");
+    expect(source).not.toContain("Date.now()");
+    expect(source).toContain("Valor não informado pela fonte");
   });
 
   it("humanizes timeline evidence and does not show raw technical events", () => {
@@ -158,6 +162,14 @@ describe("ExecutiveDashboard decision center", () => {
       "const pageError = kpisQuery.isError && alertsQuery.isError"
     );
     expect(source).toContain("Tentar próxima ação novamente");
+  });
+
+  it("degrades independent official contracts without manufacturing empty success", () => {
+    expect(source).toContain("KPIs indisponíveis");
+    expect(source).toContain("Nenhum valor zero foi fabricado");
+    expect(source).toContain("Fluxo operacional indisponível");
+    expect(source).toContain("Fila operacional indisponível");
+    expect(source).toContain("não representa uma fila vazia");
   });
 
   it("shows the authoritative state verbatim and contextualizes the current role", () => {
@@ -204,7 +216,9 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("state: stage.state");
     expect(source).toContain("value: String(stage.volume)");
     expect(source).toContain("stage.referenceTimestamp");
-    expect(source).not.toMatch(/stage\.volume[\s\S]{0,120}\?\s*["'](?:done|active|warning|blocked|idle)["']/);
+    expect(source).not.toMatch(
+      /stage\.volume[\s\S]{0,120}\?\s*["'](?:done|active|warning|blocked|idle)["']/
+    );
     expect(source).toContain("Nenhum risco foi inferido a partir de KPIs");
   });
 
