@@ -907,37 +907,51 @@ export default function ExecutiveDashboard() {
   const pulseInsights = [
     {
       label: "Receita",
-      keyword: formatCurrencyFromCents(weeklyRevenueInCents),
+      keyword: kpisQuery.isError
+        ? "Indisponível"
+        : formatCurrencyFromCents(weeklyRevenueInCents),
       Icon: WalletCards,
       iconClass: "text-[var(--text-muted)]",
-      text: "Recebimentos registrados na semana.",
-      trend: revenueTrend,
+      text: kpisQuery.isError
+        ? "O contrato oficial de KPIs não respondeu."
+        : "Recebimentos registrados na semana.",
+      trend: kpisQuery.isError ? "Sem leitura oficial" : revenueTrend,
     },
     {
       label: "Execução",
-      keyword: `${readNumber(metrics, "openServiceOrders")} O.S. abertas`,
+      keyword: kpisQuery.isError
+        ? "Indisponível"
+        : `${readNumber(metrics, "openServiceOrders")} O.S. abertas`,
       Icon: Clock3,
       iconClass: "text-[var(--text-muted)]",
-      text: "Volume oficial de ordens em aberto.",
-      trend: completedOrdersTrend,
+      text: kpisQuery.isError
+        ? "O contrato oficial de KPIs não respondeu."
+        : "Volume oficial de ordens em aberto.",
+      trend: kpisQuery.isError ? "Sem leitura oficial" : completedOrdersTrend,
     },
     {
       label: "Contato",
-      keyword: `${failedMessages} falha(s)`,
+      keyword: kpisQuery.isError
+        ? "Indisponível"
+        : `${failedMessages} falha(s)`,
       Icon: MessageSquareWarning,
       iconClass: "text-[var(--text-muted)]",
-      text: "Falhas registradas no canal oficial.",
-      trend: failedMessagesTrend,
+      text: kpisQuery.isError
+        ? "O contrato oficial de KPIs não respondeu."
+        : "Falhas registradas no canal oficial.",
+      trend: kpisQuery.isError ? "Sem leitura oficial" : failedMessagesTrend,
     },
     {
       label: "Cobranças",
-      keyword: formatCurrencyFromCents(
-        alerts.overdueCharges?.totalAmountCents ?? 0
-      ),
+      keyword: alertsQuery.isError
+        ? "Indisponível"
+        : formatCurrencyFromCents(alerts.overdueCharges?.totalAmountCents ?? 0),
       Icon: WalletCards,
       iconClass: "text-[var(--text-muted)]",
-      text: "Valor vencido retornado pelo contrato.",
-      trend: overdueChargesTrend,
+      text: alertsQuery.isError
+        ? "O contrato oficial de alertas não respondeu."
+        : "Valor vencido retornado pelo contrato.",
+      trend: alertsQuery.isError ? "Sem leitura oficial" : overdueChargesTrend,
     },
   ];
   const statusLabel = executiveDashboardStateLabel[dashboardState];
@@ -950,11 +964,16 @@ export default function ExecutiveDashboard() {
           ? "Visão operacional"
           : "Visão de consulta";
   const executiveContactSummary = [
-    `${readNumber(asRecord(metrics.whatsappSignals), "customersNoResponse")} aguardando resposta`,
-    `${pendingWhatsAppApprovals.length} aprovações pendentes`,
-    `${failedMessages} falhas relevantes`,
-    `${readNumber(asRecord(metrics.whatsappSignals), "customersNoResponse")} clientes sem retorno`,
-  ].join(" · ");
+    kpisQuery.isError
+      ? "contato e falhas indisponíveis"
+      : `${readNumber(asRecord(metrics.whatsappSignals), "customersNoResponse")} aguardando resposta`,
+    pendingWhatsAppApprovalsQuery.isError
+      ? "aprovações indisponíveis"
+      : `${pendingWhatsAppApprovals.length} aprovações pendentes`,
+    kpisQuery.isError ? null : `${failedMessages} falhas relevantes`,
+  ]
+    .filter((item): item is string => item !== null)
+    .join(" · ");
   return (
     <AppPageShell className="gap-3 sm:gap-4">
       <AppOperationalHeader
@@ -1416,7 +1435,10 @@ export default function ExecutiveDashboard() {
             <div className="mt-3 w-full min-w-0 border-t border-[var(--border-subtle)]/70 pt-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-[var(--text-primary)]">
-                  Aprovações WhatsApp · {pendingWhatsAppApprovals.length}
+                  Aprovações WhatsApp ·{" "}
+                  {pendingWhatsAppApprovalsQuery.isError
+                    ? "indisponíveis"
+                    : pendingWhatsAppApprovals.length}
                 </p>
                 {pendingWhatsAppApprovals.length > 0 ? (
                   <Button

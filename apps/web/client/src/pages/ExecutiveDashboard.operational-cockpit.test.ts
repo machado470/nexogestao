@@ -176,6 +176,13 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("não representa uma fila vazia");
   });
 
+  it("does not manufacture pulse or WhatsApp zeros when their source fails", () => {
+    expect(source).toContain("keyword: kpisQuery.isError");
+    expect(source).toContain("keyword: alertsQuery.isError");
+    expect(source).toContain('"contato e falhas indisponíveis"');
+    expect(source).toContain('"aprovações indisponíveis"');
+  });
+
   it("uses only the official evidence timestamp in the operational header", () => {
     expect(source).toContain("operationalStateQuery.data?.evidenceAt");
     expect(source).toContain("Referência oficial:");
