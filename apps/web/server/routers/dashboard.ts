@@ -32,16 +32,16 @@ const operationalStateSchema = z.object({
 
 const operationalSignalSchema = z
   .object({
-  id: z.string(),
-  severity: z.enum(["CRITICAL", "WARNING", "INFO"]),
-  area: z.string(),
-  title: z.string(),
-  summary: z.string().optional(),
-  impact: z.string().optional(),
-  suggestedAction: z.string().optional(),
-  serviceOrderId: z.string().nullable().optional(),
-  chargeId: z.string().nullable().optional(),
-  messageId: z.string().nullable().optional(),
+    id: z.string(),
+    severity: z.enum(["CRITICAL", "WARNING", "INFO"]),
+    area: z.string(),
+    title: z.string(),
+    summary: z.string().optional(),
+    impact: z.string().optional(),
+    suggestedAction: z.string().optional(),
+    serviceOrderId: z.string().nullable().optional(),
+    chargeId: z.string().nullable().optional(),
+    messageId: z.string().nullable().optional(),
   })
   .passthrough();
 
@@ -66,30 +66,78 @@ const nextBestActionSchema = z.object({
 
 const nonnegativeInteger = z.number().int().nonnegative();
 const nullableDate = z.string().nullable();
+const unwrapApiResponse = (raw: unknown): unknown => {
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    "success" in raw &&
+    "data" in raw
+  ) {
+    return (raw as { data: unknown }).data;
+  }
+  return raw;
+};
 const executivePipelineSchema = z
   .object({
     generatedAt: z.string().datetime(),
-    stages: z.array(
-      z.object({
-        key: z.enum(["customers", "appointments", "service-orders", "charges", "payments"]),
-        label: z.string(),
-        state: z.enum(["done", "active", "warning", "blocked", "idle", "unavailable"]),
-        volume: nonnegativeInteger,
-        reason: z.string().min(1),
-        evidence: z.object({
-          source: z.enum(["CUSTOMER", "APPOINTMENT", "SERVICE_ORDER", "CHARGE", "PAYMENT"]),
-          description: z.string().min(1),
-        }).strict(),
-        referenceTimestamp: z.string().datetime().nullable(),
-        navigationTarget: z.string().startsWith("/"),
-      }).strict()
-    ).length(5),
+    stages: z
+      .array(
+        z
+          .object({
+            key: z.enum([
+              "customers",
+              "appointments",
+              "service-orders",
+              "charges",
+              "payments",
+            ]),
+            label: z.string(),
+            state: z.enum([
+              "done",
+              "active",
+              "warning",
+              "blocked",
+              "idle",
+              "unavailable",
+            ]),
+            volume: nonnegativeInteger,
+            reason: z.string().min(1),
+            evidence: z
+              .object({
+                source: z.enum([
+                  "CUSTOMER",
+                  "APPOINTMENT",
+                  "SERVICE_ORDER",
+                  "CHARGE",
+                  "PAYMENT",
+                ]),
+                description: z.string().min(1),
+              })
+              .strict(),
+            referenceTimestamp: z.string().datetime().nullable(),
+            navigationTarget: z.string().startsWith("/"),
+          })
+          .strict()
+      )
+      .length(5),
   })
   .strict()
   .superRefine((contract, ctx) => {
-    const expected = ["customers", "appointments", "service-orders", "charges", "payments"];
+    const expected = [
+      "customers",
+      "appointments",
+      "service-orders",
+      "charges",
+      "payments",
+    ];
     contract.stages.forEach((stage, index) => {
-      if (stage.key !== expected[index]) ctx.addIssue({ code: "custom", path: ["stages", index, "key"], message: "Ordem canônica do pipeline inválida" });
+      if (stage.key !== expected[index])
+        ctx.addIssue({
+          code: "custom",
+          path: ["stages", index, "key"],
+          message: "Ordem canônica do pipeline inválida",
+        });
     });
   });
 const customerSummarySchema = z
@@ -358,28 +406,28 @@ export const dashboardRouter = router({
     const raw = await nexoFetch<unknown>(ctx, `/dashboard/metrics`, {
       method: "GET",
     });
-    return dashboardMetricsSchema.parse(raw);
+    return dashboardMetricsSchema.parse(unwrapApiResponse(raw));
   }),
 
   alerts: protectedProcedure.query(async ({ ctx }) => {
     const raw = await nexoFetch<unknown>(ctx, `/dashboard/alerts`, {
       method: "GET",
     });
-    return dashboardAlertsSchema.parse(raw);
+    return dashboardAlertsSchema.parse(unwrapApiResponse(raw));
   }),
 
   executivePipeline: protectedProcedure.query(async ({ ctx }) => {
     const raw = await nexoFetch<unknown>(ctx, `/dashboard/executive-pipeline`, {
       method: "GET",
     });
-    return executivePipelineSchema.parse(raw);
+    return executivePipelineSchema.parse(unwrapApiResponse(raw));
   }),
 
   operationalState: protectedProcedure.query(async ({ ctx }) => {
     const raw = await nexoFetch<any>(ctx, "/governance/operational-state", {
       method: "GET",
     });
-    return operationalStateSchema.parse(raw?.data ?? raw);
+    return operationalStateSchema.parse(unwrapApiResponse(raw));
   }),
 
   operationalSignals: protectedProcedure
@@ -395,12 +443,12 @@ export const dashboardRouter = router({
       );
       return z
         .object({
-        generatedAt: z.string(),
-        totalSignals: z.number().int().nonnegative(),
-        signals: z.array(operationalSignalSchema),
+          generatedAt: z.string(),
+          totalSignals: z.number().int().nonnegative(),
+          signals: z.array(operationalSignalSchema),
         })
         .passthrough()
-        .parse(raw?.data ?? raw);
+        .parse(unwrapApiResponse(raw));
     }),
 
   nextBestAction: protectedProcedure.query(async ({ ctx }) => {
@@ -409,7 +457,7 @@ export const dashboardRouter = router({
       "/internal/operational-signals/next-best-action",
       { method: "GET" }
     );
-    const payload = raw?.data ?? raw;
+    const payload = unwrapApiResponse(raw);
     return payload === null ? null : nextBestActionSchema.parse(payload);
   }),
 });

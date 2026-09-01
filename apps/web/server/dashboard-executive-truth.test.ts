@@ -92,6 +92,23 @@ describe("Dashboard BFF executive truth", () => {
     }
   });
 
+  it("normaliza o envelope real da API sem transformar zeros oficiais", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, data: validKpis }), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, data: validAlerts }), {
+          status: 200,
+        })
+      );
+
+    await expect(caller().dashboard.kpis()).resolves.toEqual(validKpis);
+    await expect(caller().dashboard.alerts()).resolves.toEqual(validAlerts);
+  });
+
   it.each(["kpis", "alerts"] as const)(
     "rejeita null e payload inválido em dashboard.%s",
     async procedure => {
@@ -121,13 +138,13 @@ describe("Dashboard BFF executive truth", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
-        dashboardState: "EMPTY",
-        operationalState: "UNKNOWN",
-        source: "NO_DATA",
-        evidenceAt: null,
-        availability: "NO_DATA",
-        reason: "Nenhuma avaliação operacional concluída",
-        evaluatedRecords: 0,
+          dashboardState: "EMPTY",
+          operationalState: "UNKNOWN",
+          source: "NO_DATA",
+          evidenceAt: null,
+          availability: "NO_DATA",
+          reason: "Nenhuma avaliação operacional concluída",
+          evaluatedRecords: 0,
         }),
         { status: 200 }
       )
@@ -185,8 +202,8 @@ describe("Dashboard BFF executive truth", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-        success: true,
-        data: nextBestAction,
+            success: true,
+            data: nextBestAction,
           }),
           { status: 200 }
         )
