@@ -272,17 +272,6 @@ function resolveExecutiveEntity(event: DashboardTimelineEvent) {
   return "Operação relacionada";
 }
 
-function formatRelativeDelay(value: unknown) {
-  if (typeof value !== "string" && !(value instanceof Date)) return "";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const diffMs = Date.now() - date.getTime();
-  if (diffMs <= 0) return "Prazo operacional vencido";
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "Vencida hoje";
-  return `Vencida há ${days} ${days === 1 ? "dia" : "dias"}`;
-}
-
 function describeMicroTrend(
   value: number | null,
   lowerIsBetter = false,
@@ -509,25 +498,23 @@ function buildQueue(alerts: DashboardAlerts): QueueItem[] {
           String(item.context ?? "Prazo operacional vencido")
         ),
         status: "Prazo vencido",
-        dueLabel:
-          formatRelativeDelay(
-            item.deadlineAt ?? item.dueAt ?? item.dueDate ?? item.startsAt
-          ) || "Prazo operacional vencido",
+        dueLabel: "Atraso confirmado pela fonte oficial",
         responsible: readResponsible(asRecord(item)).label,
         responsibleMissing: readResponsible(asRecord(item)).missing,
         ctaLabel: "Destravar",
         path: `/service-orders?id=${String(item.serviceOrderId ?? item.id)}`,
       };
     if (type === "OVERDUE_CHARGE") {
-      const amount =
-        typeof item.amountCents === "number" ? item.amountCents : 0;
-      const amountLabel = formatCurrencyFromCents(amount);
+      const amountLabel =
+        typeof item.amountCents === "number"
+          ? formatCurrencyFromCents(item.amountCents)
+          : null;
       const context = formatCurrencyMentions(
         String(item.context ?? "Prazo financeiro vencido")
       )
         .replace(
           new RegExp(
-            `${amountLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(?:-|·)?\\s*`,
+            `${(amountLabel ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(?:-|·)?\\s*`,
             "i"
           ),
           ""
@@ -537,11 +524,9 @@ function buildQueue(alerts: DashboardAlerts): QueueItem[] {
         id: String(item.id),
         type: "Cobrança vencida",
         entity: String(item.title ?? "Cliente"),
-        context: `${amountLabel} pendentes${context ? ` · ${context}` : ""}`,
+        context: `${amountLabel ? `${amountLabel} pendentes` : "Valor não informado pela fonte"}${context ? ` · ${context}` : ""}`,
         status: "Vencida",
-        dueLabel:
-          formatRelativeDelay(item.dueAt ?? item.dueDate ?? item.startsAt) ||
-          "Cliente com cobrança vencida",
+        dueLabel: "Vencimento confirmado pela fonte oficial",
         responsible: readResponsible(asRecord(item)).label,
         responsibleMissing: readResponsible(asRecord(item)).missing,
         ctaLabel: "Cobrar",
@@ -655,10 +640,13 @@ export default function ExecutiveDashboard() {
     enabled: isAuthenticated,
     retry: false,
   });
-  const executivePipelineQuery = trpc.dashboard.executivePipeline.useQuery(undefined, {
-    enabled: isAuthenticated,
-    retry: false,
-  });
+  const executivePipelineQuery = trpc.dashboard.executivePipeline.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+      retry: false,
+    }
+  );
   const pendingWhatsAppApprovalsQuery =
     trpc.nexo.whatsapp.listPendingApprovals.useQuery(
       { limit: 10 },
@@ -1155,19 +1143,27 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Indicadores de apoio para decidir rápido."
           >
-            <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {kpiCards.map(({ label, value, context, cta, path, Icon }) => (
-                <NexoExecutiveMetric
-                  key={label}
-                  title={label}
-                  value={value}
-                  context={context}
-                  icon={<Icon className="h-4 w-4" />}
-                  ctaLabel={cta}
-                  onClick={() => navigate(path)}
-                />
-              ))}
-            </div>
+            {kpisQuery.isError ? (
+              <AppPageErrorState
+                title="KPIs indisponíveis"
+                description="O contrato oficial de indicadores não pôde ser consultado. Nenhum valor zero foi fabricado."
+                onRetry={() => void kpisQuery.refetch()}
+              />
+            ) : (
+              <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {kpiCards.map(({ label, value, context, cta, path, Icon }) => (
+                  <NexoExecutiveMetric
+                    key={label}
+                    title={label}
+                    value={value}
+                    context={context}
+                    icon={<Icon className="h-4 w-4" />}
+                    ctaLabel={cta}
+                    onClick={() => navigate(path)}
+                  />
+                ))}
+              </div>
+            )}
           </AppSectionBlock>
 
           <AppSectionBlock
@@ -1176,19 +1172,29 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Gargalos do fluxo Cliente → Agendamento → O.S. → Cobrança → Pagamento."
           >
-            <NexoOperationalPipeline
-              title="Etapas operacionais"
-              subtitle="Volumes, estados e justificativas recebidos do contrato autoritativo do backend."
-              stages={flow.map(stage => ({
-                id: stage.id,
-                label: stage.label,
-                summary: stage.context,
-                state: stage.state,
-                countOrValue: stage.value,
-                hrefLabel: stage.action,
-                onClick: () => navigate(stage.path),
-              }))}
-            />
+            {executivePipelineQuery.isError ? (
+              <AppPageErrorState
+                title="Fluxo operacional indisponível"
+                description="O pipeline oficial não pôde ser consultado. Nenhum estado ou gargalo foi inferido a partir dos KPIs."
+                onRetry={() => void executivePipelineQuery.refetch()}
+              />
+            ) : executivePipelineQuery.isLoading ? (
+              <AppPageLoadingState label="Carregando fluxo operacional" />
+            ) : (
+              <NexoOperationalPipeline
+                title="Etapas operacionais"
+                subtitle="Volumes, estados e justificativas recebidos do contrato autoritativo do backend."
+                stages={flow.map(stage => ({
+                  id: stage.id,
+                  label: stage.label,
+                  summary: stage.context,
+                  state: stage.state,
+                  countOrValue: stage.value,
+                  hrefLabel: stage.action,
+                  onClick: () => navigate(stage.path),
+                }))}
+              />
+            )}
           </AppSectionBlock>
 
           <AppSectionBlock
@@ -1197,7 +1203,13 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Itens que exigem execução, ordenados por urgência."
           >
-            {queue.length > 0 ? (
+            {alertsQuery.isError ? (
+              <AppPageErrorState
+                title="Fila operacional indisponível"
+                description="A fonte oficial da fila não pôde ser consultada. A ausência de itens não representa uma fila vazia."
+                onRetry={() => void alertsQuery.refetch()}
+              />
+            ) : queue.length > 0 ? (
               <div className="w-full min-w-0">
                 <div className="max-h-[340px] w-full min-w-0 overflow-auto rounded-xl border border-[var(--border-subtle)]/70 p-2">
                   <div className="grid min-w-0 gap-2 text-xs">
