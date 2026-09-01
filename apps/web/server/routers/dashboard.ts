@@ -71,8 +71,9 @@ const unwrapApiResponse = (raw: unknown): unknown => {
     raw !== null &&
     typeof raw === "object" &&
     !Array.isArray(raw) &&
-    "success" in raw &&
-    "data" in raw
+    Object.prototype.hasOwnProperty.call(raw, "success") &&
+    Object.prototype.hasOwnProperty.call(raw, "data") &&
+    (raw as { success?: unknown }).success === true
   ) {
     return (raw as { data: unknown }).data;
   }
