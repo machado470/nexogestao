@@ -134,6 +134,18 @@ describe("Dashboard BFF executive truth", () => {
     await expect(caller().dashboard.alerts()).rejects.toBeDefined();
   });
 
+  it.each(["kpis", "alerts"] as const)(
+    "rejeita envelope de erro mesmo quando dashboard.%s recebe um data válido",
+    async procedure => {
+      const data = procedure === "kpis" ? validKpis : validAlerts;
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ success: false, data }), { status: 200 })
+      );
+
+      await expect(caller().dashboard[procedure]()).rejects.toBeDefined();
+    }
+  );
+
   it("consulta estado pela API /v1, encaminha autenticação e preserva UNKNOWN", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
