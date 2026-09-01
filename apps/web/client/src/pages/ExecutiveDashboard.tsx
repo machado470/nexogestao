@@ -287,10 +287,6 @@ function describeMicroTrend(
   return `${arrow} ${value > 0 ? "+" : "-"}${amount} desde o período anterior`;
 }
 
-function formatPeriod() {
-  return `Hoje · ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date())}`;
-}
-
 function readResponsible(record: DashboardRecord) {
   const responsible =
     readString(record, "responsibleName") ||
@@ -689,8 +685,7 @@ export default function ExecutiveDashboard() {
   // Métricas e alertas formam a leitura mínima. Sinais auxiliares degradam
   // apenas seus próprios blocos e nunca escondem dados operacionais válidos.
   const pageLoading =
-    (kpisQuery.isLoading && !kpisQuery.data) ||
-    (alertsQuery.isLoading && !alertsQuery.data);
+    operationalStateQuery.isLoading && !operationalStateQuery.data;
   const pageError = kpisQuery.isError && alertsQuery.isError;
   const unavailableSources = [
     kpisQuery.isError ? "KPIs" : null,
@@ -824,6 +819,9 @@ export default function ExecutiveDashboard() {
   const missingComparisonCount =
     pulseComparisons.length - availableComparisons.length;
   const hasOperationalData = dashboardState !== "EMPTY";
+  const officialReference = operationalStateQuery.data?.evidenceAt
+    ? `Referência oficial: ${formatEventDateTime(operationalStateQuery.data.evidenceAt)}`
+    : "Referência temporal oficial indisponível";
   const weeklyRevenueInCents = readNumber(metrics, "weeklyRevenueInCents");
   const kpiCards = [
     {
@@ -965,8 +963,7 @@ export default function ExecutiveDashboard() {
         description="Decida primeiro o que destrava execução e caixa."
         contextChips={
           <>
-            <AppContextChip>{formatPeriod()}</AppContextChip>
-            <AppContextChip>Período: Hoje / Semana / 30 dias</AppContextChip>
+            <AppContextChip>{officialReference}</AppContextChip>
             <AppContextChip
               tone={operationLevel === "NORMAL" ? "success" : "accent"}
             >
@@ -1060,7 +1057,7 @@ export default function ExecutiveDashboard() {
         </div>
       ) : null}
 
-      {!pageLoading && !pageError && hasOperationalData ? (
+      {hasOperationalData ? (
         <div className="w-full min-w-0 space-y-3 sm:space-y-4">
           <AppSectionBlock
             title="Atenção imediata"
@@ -1068,7 +1065,9 @@ export default function ExecutiveDashboard() {
             className="border-[var(--danger)]/30 bg-[var(--surface-base)]"
             subtitle="Riscos que interrompem execução, recebimento ou atendimento."
           >
-            {attention.length > 0 ? (
+            {operationalSignalsQuery.isLoading ? (
+              <AppPageLoadingState title="Carregando atenção imediata" />
+            ) : attention.length > 0 ? (
               <div className="w-full min-w-0 divide-y divide-[var(--border-subtle)]/70">
                 {attention.map(item => (
                   <AttentionRow key={item.id} item={item} navigate={navigate} />
@@ -1096,7 +1095,9 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Ação contextual mais importante retornada pelos sinais operacionais."
           >
-            {recommendedAction ? (
+            {nextBestActionQuery.isLoading ? (
+              <AppPageLoadingState title="Carregando próxima melhor ação" />
+            ) : recommendedAction ? (
               <NexoPriorityPanel
                 title={recommendedAction.title}
                 entity={recommendedAction.entity}
@@ -1143,11 +1144,13 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Indicadores de apoio para decidir rápido."
           >
-            {kpisQuery.isError ? (
+            {kpisQuery.isLoading ? (
+              <AppPageLoadingState title="Carregando KPIs operacionais" />
+            ) : kpisQuery.isError ? (
               <AppPageErrorState
                 title="KPIs indisponíveis"
                 description="O contrato oficial de indicadores não pôde ser consultado. Nenhum valor zero foi fabricado."
-                onRetry={() => void kpisQuery.refetch()}
+                onAction={() => void kpisQuery.refetch()}
               />
             ) : (
               <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1176,10 +1179,10 @@ export default function ExecutiveDashboard() {
               <AppPageErrorState
                 title="Fluxo operacional indisponível"
                 description="O pipeline oficial não pôde ser consultado. Nenhum estado ou gargalo foi inferido a partir dos KPIs."
-                onRetry={() => void executivePipelineQuery.refetch()}
+                onAction={() => void executivePipelineQuery.refetch()}
               />
             ) : executivePipelineQuery.isLoading ? (
-              <AppPageLoadingState label="Carregando fluxo operacional" />
+              <AppPageLoadingState title="Carregando fluxo operacional" />
             ) : (
               <NexoOperationalPipeline
                 title="Etapas operacionais"
@@ -1203,11 +1206,13 @@ export default function ExecutiveDashboard() {
             className={dashboardSectionClass}
             subtitle="Itens que exigem execução, ordenados por urgência."
           >
-            {alertsQuery.isError ? (
+            {alertsQuery.isLoading ? (
+              <AppPageLoadingState title="Carregando fila operacional" />
+            ) : alertsQuery.isError ? (
               <AppPageErrorState
                 title="Fila operacional indisponível"
                 description="A fonte oficial da fila não pôde ser consultada. A ausência de itens não representa uma fila vazia."
-                onRetry={() => void alertsQuery.refetch()}
+                onAction={() => void alertsQuery.refetch()}
               />
             ) : queue.length > 0 ? (
               <div className="w-full min-w-0">

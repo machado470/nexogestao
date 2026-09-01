@@ -165,11 +165,23 @@ describe("ExecutiveDashboard decision center", () => {
   });
 
   it("degrades independent official contracts without manufacturing empty success", () => {
+    expect(source).toContain("Carregando atenção imediata");
+    expect(source).toContain("Carregando próxima melhor ação");
+    expect(source).toContain("Carregando KPIs operacionais");
+    expect(source).toContain("Carregando fila operacional");
     expect(source).toContain("KPIs indisponíveis");
     expect(source).toContain("Nenhum valor zero foi fabricado");
     expect(source).toContain("Fluxo operacional indisponível");
     expect(source).toContain("Fila operacional indisponível");
     expect(source).toContain("não representa uma fila vazia");
+  });
+
+  it("uses only the official evidence timestamp in the operational header", () => {
+    expect(source).toContain("operationalStateQuery.data?.evidenceAt");
+    expect(source).toContain("Referência oficial:");
+    expect(source).toContain("Referência temporal oficial indisponível");
+    expect(source).not.toContain("function formatPeriod");
+    expect(source).not.toContain("new Date()");
   });
 
   it("shows the authoritative state verbatim and contextualizes the current role", () => {
