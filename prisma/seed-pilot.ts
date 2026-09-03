@@ -55,10 +55,6 @@ function atHour(base: Date, dayOffset: number, hour: number, minute = 0) {
   return date
 }
 
-function toIsoMinute(date: Date) {
-  return date.toISOString().slice(0, 16)
-}
-
 async function resolveNonOverlappingWindow(params: {
   orgId: string
   desiredStartsAt: Date
@@ -206,6 +202,7 @@ async function upsertCustomer(orgId: string, customer: CustomerSeed) {
 
 async function upsertAppointment(params: {
   idempotencyKey: string
+  legacyIdempotencyKeyPrefix?: string
   orgId: string
   customerId: string
   startsAt: Date
@@ -225,8 +222,14 @@ async function upsertAppointment(params: {
       where: {
         orgId: params.orgId,
         customerId: params.customerId,
-        startsAt: params.startsAt,
+        OR: [
+          { startsAt: params.startsAt },
+          ...(params.legacyIdempotencyKeyPrefix
+            ? [{ idempotencyKey: { startsWith: params.legacyIdempotencyKeyPrefix } }]
+            : []),
+        ],
       },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     }))
 
   const resolvedWindow = await resolveNonOverlappingWindow({
@@ -377,9 +380,12 @@ async function seedPilotAppointments(params: {
       durationMinutes: seed.durationMinutes,
     })
 
+    const stableIdempotencyKey = `pilot:${params.orgId}:appointment:${seed.key}`
+
     appointments.push(
       await upsertAppointment({
-        idempotencyKey: `pilot:${params.orgId}:appointment:${seed.key}:${toIsoMinute(startsAt)}`,
+        idempotencyKey: stableIdempotencyKey,
+        legacyIdempotencyKeyPrefix: `${stableIdempotencyKey}:`,
         orgId: params.orgId,
         customerId: params.customers[seed.customerIndex].id,
         startsAt,
