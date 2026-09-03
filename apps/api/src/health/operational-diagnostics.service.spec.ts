@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { OperationalDiagnosticsService } from './operational-diagnostics.service'
 
 describe('OperationalDiagnosticsService', () => {
@@ -67,5 +68,36 @@ describe('OperationalDiagnosticsService', () => {
     expect(result.findings[0]).toEqual(expect.objectContaining({ id: expect.any(String), severity: expect.any(String), area: expect.any(String), code: expect.any(String), title: expect.any(String), description: expect.any(String), entityType: expect.any(String), entityId: expect.any(String), orgId: 'org-safe', detectedAt: expect.any(String), suggestedAction: expect.any(String), metadata: expect.any(Object) }))
     expect(JSON.stringify(result)).not.toContain('phone')
     expect(JSON.stringify(result)).not.toContain('content')
+  })
+
+  it('consulta metadata ausente com os filtros JSON nullable do Prisma e emite o diagnóstico', async () => {
+    const { prisma, service } = build()
+    prisma.charge.findMany.mockResolvedValue([])
+    prisma.payment.findMany.mockResolvedValue([])
+    prisma.serviceOrder.findMany.mockResolvedValue([])
+    prisma.whatsAppMessage.findMany.mockResolvedValue([])
+    prisma.timelineEvent.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 'timeline-1', orgId: 'org-a', action: 'PAYMENT_RECEIVED' }])
+    prisma.riskSnapshot.findFirst.mockResolvedValue({ id: 'risk-1', createdAt: new Date() })
+    prisma.governanceRun.findFirst.mockResolvedValue({ id: 'gov-1', orgId: 'org-a', createdAt: new Date() })
+
+    const result = await service.runForOrg('org-a', 100)
+
+    expect(prisma.timelineEvent.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: expect.objectContaining({
+        orgId: 'org-a',
+        OR: [
+          { metadata: { equals: Prisma.DbNull } },
+          { metadata: { equals: Prisma.JsonNull } },
+          { metadata: { equals: {} } },
+        ],
+      }),
+    }))
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: 'TIMELINE_EVENT_MISSING_METADATA',
+      entityId: 'timeline-1',
+      metadata: { action: 'PAYMENT_RECEIVED' },
+    }))
   })
 })
