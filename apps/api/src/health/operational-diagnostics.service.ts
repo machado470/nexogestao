@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { ChargeStatus, ServiceOrderStatus, WhatsAppMessageStatus } from '@prisma/client'
+import { ChargeStatus, Prisma, ServiceOrderStatus, WhatsAppMessageStatus } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 
 type Severity = 'INFO' | 'WARNING' | 'CRITICAL'
@@ -44,7 +44,7 @@ export class OperationalDiagnosticsService {
       this.prisma.whatsAppMessage.findMany({ where: { orgId, status: WhatsAppMessageStatus.FAILED, failedAt: null }, select: { id: true, orgId: true, status: true }, take: safeLimit }),
       this.prisma.whatsAppMessage.findMany({ where: { orgId, status: { in: [WhatsAppMessageStatus.DELIVERED, WhatsAppMessageStatus.READ] }, providerMessageId: null }, select: { id: true, orgId: true, status: true }, take: safeLimit }),
       this.prisma.timelineEvent.findMany({ where: { orgId, action: { in: ['CHARGE_OVERDUE', 'PAYMENT_RECEIVED', 'SERVICE_ORDER_COMPLETED', 'EXECUTION_DONE', 'CHARGE_CREATED', 'SERVICE_ORDER_CHARGE_CREATED', 'MESSAGE_FAILED', 'WHATSAPP_MESSAGE_FAILED', 'GOVERNANCE_RUN_COMPLETED', 'RISK_UPDATED', 'RISK_SNAPSHOT_CREATED'] }, OR: [{ customerId: null, serviceOrderId: null, appointmentId: null, chargeId: null, personId: null }] }, select: { id: true, orgId: true, action: true }, take: safeLimit }),
-      this.prisma.timelineEvent.findMany({ where: { orgId, action: { in: ['CHARGE_OVERDUE', 'PAYMENT_RECEIVED', 'SERVICE_ORDER_COMPLETED', 'EXECUTION_DONE', 'CHARGE_CREATED', 'SERVICE_ORDER_CHARGE_CREATED', 'MESSAGE_FAILED', 'WHATSAPP_MESSAGE_FAILED', 'GOVERNANCE_RUN_COMPLETED', 'RISK_UPDATED', 'RISK_SNAPSHOT_CREATED'] }, OR: [{ metadata: null }, { metadata: {} as any }] }, select: { id: true, orgId: true, action: true }, take: safeLimit }),
+      this.prisma.timelineEvent.findMany({ where: { orgId, action: { in: ['CHARGE_OVERDUE', 'PAYMENT_RECEIVED', 'SERVICE_ORDER_COMPLETED', 'EXECUTION_DONE', 'CHARGE_CREATED', 'SERVICE_ORDER_CHARGE_CREATED', 'MESSAGE_FAILED', 'WHATSAPP_MESSAGE_FAILED', 'GOVERNANCE_RUN_COMPLETED', 'RISK_UPDATED', 'RISK_SNAPSHOT_CREATED'] }, OR: [{ metadata: { equals: Prisma.DbNull } }, { metadata: { equals: Prisma.JsonNull } }, { metadata: { equals: {} } }] }, select: { id: true, orgId: true, action: true }, take: safeLimit }),
       this.prisma.riskSnapshot.findFirst({ where: { person: { orgId } }, orderBy: { createdAt: 'desc' }, select: { id: true, createdAt: true } }),
       this.prisma.governanceRun.findFirst({ where: { orgId }, orderBy: { createdAt: 'desc' }, select: { id: true, orgId: true, createdAt: true } }),
     ])
