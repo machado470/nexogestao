@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto'
 
 import { AppModule } from '../../src/app.module'
 import { PrismaService } from '../../src/prisma/prisma.service'
+import { DashboardService } from '../../src/dashboard/dashboard.service'
 import {
   describeRealIntegration,
   REAL_INTEGRATION_ENABLED_MESSAGE,
@@ -34,6 +35,7 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
   jest.setTimeout(90000)
   let app: INestApplication
   let prisma: WorkflowPrisma
+  let dashboard: DashboardService
 
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET must be explicitly configured for integration tests')
@@ -62,6 +64,7 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
     await app.init()
 
     prisma = app.get(PrismaService) as WorkflowPrisma
+    dashboard = app.get(DashboardService)
 
     await prisma.organization.createMany({
       data: [
@@ -136,6 +139,43 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
   it('runs end-to-end operational flow with timeline, finance transitions, risk recalculation, and org isolation', async () => {
     const mainAuth = authFor(primaryOrgId, primaryUserId, primaryPersonId)
     const otherAuth = authFor(secondaryOrgId, secondaryUserId, secondaryPersonId)
+
+    // Establish the real, tenant-scoped read-model baseline before any workflow
+    // mutation. Dashboard reads are cached by contract, so later reads use the
+    // service's public invalidation mechanism rather than reaching into cache internals.
+    const baselineMetricsResponse = await request(app.getHttpServer())
+      .get('/dashboard/metrics')
+      .set(mainAuth)
+      .expect(200)
+    const baselineAlertsResponse = await request(app.getHttpServer())
+      .get('/dashboard/alerts')
+      .set(mainAuth)
+      .expect(200)
+    const baselinePipelineResponse = await request(app.getHttpServer())
+      .get('/dashboard/executive-pipeline')
+      .set(mainAuth)
+      .expect(200)
+    const baselineSignalsResponse = await request(app.getHttpServer())
+      .get('/internal/operational-signals')
+      .set(mainAuth)
+      .expect(200)
+    const baselineNextBestActionResponse = await request(app.getHttpServer())
+      .get('/internal/operational-signals/next-best-action')
+      .set(mainAuth)
+      .expect(200)
+
+    const baselineMetrics = baselineMetricsResponse.body
+    const baselinePipelineVolumes = new Map<string, number>(
+      baselinePipelineResponse.body.stages.map((stage: any) => [stage.key, stage.volume]),
+    )
+    const baselineAlertIds = new Set<string>([
+      ...baselineAlertsResponse.body.doneOrdersWithoutCharge.items.map((item: any) => item.id),
+      ...baselineAlertsResponse.body.overdueCharges.items.map((item: any) => item.id),
+    ])
+    const baselineSignalIds = new Set<string>(
+      baselineSignalsResponse.body.signals.map((signal: any) => signal.id),
+    )
+    const baselineNextBestActionEntityId = baselineNextBestActionResponse.body?.entityId ?? null
 
     // 1) customer
     const createCustomer = await request(app.getHttpServer())
@@ -483,6 +523,146 @@ describeRealIntegration('Canonical Operational Workflow (e2e)', () => {
       },
     })
     expect(receiptMessage).toBeTruthy()
+
+    // The canonical paid path must be reflected by the official dashboard facts.
+    // Both successful payments happened in the current week by construction.
+    dashboard.invalidateCache(primaryOrgId)
+    const afterCanonicalMetrics = await request(app.getHttpServer())
+      .get('/dashboard/metrics')
+      .set(mainAuth)
+      .expect(200)
+    expect(afterCanonicalMetrics.body.totalCustomers - baselineMetrics.totalCustomers).toBe(2)
+    expect(afterCanonicalMetrics.body.totalServiceOrders - baselineMetrics.totalServiceOrders).toBe(1)
+    expect(afterCanonicalMetrics.body.completedOrders - baselineMetrics.completedOrders).toBe(1)
+    expect(afterCanonicalMetrics.body.chargesGenerated - baselineMetrics.chargesGenerated).toBe(2)
+    expect(afterCanonicalMetrics.body.paymentsReceivedCount - baselineMetrics.paymentsReceivedCount).toBe(2)
+    expect(afterCanonicalMetrics.body.paidRevenueInCents - baselineMetrics.paidRevenueInCents).toBe(38000)
+    expect(afterCanonicalMetrics.body.weeklyRevenueInCents - baselineMetrics.weeklyRevenueInCents).toBe(38000)
+
+    const afterCanonicalPipeline = await request(app.getHttpServer())
+      .get('/dashboard/executive-pipeline')
+      .set(mainAuth)
+      .expect(200)
+    const expectedCanonicalPipelineDeltas: Record<string, number> = {
+      customers: 2,
+      appointments: 1,
+      'service-orders': 1,
+      charges: 2,
+      payments: 2,
+    }
+    for (const stage of afterCanonicalPipeline.body.stages) {
+      expect(stage.volume - baselinePipelineVolumes.get(stage.key)!).toBe(expectedCanonicalPipelineDeltas[stage.key])
+      expect(stage.state).toBe('unavailable')
+      expect(stage.reason).toEqual(expect.any(String))
+    }
+
+    const afterCanonicalAlerts = await request(app.getHttpServer())
+      .get('/dashboard/alerts')
+      .set(mainAuth)
+      .expect(200)
+    expect(afterCanonicalAlerts.body.doneOrdersWithoutCharge.items)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: serviceOrderId })]))
+    expect(afterCanonicalAlerts.body.overdueCharges.items)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: chargeId })]))
+    expect(afterCanonicalAlerts.body.overdueCharges.items)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: concurrentChargeId })]))
+
+    // Minimal positive exception fixture: a second real service order is taken
+    // through the official execution API to DONE, deliberately without a charge.
+    const exceptionServiceOrderResponse = await request(app.getHttpServer())
+      .post('/service-orders')
+      .set(mainAuth)
+      .send({
+        customerId,
+        title: 'O.S. concluída sem cobrança para diagnóstico',
+        description: 'Fixture operacional positivo',
+        assignedToPersonId: primaryPersonId,
+      })
+      .expect(201)
+    const exceptionServiceOrderId = exceptionServiceOrderResponse.body.id as string
+
+    const exceptionExecutionResponse = await request(app.getHttpServer())
+      .post('/executions/start')
+      .set(mainAuth)
+      .send({ serviceOrderId: exceptionServiceOrderId, notes: 'Fixture iniciado' })
+      .expect(201)
+    await request(app.getHttpServer())
+      .post(`/executions/${exceptionExecutionResponse.body.id}/complete`)
+      .set(mainAuth)
+      .send({ notes: 'Fixture concluído sem cobrança' })
+      .expect(201)
+
+    dashboard.invalidateCache(primaryOrgId)
+    const positiveAlerts = await request(app.getHttpServer())
+      .get('/dashboard/alerts')
+      .set(mainAuth)
+      .expect(200)
+    expect(baselineAlertIds.has(exceptionServiceOrderId)).toBe(false)
+    expect(positiveAlerts.body.doneOrdersWithoutCharge.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: exceptionServiceOrderId })]),
+    )
+
+    const positiveSignals = await request(app.getHttpServer())
+      .get('/internal/operational-signals')
+      .set(mainAuth)
+      .expect(200)
+    const exceptionSignal = positiveSignals.body.signals.find(
+      (signal: any) => signal.entityId === exceptionServiceOrderId,
+    )
+    expect(exceptionSignal).toEqual(expect.objectContaining({
+      actionType: 'GENERATE_CHARGE_FOR_COMPLETED_SO',
+      entityType: 'ServiceOrder',
+      entityId: exceptionServiceOrderId,
+      serviceOrderId: exceptionServiceOrderId,
+      orgId: primaryOrgId,
+      reason: 'SERVICE_ORDER_COMPLETED_WITHOUT_CHARGE',
+      source: 'DIAGNOSTIC',
+    }))
+    expect(baselineSignalIds.has(exceptionSignal.id)).toBe(false)
+
+    const positiveNextBestAction = await request(app.getHttpServer())
+      .get('/internal/operational-signals/next-best-action')
+      .set(mainAuth)
+      .expect(200)
+    expect(positiveNextBestAction.body).toEqual(expect.objectContaining({
+      actionType: 'GENERATE_CHARGE_FOR_COMPLETED_SO',
+      entityType: 'ServiceOrder',
+      entityId: exceptionServiceOrderId,
+      serviceOrderId: exceptionServiceOrderId,
+    }))
+    expect(positiveNextBestAction.body.entityId).not.toBe(baselineNextBestActionEntityId)
+
+    const isolatedAlerts = await request(app.getHttpServer()).get('/dashboard/alerts').set(otherAuth).expect(200)
+    expect(isolatedAlerts.body.doneOrdersWithoutCharge.items.some((item: any) => item.id === exceptionServiceOrderId)).toBe(false)
+    expect(isolatedAlerts.body.overdueCharges.items.some((item: any) => [chargeId, concurrentChargeId].includes(item.id))).toBe(false)
+
+    const isolatedSignals = await request(app.getHttpServer()).get('/internal/operational-signals').set(otherAuth).expect(200)
+    expect(isolatedSignals.body.orgId).toBe(secondaryOrgId)
+    expect(isolatedSignals.body.signals.every((signal: any) => signal.orgId === secondaryOrgId)).toBe(true)
+    expect(isolatedSignals.body.signals.some((signal: any) => signal.entityId === exceptionServiceOrderId)).toBe(false)
+
+    const isolatedNextBestAction = await request(app.getHttpServer())
+      .get('/internal/operational-signals/next-best-action')
+      .set(otherAuth)
+      .expect(200)
+    expect(isolatedNextBestAction.body?.entityId).not.toBe(exceptionServiceOrderId)
+
+    const isolatedMetrics = await request(app.getHttpServer()).get('/dashboard/metrics').set(otherAuth).expect(200)
+    expect(isolatedMetrics.body).toEqual(expect.objectContaining({
+      totalCustomers: 0,
+      totalServiceOrders: 0,
+      completedOrders: 0,
+      chargesGenerated: 0,
+      paymentsReceivedCount: 0,
+      paidRevenueInCents: 0,
+    }))
+
+    const isolatedPipeline = await request(app.getHttpServer())
+      .get('/dashboard/executive-pipeline')
+      .set(otherAuth)
+      .expect(200)
+    expect(isolatedPipeline.body.stages.every((stage: any) => stage.state === 'unavailable')).toBe(true)
+    expect(isolatedPipeline.body.stages.every((stage: any) => stage.volume === 0)).toBe(true)
 
     // 13) timeline events emitted for canonical path
     const timeline = await prisma.timelineEvent.findMany({
