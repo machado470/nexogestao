@@ -585,8 +585,8 @@ function AttentionRow({
   navigate: (path: string) => void;
 }) {
   return (
-    <OperationalInnerCard className="grid w-full min-w-0 gap-2 border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/35 p-2.5 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center">
-      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--danger)]/25 bg-[var(--danger)]/8">
+    <OperationalInnerCard className="grid w-full min-w-0 gap-3 border-[var(--border-subtle)]/70 bg-[var(--surface-primary)]/35 p-3 sm:p-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+      <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--danger)]/25 bg-[var(--danger)]/8">
         <ShieldAlert className="h-4 w-4 text-[var(--danger)]" />
       </span>
       <div className="min-w-0">
@@ -604,22 +604,30 @@ function AttentionRow({
             {compactIncidentTitle(item.title)}
           </p>
         </div>
-        <p className="mt-1 line-clamp-1 text-xs leading-4 text-[var(--text-secondary)]">
-          Impacto: {item.impact}
-        </p>
+        <div className="mt-2 grid gap-1 text-xs leading-4 text-[var(--text-secondary)] sm:grid-cols-2">
+          <p>
+            <strong className="text-[var(--text-primary)]">Razão:</strong>{" "}
+            {item.reason}
+          </p>
+          <p>
+            Impacto: {item.impact}
+          </p>
+        </div>
       </div>
-      {item.primaryValue ? (
-        <strong className="text-2xl font-semibold leading-none text-[var(--text-primary)] md:text-right">
-          {item.primaryValue}
-        </strong>
-      ) : null}
-      <Button
-        className="h-8 w-full shrink-0 px-3 text-xs md:w-auto"
-        size="sm"
-        onClick={() => navigate(item.path)}
-      >
-        {item.ctaLabel}
-      </Button>
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:flex-col md:items-end">
+        {item.primaryValue ? (
+          <strong className="text-2xl font-semibold leading-none text-[var(--text-primary)]">
+            {item.primaryValue}
+          </strong>
+        ) : null}
+        <Button
+          className="h-9 w-full shrink-0 px-3 text-xs sm:w-auto"
+          size="sm"
+          onClick={() => navigate(item.path)}
+        >
+          {item.ctaLabel}
+        </Button>
+      </div>
     </OperationalInnerCard>
   );
 }
@@ -1006,7 +1014,22 @@ export default function ExecutiveDashboard() {
             </AppContextChip>
           </>
         }
-      />
+      >
+        <div className="grid gap-2 text-xs text-[var(--text-secondary)] sm:grid-cols-3">
+          <p>
+            <strong className="text-[var(--text-primary)]">Agora</strong> ·{" "}
+            {statusLabel}
+          </p>
+          <p>
+            <strong className="text-[var(--text-primary)]">Atenção</strong> ·
+            sinais oficiais logo abaixo
+          </p>
+          <p>
+            <strong className="text-[var(--text-primary)]">Primeiro</strong> ·
+            execute a recomendação oficial
+          </p>
+        </div>
+      </AppOperationalHeader>
 
       {pageLoading ? (
         <AppPageLoadingState
@@ -1078,84 +1101,90 @@ export default function ExecutiveDashboard() {
 
       {hasOperationalData ? (
         <div className="w-full min-w-0 space-y-3 sm:space-y-4">
-          <AppSectionBlock
-            title="Atenção imediata"
-            compact
-            className="border-[var(--danger)]/30 bg-[var(--surface-base)]"
-            subtitle="Riscos que interrompem execução, recebimento ou atendimento."
-          >
-            {operationalSignalsQuery.isLoading ? (
-              <AppPageLoadingState title="Carregando atenção imediata" />
-            ) : attention.length > 0 ? (
-              <div className="w-full min-w-0 divide-y divide-[var(--border-subtle)]/70">
-                {attention.map(item => (
-                  <AttentionRow key={item.id} item={item} navigate={navigate} />
-                ))}
-              </div>
-            ) : (
-              <AppPageEmptyState
-                title={
-                  operationalSignalsQuery.isError
-                    ? "Atenção imediata indisponível"
-                    : "Nenhum sinal operacional retornado"
-                }
-                description={
-                  operationalSignalsQuery.isError
-                    ? "O contrato oficial de sinais não pôde ser consultado. Nenhum risco foi inferido a partir de KPIs ou alertas auxiliares."
-                    : "A fonte oficial não retornou sinais para esta leitura; isso não é apresentado como confirmação de operação saudável."
-                }
-              />
-            )}
-          </AppSectionBlock>
-
-          <AppSectionBlock
-            title="Próxima melhor ação"
-            compact
-            className={dashboardSectionClass}
-            subtitle="Ação contextual mais importante retornada pelos sinais operacionais."
-          >
-            {nextBestActionQuery.isLoading ? (
-              <AppPageLoadingState title="Carregando próxima melhor ação" />
-            ) : recommendedAction ? (
-              <NexoPriorityPanel
-                title={recommendedAction.title}
-                entity={recommendedAction.entity}
-                reason={recommendedAction.reason}
-                impact={recommendedAction.impact}
-                safetyNote={recommendedAction.safetyNote}
-                primaryValue={recommendedAction.primaryValue}
-                primaryActionLabel={recommendedAction.ctaLabel}
-                onPrimaryAction={() => navigate(recommendedAction.path)}
-                className="border-[var(--accent-primary)]/55 bg-[var(--accent-soft)]/50"
-              />
-            ) : (
-              <div className="space-y-2">
+          <div className="grid w-full min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)] sm:gap-4">
+            <AppSectionBlock
+              title="Atenção imediata"
+              compact
+              className="min-w-0 border-[var(--danger)]/35 bg-[var(--surface-base)]"
+              subtitle="Riscos que interrompem execução, recebimento ou atendimento."
+            >
+              {operationalSignalsQuery.isLoading ? (
+                <AppPageLoadingState title="Carregando atenção imediata" />
+              ) : attention.length > 0 ? (
+                <div className="w-full min-w-0 divide-y divide-[var(--border-subtle)]/70">
+                  {attention.map(item => (
+                    <AttentionRow
+                      key={item.id}
+                      item={item}
+                      navigate={navigate}
+                    />
+                  ))}
+                </div>
+              ) : (
                 <AppPageEmptyState
                   title={
-                    nextBestActionQuery.isError
-                      ? "Próxima ação indisponível"
-                      : "Nenhuma ação prioritária encontrada."
+                    operationalSignalsQuery.isError
+                      ? "Atenção imediata indisponível"
+                      : "Nenhum sinal operacional retornado"
                   }
                   description={
-                    nextBestActionQuery.isError
-                      ? "A fonte desta recomendação falhou. Use a fila e os alertas disponíveis ou tente novamente; nenhuma recomendação foi inventada."
-                      : "Nenhuma ação prioritária retornada para o período."
+                    operationalSignalsQuery.isError
+                      ? "O contrato oficial de sinais não pôde ser consultado. Nenhum risco foi inferido a partir de KPIs ou alertas auxiliares."
+                      : "A fonte oficial não retornou sinais para esta leitura; isso não é apresentado como confirmação de operação saudável."
                   }
                 />
-                {nextBestActionQuery.isError ? (
-                  <div className="flex justify-center">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void nextBestActionQuery.refetch()}
-                    >
-                      Tentar próxima ação novamente
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </AppSectionBlock>
+              )}
+            </AppSectionBlock>
+
+            <AppSectionBlock
+              title="Próxima melhor ação"
+              compact
+              className="min-w-0 border-[var(--accent-primary)]/30 bg-[var(--accent-soft)]/20"
+              subtitle="Ação contextual mais importante retornada pelos sinais operacionais."
+            >
+              {nextBestActionQuery.isLoading ? (
+                <AppPageLoadingState title="Carregando próxima melhor ação" />
+              ) : recommendedAction ? (
+                <NexoPriorityPanel
+                  title={recommendedAction.title}
+                  entity={recommendedAction.entity}
+                  reason={recommendedAction.reason}
+                  impact={recommendedAction.impact}
+                  safetyNote={recommendedAction.safetyNote}
+                  primaryValue={recommendedAction.primaryValue}
+                  primaryActionLabel={recommendedAction.ctaLabel}
+                  onPrimaryAction={() => navigate(recommendedAction.path)}
+                  className="border-[var(--accent-primary)]/55 bg-[var(--accent-soft)]/50"
+                />
+              ) : (
+                <div className="space-y-2">
+                  <AppPageEmptyState
+                    title={
+                      nextBestActionQuery.isError
+                        ? "Próxima ação indisponível"
+                        : "Nenhuma ação prioritária encontrada."
+                    }
+                    description={
+                      nextBestActionQuery.isError
+                        ? "A fonte desta recomendação falhou. Use a fila e os alertas disponíveis ou tente novamente; nenhuma recomendação foi inventada."
+                        : "Nenhuma ação prioritária retornada para o período."
+                    }
+                  />
+                  {nextBestActionQuery.isError ? (
+                    <div className="flex justify-center">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void nextBestActionQuery.refetch()}
+                      >
+                        Tentar próxima ação novamente
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </AppSectionBlock>
+          </div>
 
           <AppSectionBlock
             title="KPIs operacionais"
@@ -1172,7 +1201,7 @@ export default function ExecutiveDashboard() {
                 onAction={() => void kpisQuery.refetch()}
               />
             ) : (
-              <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid w-full min-w-0 grid-cols-1 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--border-subtle)] md:grid-cols-2 xl:grid-cols-4">
                 {kpiCards.map(({ label, value, context, cta, path, Icon }) => (
                   <NexoExecutiveMetric
                     key={label}
@@ -1182,6 +1211,7 @@ export default function ExecutiveDashboard() {
                     icon={<Icon className="h-4 w-4" />}
                     ctaLabel={cta}
                     onClick={() => navigate(path)}
+                    className="rounded-none border-0 bg-[var(--surface-base)] shadow-none"
                   />
                 ))}
               </div>
@@ -1247,9 +1277,9 @@ export default function ExecutiveDashboard() {
                             <span className="font-semibold text-[var(--text-primary)]">
                               {item.type}
                             </span>
-                            <span className="text-[var(--text-muted)]">
-                              · {presentationStatusLabel(item.status)}
-                            </span>
+                            <AppStatusBadge
+                              label={presentationStatusLabel(item.status)}
+                            />
                           </div>
                           <strong className="mt-1 block truncate text-sm text-[var(--text-primary)]">
                             {item.entity}
@@ -1369,28 +1399,35 @@ export default function ExecutiveDashboard() {
             ) : null}
           </AppSectionBlock>
 
-          <div className="grid w-full min-w-0 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-            <NexoGovernanceDecisionCard
-              level={operationLevel}
-              title="Estado operacional"
-              reason={operationStateReason}
-              impact={
-                operationalStateQuery.data?.evidenceAt
-                  ? `Evidência registrada em ${formatEventDateTime(operationalStateQuery.data.evidenceAt)}.`
-                  : "Nenhuma evidência operacional confiável disponível."
-              }
-              detailsLabel="Abrir governança"
-              metrics={operationStateMetrics}
-              onDetails={() => navigate("/governance")}
-            />
+          <AppSectionBlock
+            title="Governança e evidências"
+            compact
+            className={dashboardSectionClass}
+            subtitle="Explicação, confiança e eventos que sustentam a leitura operacional."
+          >
+            <div className="grid w-full min-w-0 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+              <NexoGovernanceDecisionCard
+                level={operationLevel}
+                title="Estado operacional"
+                reason={operationStateReason}
+                impact={
+                  operationalStateQuery.data?.evidenceAt
+                    ? `Evidência registrada em ${formatEventDateTime(operationalStateQuery.data.evidenceAt)}.`
+                    : "Nenhuma evidência operacional confiável disponível."
+                }
+                detailsLabel="Abrir governança"
+                metrics={operationStateMetrics}
+                onDetails={() => navigate("/governance")}
+              />
 
-            <NexoEvidenceTimeline
-              className="h-full"
-              events={timelineEvents}
-              fullTimelineLabel="Ver Timeline"
-              onFullTimeline={() => navigate("/timeline")}
-            />
-          </div>
+              <NexoEvidenceTimeline
+                className="h-full"
+                events={timelineEvents}
+                fullTimelineLabel="Ver Timeline"
+                onFullTimeline={() => navigate("/timeline")}
+              />
+            </div>
+          </AppSectionBlock>
 
           <AppSectionBlock
             title="WhatsApp executivo"
