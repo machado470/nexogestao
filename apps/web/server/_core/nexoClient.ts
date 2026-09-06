@@ -123,16 +123,16 @@ function mapNexoHttpErrorToTrpcError(error: NexoHttpError): TRPCError {
   return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message, cause: error });
 }
 
-export async function nexoFetch<T>(
+async function requestNexo<T>(
   source: CtxLike | any,
   path: string,
-  init?: RequestInit & { allowAnonymous?: boolean }
-): Promise<T | null> {
+  init: RequestInit = {},
+  requireAuth = true,
+): Promise<T> {
   const startedAt = Date.now();
   const token = resolveAuthToken(source);
 
-  if (!token) {
-    if (init?.allowAnonymous) return null;
+  if (!token && requireAuth) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Não autenticado" });
   }
   const timeoutMs =
@@ -171,7 +171,7 @@ export async function nexoFetch<T>(
       credentials: "include",
       signal: controller.signal,
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         "content-type": "application/json",
         ...(requestId ? { "x-request-id": String(requestId) } : {}),
         ...(correlationId ? { "x-correlation-id": String(correlationId) } : {}),
@@ -219,4 +219,21 @@ export async function nexoFetch<T>(
   }
 
   return body as T;
+}
+
+export async function nexoFetch<T>(
+  source: CtxLike | any,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  return requestNexo<T>(source, path, init, true);
+}
+
+/** Shared transport for the API's intentionally anonymous auth endpoints. */
+export async function nexoPublicFetch<T>(
+  source: CtxLike | any,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  return requestNexo<T>(source, path, init, false);
 }

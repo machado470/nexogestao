@@ -2,13 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const router = readFileSync(
-  new URL("./routers/nexo-proxy.ts", import.meta.url),
+  new URL("./routers/timeline.ts", import.meta.url),
   "utf8"
 );
-const timelineRouter = router.slice(
-  router.indexOf("timeline: router({"),
-  router.indexOf("executions: router({")
-);
+const timelineRouter = router;
 
 describe("Timeline BFF authority boundary", () => {
   it("accepts only presentation query fields and derives tenant and role from authentication", () => {
@@ -22,7 +19,7 @@ describe("Timeline BFF authority boundary", () => {
 
   it("only forwards the API response and does not rebuild classifications", () => {
     expect(timelineRouter).toContain(
-      "authedGet(ctx as CtxLike, `/timeline`, input ?? {})"
+      "authedGet(ctx as NexoContext, `/timeline`, input ?? {})"
     );
     expect(timelineRouter).not.toMatch(
       /severity|risk|recommendedAction|consequence/
