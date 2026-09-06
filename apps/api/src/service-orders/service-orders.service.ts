@@ -28,6 +28,7 @@ import {
 import { IdempotencyService } from '../common/idempotency/idempotency.service'
 import { notificationRoutes } from '@nexogestao/common'
 import { OutboxService } from '../outbox/outbox.service'
+import { ServiceOrderReadService } from './service-order-read.service'
 
 function normalizeText(v?: string): string | null {
   const s = (v ?? '').trim()
@@ -142,54 +143,8 @@ function buildServiceOrderIdempotencyKey(input: {
   ].join(':')
 }
 
-type FinancialSummary = {
-  hasCharge: boolean
-  chargeId: string | null
-  chargeStatus: 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELED' | null
-  chargeAmountCents: number | null
-  chargeDueDate: Date | null
-  paidAt: Date | null
-}
-
-export type ServiceOrderOperationalDecision = {
-  isOverdue: boolean
-  overdueDays: number
-  isStalled: boolean
-  chargeOverdue: boolean
-  operationalStatus: 'NORMAL' | 'ATENÇÃO' | 'RISCO'
-  priority: 'P0' | 'P1' | 'P2' | 'P3'
-  riskLabel: string
-  nextAction: { type: 'start' | 'complete' | 'charge' | 'edit' | 'select'; label: string; reason: string }
-}
-
-export function resolveServiceOrderOperationalDecision(input: {
-  status: ServiceOrderStatus; assignedToPersonId?: string | null; dueDate?: Date | null
-  scheduledFor?: Date | null; financialSummary: FinancialSummary; now?: Date
-}): ServiceOrderOperationalDecision {
-  const now = input.now ?? new Date()
-  const deadline = input.dueDate ?? input.scheduledFor ?? null
-  const active = ['OPEN', 'ASSIGNED', 'IN_PROGRESS'].includes(input.status)
-  const isOverdue = Boolean(deadline && active && deadline.getTime() < now.getTime())
-  const overdueDays = isOverdue && deadline ? Math.max(1, Math.ceil((now.getTime() - deadline.getTime()) / 86_400_000)) : 0
-  const isStalled = input.status === 'IN_PROGRESS' && !deadline
-  const chargeDueDate = input.financialSummary.chargeDueDate
-  const chargeOverdue = input.financialSummary.chargeStatus === 'OVERDUE' || Boolean(input.financialSummary.chargeStatus === 'PENDING' && chargeDueDate && chargeDueDate.getTime() < now.getTime())
-  const withoutOwner = !input.assignedToPersonId && active
-  const doneWithoutCharge = input.status === 'DONE' && !input.financialSummary.hasCharge
-  let nextAction: ServiceOrderOperationalDecision['nextAction']
-  if (isOverdue) nextAction = input.status === 'IN_PROGRESS' ? { type: 'complete', label: 'Concluir ou replanejar', reason: 'Prazo vencido' } : { type: 'start', label: 'Iniciar agora', reason: 'Atrasada sem execução' }
-  else if (withoutOwner) nextAction = { type: 'edit', label: 'Definir responsável', reason: 'Sem responsável' }
-  else if (doneWithoutCharge) nextAction = { type: 'charge', label: 'Gerar cobrança', reason: 'Concluída sem cobrança' }
-  else if (chargeOverdue) nextAction = { type: 'select', label: 'Cobrar cliente', reason: 'Cobrança vencida vinculada' }
-  else if (input.status === 'OPEN' || input.status === 'ASSIGNED') nextAction = { type: 'start', label: 'Iniciar', reason: 'Pronta para execução' }
-  else if (input.status === 'IN_PROGRESS') nextAction = { type: 'complete', label: 'Concluir', reason: 'Execução em andamento' }
-  else if (input.status === 'DONE') nextAction = { type: 'select', label: 'Abrir detalhe', reason: 'Execução concluída' }
-  else nextAction = { type: 'select', label: 'Revisar O.S.', reason: 'Dados incompletos' }
-  const riskLabel = isOverdue ? 'Atrasada' : doneWithoutCharge ? 'Alerta: concluída sem cobrança' : chargeOverdue ? 'Cobrança vencida vinculada' : withoutOwner ? 'Sem responsável' : isStalled ? 'Em risco: sem prazo' : 'Sem bloqueio crítico'
-  const operationalStatus = isOverdue || doneWithoutCharge || chargeOverdue ? 'RISCO' as const : withoutOwner || isStalled ? 'ATENÇÃO' as const : 'NORMAL' as const
-  const priority = isOverdue || doneWithoutCharge || chargeOverdue ? 'P0' as const : withoutOwner || isStalled ? 'P1' as const : active ? 'P2' as const : 'P3' as const
-  return { isOverdue, overdueDays, isStalled, chargeOverdue, operationalStatus, priority, riskLabel, nextAction }
-}
+export { resolveServiceOrderOperationalDecision } from './service-order-read.service'
+export type { ServiceOrderOperationalDecision } from './service-order-read.service'
 
 @Injectable()
 export class ServiceOrdersService {
@@ -208,6 +163,7 @@ export class ServiceOrdersService {
     private readonly analytics: AnalyticsService,
     private readonly idempotency: IdempotencyService,
     private readonly outbox: OutboxService,
+    private readonly readService: ServiceOrderReadService = new ServiceOrderReadService(prisma),
   ) {}
 
   private async enqueueServiceOrderCreatedMessage(params: {
@@ -282,229 +238,12 @@ export class ServiceOrdersService {
     }
   }
 
-  private buildFinancialSummary(
-    charge?:
-      | {
-          id: string
-          status: 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELED'
-          amountCents: number
-          dueDate: Date
-          paidAt: Date | null
-        }
-      | null,
-  ): FinancialSummary {
-    if (!charge) {
-      return {
-        hasCharge: false,
-        chargeId: null,
-        chargeStatus: null,
-        chargeAmountCents: null,
-        chargeDueDate: null,
-        paidAt: null,
-      }
-    }
-
-    return {
-      hasCharge: true,
-      chargeId: charge.id,
-      chargeStatus: charge.status,
-      chargeAmountCents: charge.amountCents,
-      chargeDueDate: charge.dueDate,
-      paidAt: charge.paidAt ?? null,
-    }
-  }
-
-  private async attachFinancialSummary<T extends { id: string }>(
-    orgId: string,
-    serviceOrders: T[],
-  ): Promise<Array<T & { financialSummary: FinancialSummary }>> {
-    if (serviceOrders.length === 0) return []
-
-    const serviceOrderIds = serviceOrders.map((item) => item.id)
-
-    const charges = await this.prisma.charge.findMany({
-      where: {
-        orgId,
-        serviceOrderId: { in: serviceOrderIds },
-      },
-      select: {
-        id: true,
-        serviceOrderId: true,
-        status: true,
-        amountCents: true,
-        dueDate: true,
-        paidAt: true,
-        createdAt: true,
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    })
-
-    const priority: Record<'OVERDUE' | 'PENDING' | 'PAID' | 'CANCELED', number> = {
-      OVERDUE: 4,
-      PENDING: 3,
-      PAID: 2,
-      CANCELED: 1,
-    }
-
-    const chargeByServiceOrderId = new Map<
-      string,
-      {
-        id: string
-        status: 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELED'
-        amountCents: number
-        dueDate: Date
-        paidAt: Date | null
-      }
-    >()
-
-    for (const charge of charges) {
-      if (!charge.serviceOrderId) continue
-
-      const current = chargeByServiceOrderId.get(charge.serviceOrderId)
-      if (!current) {
-        chargeByServiceOrderId.set(charge.serviceOrderId, {
-          id: charge.id,
-          status: charge.status as any,
-          amountCents: charge.amountCents,
-          dueDate: charge.dueDate,
-          paidAt: charge.paidAt ?? null,
-        })
-        continue
-      }
-
-      if (
-        priority[charge.status as keyof typeof priority] >
-        priority[current.status as keyof typeof priority]
-      ) {
-        chargeByServiceOrderId.set(charge.serviceOrderId, {
-          id: charge.id,
-          status: charge.status as any,
-          amountCents: charge.amountCents,
-          dueDate: charge.dueDate,
-          paidAt: charge.paidAt ?? null,
-        })
-      }
-    }
-
-    return serviceOrders.map((serviceOrder) => {
-      const financialSummary = this.buildFinancialSummary(chargeByServiceOrderId.get(serviceOrder.id) ?? null)
-      const order = serviceOrder as T & { status: ServiceOrderStatus; assignedToPersonId?: string | null; dueDate?: Date | null; scheduledFor?: Date | null }
-      return { ...serviceOrder, financialSummary, operationalDecision: resolveServiceOrderOperationalDecision({ status: order.status, assignedToPersonId: order.assignedToPersonId, dueDate: order.dueDate, scheduledFor: order.scheduledFor, financialSummary }) }
-    })
-  }
-
-  async list(
-    orgId: string,
-    filters: {
-      status?: ServiceOrderStatus
-      customerId?: string
-      assignedToPersonId?: string
-      from?: string
-      to?: string
-      page?: number
-      limit?: number
-      search?: string
-    },
-  ) {
-    if (!orgId) throw new BadRequestException('orgId é obrigatório')
-
-    const page = Number(filters.page) || 1
-    const limit = Math.min(Number(filters.limit) || 20, 100)
-    const skip = (page - 1) * limit
-
-    const from = parseOptionalDate('from', filters.from)
-    const to = parseOptionalDate('to', filters.to)
-
-    if (from && to && from.getTime() > to.getTime()) {
-      throw new BadRequestException('intervalo inválido: from não pode ser maior que to')
-    }
-
-    const where: Prisma.ServiceOrderWhereInput = { orgId }
-
-    if (filters.customerId) where.customerId = filters.customerId
-    if (filters.assignedToPersonId) {
-      where.assignedToPersonId = filters.assignedToPersonId
-    }
-
-    if (filters.status != null) {
-      if (!isStatus(filters.status)) {
-        throw new BadRequestException('status inválido')
-      }
-      where.status = filters.status
-    }
-
-    if (from || to) {
-      where.scheduledFor = {}
-      if (from) where.scheduledFor.gte = from
-      if (to) where.scheduledFor.lte = to
-    }
-
-    if (filters.search) {
-      const s = String(filters.search)
-      where.OR = [
-        { title: { contains: s, mode: 'insensitive' } },
-        { description: { contains: s, mode: 'insensitive' } },
-        {
-          customer: {
-            OR: [
-              { name: { contains: s, mode: 'insensitive' } },
-              { email: { contains: s, mode: 'insensitive' } },
-              { phone: { contains: s, mode: 'insensitive' } },
-            ],
-          },
-        },
-      ]
-    }
-
-    const [rows, total] = await Promise.all([
-      this.prisma.serviceOrder.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-        include: {
-          customer: { select: { id: true, name: true, phone: true } },
-          assignedTo: { select: { id: true, name: true } },
-          appointment: {
-            select: { id: true, startsAt: true, endsAt: true, status: true },
-          },
-        },
-      }),
-      this.prisma.serviceOrder.count({ where }),
-    ])
-
-    const data = await this.attachFinancialSummary(orgId, rows)
-
-    return {
-      data,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    }
+  async list(orgId: string, filters: Parameters<ServiceOrderReadService['list']>[1]) {
+    return this.readService.list(orgId, filters)
   }
 
   async get(orgId: string, id: string) {
-    if (!orgId) throw new BadRequestException('orgId é obrigatório')
-    if (!id) throw new BadRequestException('id é obrigatório')
-
-    const os = await this.prisma.serviceOrder.findFirst({
-      where: { id, orgId },
-      include: {
-        customer: { select: { id: true, name: true, phone: true } },
-        assignedTo: { select: { id: true, name: true } },
-        appointment: {
-          select: { id: true, startsAt: true, endsAt: true, status: true },
-        },
-      },
-    })
-
-    if (!os) throw new NotFoundException('Ordem de serviço não encontrada')
-
-    const [enriched] = await this.attachFinancialSummary(orgId, [os])
-
-    if (!enriched) {
-      throw new NotFoundException('Ordem de serviço não encontrada')
-    }
-
-    return enriched
+    return this.readService.get(orgId, id)
   }
 
   async create(params: {
