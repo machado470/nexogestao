@@ -11,7 +11,7 @@ describe('PaymentsService production hardening', () => {
     } as any
 
     expect(
-      () => new PaymentsService(config, {} as any, {} as any, {} as any),
+      () => new PaymentsService(config, {} as any, {} as any),
     ).toThrow('STRIPE_SECRET_KEY/STRIPE_KEY é obrigatório em produção')
   })
 })

@@ -25,6 +25,7 @@ Status: `current` descreve a referência vigente; `review` explicita conteúdo �
 | --------------------------------------------------------------------------------- | ------------------------------------ | ------- | --------------- | -------------------------------------------------- | -------------- |
 | [Contexto do sistema](architecture/system-context.md)                             | Arquitetura macro e limites          | current | true            | `ARCHITECTURE_OVERVIEW.md`, `SAAS_ARCHITECTURE.md` | 2026-09-06     |
 | [ADR 0001 — contratos e persistência](architecture/adr/0001-api-bff-contract-and-persistence-boundaries.md) | Autoridade API/BFF, envelopes e tenancy | current | true | — | 2026-09-06 |
+| [ADR 0002 — fronteiras financeiras](architecture/adr/0002-finance-payments-billing-boundaries.md) | Autoridade de Finance, Payments, Billing e Stripe | current | true | — | 2026-09-06 |
 | [Contrato de eventos operacionais](architecture/CONTRATO_EVENTOS_OPERACIONAIS.md) | Envelope e invariantes dos eventos   | current | true            | —                                                  | 2026-09-06     |
 | [Taxonomia da Timeline](TIMELINE_EVENT_TAXONOMY.md)                               | Vocabulário canônico de eventos      | current | true            | —                                                  | 2026-09-06     |
 | [Sinais do Risk Engine](RISK_ENGINE_OPERATIONAL_SIGNALS.md)                       | Sinais operacionais de risco         | current | true            | —                                                  | 2026-09-06     |
@@ -51,7 +52,7 @@ Status: `current` descreve a referência vigente; `review` explicita conteúdo �
 | [Billing](integrations/billing.md)   | Fluxo Stripe/Billing                 | review | true            | `BILLING_FLOW.md`           | 2026-09-06     |
 | [WhatsApp](integrations/whatsapp.md) | Configuração local da Z-API          | review | true            | `WHATSAPP_ZAPI_LOCAL.md`    | 2026-09-06     |
 
-> Finance, Payments e Billing permanecem em `review`: o catálogo não declara fronteiras que ainda precisam de decisão arquitetural.
+> Finance, Payments e Billing têm fronteiras normativas no ADR 0002. Guias de integração continuam em `review` por dependerem de configuração e validação do ambiente.
 
 ## Frontend
 
