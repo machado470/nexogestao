@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, protectedProcedure } from "../_core/trpc";
 import { nexoFetch } from "../_core/nexoClient";
+import { unwrapNexoApiResponse } from "../_core/nexoEnvelope";
 import {
   countUnreadOperationalNotifications,
   listOperationalNotifications,
@@ -66,19 +67,6 @@ const nextBestActionSchema = z.object({
 
 const nonnegativeInteger = z.number().int().nonnegative();
 const nullableDate = z.string().nullable();
-const unwrapApiResponse = (raw: unknown): unknown => {
-  if (
-    raw !== null &&
-    typeof raw === "object" &&
-    !Array.isArray(raw) &&
-    Object.prototype.hasOwnProperty.call(raw, "success") &&
-    Object.prototype.hasOwnProperty.call(raw, "data") &&
-    (raw as { success?: unknown }).success === true
-  ) {
-    return (raw as { data: unknown }).data;
-  }
-  return raw;
-};
 const executivePipelineSchema = z
   .object({
     generatedAt: z.string().datetime(),
@@ -407,28 +395,28 @@ export const dashboardRouter = router({
     const raw = await nexoFetch<unknown>(ctx, `/dashboard/metrics`, {
       method: "GET",
     });
-    return dashboardMetricsSchema.parse(unwrapApiResponse(raw));
+    return dashboardMetricsSchema.parse(unwrapNexoApiResponse(raw));
   }),
 
   alerts: protectedProcedure.query(async ({ ctx }) => {
     const raw = await nexoFetch<unknown>(ctx, `/dashboard/alerts`, {
       method: "GET",
     });
-    return dashboardAlertsSchema.parse(unwrapApiResponse(raw));
+    return dashboardAlertsSchema.parse(unwrapNexoApiResponse(raw));
   }),
 
   executivePipeline: protectedProcedure.query(async ({ ctx }) => {
     const raw = await nexoFetch<unknown>(ctx, `/dashboard/executive-pipeline`, {
       method: "GET",
     });
-    return executivePipelineSchema.parse(unwrapApiResponse(raw));
+    return executivePipelineSchema.parse(unwrapNexoApiResponse(raw));
   }),
 
   operationalState: protectedProcedure.query(async ({ ctx }) => {
     const raw = await nexoFetch<any>(ctx, "/governance/operational-state", {
       method: "GET",
     });
-    return operationalStateSchema.parse(unwrapApiResponse(raw));
+    return operationalStateSchema.parse(unwrapNexoApiResponse(raw));
   }),
 
   operationalSignals: protectedProcedure
@@ -449,7 +437,7 @@ export const dashboardRouter = router({
           signals: z.array(operationalSignalSchema),
         })
         .passthrough()
-        .parse(unwrapApiResponse(raw));
+        .parse(unwrapNexoApiResponse(raw));
     }),
 
   nextBestAction: protectedProcedure.query(async ({ ctx }) => {
@@ -458,7 +446,7 @@ export const dashboardRouter = router({
       "/internal/operational-signals/next-best-action",
       { method: "GET" }
     );
-    const payload = unwrapApiResponse(raw);
+    const payload = unwrapNexoApiResponse(raw);
     return payload === null ? null : nextBestActionSchema.parse(payload);
   }),
 });
