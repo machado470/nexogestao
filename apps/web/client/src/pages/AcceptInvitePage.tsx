@@ -49,7 +49,7 @@ export default function AcceptInvitePage() {
   const [, navigate] = useLocation();
   const inviteParams = useMemo(() => readInviteParams(), []);
 
-  const acceptInviteMutation = trpc.nexo.auth.acceptInvite.useMutation();
+  const acceptInviteMutation = trpc.auth.acceptInvite.useMutation();
 
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");

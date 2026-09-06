@@ -138,25 +138,25 @@ export default function ServiceOrderDetailsPanel({ os }: { os: ServiceOrder }) {
     ? withReturnTo(whatsappUrl, `/service-orders?os=${os.id}`)
     : null;
 
-  const timelineQuery = trpc.nexo.timeline.listByServiceOrder.useQuery(
+  const timelineQuery = trpc.timeline.listByServiceOrder.useQuery(
     { serviceOrderId: os.id, limit: 20 },
     { retry: false }
   );
 
-  const executionQuery = trpc.nexo.executions.listByServiceOrder.useQuery(
+  const executionQuery = trpc.executions.listByServiceOrder.useQuery(
     { serviceOrderId: os.id, limit: 20 },
     { retry: false }
   );
 
   const invalidateOperationalData = async () => {
     await Promise.all([
-      utils.nexo.serviceOrders.list.invalidate(),
-      utils.nexo.serviceOrders.getById.invalidate({ id: os.id }),
+      utils.serviceOrders.list.invalidate(),
+      utils.serviceOrders.getById.invalidate({ id: os.id }),
       utils.finance.charges.list.invalidate(),
       utils.finance.charges.stats.invalidate(),
       utils.dashboard.alerts.invalidate(),
-      utils.nexo.timeline.listByOrg.invalidate(),
-      utils.nexo.timeline.listByServiceOrder.invalidate(),
+      utils.timeline.listByOrg.invalidate(),
+      utils.timeline.listByServiceOrder.invalidate(),
     ]);
   };
 
@@ -167,9 +167,9 @@ export default function ServiceOrderDetailsPanel({ os }: { os: ServiceOrder }) {
     refreshActions: [invalidateOperationalData],
   });
 
-  const sendInlineMessage = trpc.nexo.whatsapp.send.useMutation();
+  const sendInlineMessage = trpc.whatsapp.send.useMutation();
 
-  const startExecution = trpc.nexo.executions.start.useMutation({
+  const startExecution = trpc.executions.start.useMutation({
     onSuccess: async () => {
       toast.success("Execução iniciada");
       await invalidateOperationalData();
@@ -181,7 +181,7 @@ export default function ServiceOrderDetailsPanel({ os }: { os: ServiceOrder }) {
     },
   });
 
-  const finishExecution = trpc.nexo.executions.complete.useMutation({
+  const finishExecution = trpc.executions.complete.useMutation({
     onSuccess: async () => {
       toast.success("Execução finalizada");
       await invalidateOperationalData();
@@ -193,7 +193,7 @@ export default function ServiceOrderDetailsPanel({ os }: { os: ServiceOrder }) {
     },
   });
 
-  const generateCharge = trpc.nexo.serviceOrders.generateCharge.useMutation();
+  const generateCharge = trpc.serviceOrders.generateCharge.useMutation();
 
   const timeline = useMemo(
     () => normalizeOrders<TimelineEvent>(timelineQuery.data),

@@ -37,7 +37,7 @@ export default function AuthCallbackPage() {
   const token = useMemo(() => extractToken(), []);
   const requestedRedirect = useMemo(() => extractRedirect(), []);
 
-  const establishSessionMutation = trpc.nexo.auth.establishSession.useMutation();
+  const establishSessionMutation = trpc.auth.establishSession.useMutation();
 
   useEffect(() => {
     let active = true;

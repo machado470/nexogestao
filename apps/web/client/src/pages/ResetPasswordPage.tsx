@@ -41,7 +41,7 @@ export default function ResetPasswordPage() {
       "Defina uma nova senha para voltar ao acesso da sua conta NexoGestão com segurança.",
   });
   const [, navigate] = useLocation();
-  const resetPasswordMutation = trpc.nexo.auth.resetPassword.useMutation();
+  const resetPasswordMutation = trpc.auth.resetPassword.useMutation();
 
   const search =
     typeof window !== "undefined"

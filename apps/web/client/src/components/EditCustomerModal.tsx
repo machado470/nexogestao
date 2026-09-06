@@ -61,7 +61,7 @@ export default function EditCustomerModal({ open, customerId, onClose, onSaved }
 
   const idStr = customerId != null ? String(customerId) : undefined;
 
-  const customerQuery = trpc.nexo.customers.getById.useQuery(
+  const customerQuery = trpc.customers.getById.useQuery(
     { id: idStr! },
     {
       enabled: open && !!idStr,
@@ -70,7 +70,7 @@ export default function EditCustomerModal({ open, customerId, onClose, onSaved }
     }
   );
 
-  const updateMutation = trpc.nexo.customers.update.useMutation();
+  const updateMutation = trpc.customers.update.useMutation();
   useCriticalActionGuard({
     isPending: updateMutation.isPending,
     reason: "Atualizando cliente e sincronizando dependências.",
@@ -157,7 +157,7 @@ export default function EditCustomerModal({ open, customerId, onClose, onSaved }
       return;
     }
 
-    const previousCustomers = utils.nexo.customers.list.getData(undefined);
+    const previousCustomers = utils.customers.list.getData(undefined);
 
     try {
       const updatedPayload = {
@@ -171,7 +171,7 @@ export default function EditCustomerModal({ open, customerId, onClose, onSaved }
           typeof customer?.updatedAt === "string" ? customer.updatedAt : undefined,
       };
 
-      utils.nexo.customers.list.setData(undefined, (old: any) => {
+      utils.customers.list.setData(undefined, (old: any) => {
         const raw = old as { data?: any[] } | any[] | undefined;
         const applyUpdate = (items: any[]) =>
           items.map((item) =>
@@ -196,7 +196,7 @@ export default function EditCustomerModal({ open, customerId, onClose, onSaved }
       await onSaved?.({ id: idStr });
       onClose();
     } catch (error) {
-      utils.nexo.customers.list.setData(undefined, previousCustomers as any);
+      utils.customers.list.setData(undefined, previousCustomers as any);
       if (isConcurrentConflictError(error)) {
         toast.error(getConcurrencyErrorMessage("cliente"), {
           action: {

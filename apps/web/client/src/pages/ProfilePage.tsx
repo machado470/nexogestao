@@ -70,7 +70,7 @@ const actionPaths: Record<string, string> = {
 export default function ProfilePage() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
-  const meQuery = trpc.nexo.me.useQuery(undefined, {
+  const meQuery = trpc.auth.me.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
   });

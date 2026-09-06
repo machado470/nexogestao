@@ -97,7 +97,7 @@ export function CreateAppointmentModal({
     });
   }, [assigneeWarningTelemetry.reset, initialCustomerId, initialEndsAt, initialStartsAt, isOpen]);
 
-  const createAppointment = trpc.nexo.appointments.create.useMutation();
+  const createAppointment = trpc.appointments.create.useMutation();
 
   const handleClose = () => {
     if (createAppointment.isPending) return;
@@ -143,13 +143,13 @@ export function CreateAppointmentModal({
     };
 
     const previousAppointments =
-      utils.nexo.appointments.list.getData(undefined);
+      utils.appointments.list.getData(undefined);
     const tempId = `temp-appointment-${Date.now()}`;
     const selectedCustomer = customers.find(
       item => String(item.id) === payload.customerId
     );
 
-    utils.nexo.appointments.list.setData(undefined, (old: any) => {
+    utils.appointments.list.setData(undefined, (old: any) => {
       const raw = old as any[] | { data?: any[] } | undefined;
       const optimistic = {
         id: tempId,
@@ -174,7 +174,7 @@ export function CreateAppointmentModal({
 
     createAppointment.mutate(payload, {
       onSuccess: created => {
-        utils.nexo.appointments.list.setData(undefined, (old: any) => {
+        utils.appointments.list.setData(undefined, (old: any) => {
           const raw = old as any[] | { data?: any[] } | undefined;
           const applyReplace = (items: any[]) =>
             items.map(item => (String(item?.id) === tempId ? created : item));
@@ -197,7 +197,7 @@ export function CreateAppointmentModal({
         onClose();
       },
       onError: error => {
-        utils.nexo.appointments.list.setData(
+        utils.appointments.list.setData(
           undefined,
           previousAppointments as any
         );

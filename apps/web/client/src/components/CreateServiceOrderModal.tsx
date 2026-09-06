@@ -114,7 +114,7 @@ export default function CreateServiceOrderModal({
     customerId: initialCustomerId ? String(initialCustomerId) : "",
   });
 
-  const createMutation = trpc.nexo.serviceOrders.create.useMutation();
+  const createMutation = trpc.serviceOrders.create.useMutation();
   useCriticalActionGuard({
     isPending: createMutation.isPending,
     reason: "Criando O.S. e atualizando cliente, cobrança e timeline.",
@@ -205,9 +205,9 @@ export default function CreateServiceOrderModal({
       dueDate: parsed.data.dueDate || undefined,
     };
 
-    const previousServiceOrders = utils.nexo.serviceOrders.list.getData({ page: 1, limit: 100 });
+    const previousServiceOrders = utils.serviceOrders.list.getData({ page: 1, limit: 100 });
     const tempId = `temp-os-${Date.now()}`;
-    utils.nexo.serviceOrders.list.setData({ page: 1, limit: 100 }, (old: any) => {
+    utils.serviceOrders.list.setData({ page: 1, limit: 100 }, (old: any) => {
       const raw = old as any[] | { data?: any[] } | undefined;
       const optimistic = { id: tempId, ...payload, createdAt: new Date().toISOString() };
       if (Array.isArray(raw)) return [optimistic, ...raw];
@@ -219,7 +219,7 @@ export default function CreateServiceOrderModal({
 
     createMutation.mutate(payload, {
       onSuccess: async (created) => {
-        utils.nexo.serviceOrders.list.setData({ page: 1, limit: 100 }, (old: any) => {
+        utils.serviceOrders.list.setData({ page: 1, limit: 100 }, (old: any) => {
           const raw = old as any[] | { data?: any[] } | undefined;
           const applyReplace = (items: any[]) =>
             items.map((item) => (String(item?.id) === tempId ? created : item));
@@ -267,7 +267,7 @@ export default function CreateServiceOrderModal({
         );
       },
       onError: (error) => {
-        utils.nexo.serviceOrders.list.setData(
+        utils.serviceOrders.list.setData(
           { page: 1, limit: 100 },
           previousServiceOrders as any
         );

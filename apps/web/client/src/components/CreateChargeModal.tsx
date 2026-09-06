@@ -116,7 +116,7 @@ export function CreateChargeModal({
     reason: "Criando cobrança e sincronizando financeiro + cliente.",
   });
 
-  const { data: customersResponse } = trpc.nexo.customers.list.useQuery(undefined, {
+  const { data: customersResponse } = trpc.customers.list.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
   });

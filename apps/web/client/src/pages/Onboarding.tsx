@@ -153,18 +153,18 @@ export default function Onboarding() {
     [user?.id]
   );
 
-  const customersQuery = trpc.nexo.customers.list.useQuery(undefined, {
+  const customersQuery = trpc.customers.list.useQuery(undefined, {
     enabled: canQuery,
     retry: false,
     refetchOnWindowFocus: false,
   });
 
-  const appointmentsQuery = trpc.nexo.appointments.list.useQuery(
+  const appointmentsQuery = trpc.appointments.list.useQuery(
     { page: 1, limit: 20 },
     { enabled: canQuery, retry: false, refetchOnWindowFocus: false }
   );
 
-  const serviceOrdersQuery = trpc.nexo.serviceOrders.list.useQuery(
+  const serviceOrdersQuery = trpc.serviceOrders.list.useQuery(
     { page: 1, limit: 20 },
     { enabled: canQuery, retry: false, refetchOnWindowFocus: false }
   );
@@ -174,12 +174,12 @@ export default function Onboarding() {
     { enabled: canQuery, retry: false, refetchOnWindowFocus: false }
   );
 
-  const customerMutation = trpc.nexo.customers.create.useMutation();
-  const appointmentMutation = trpc.nexo.appointments.create.useMutation();
-  const serviceOrderMutation = trpc.nexo.serviceOrders.create.useMutation();
-  const serviceOrderUpdateMutation = trpc.nexo.serviceOrders.update.useMutation();
+  const customerMutation = trpc.customers.create.useMutation();
+  const appointmentMutation = trpc.appointments.create.useMutation();
+  const serviceOrderMutation = trpc.serviceOrders.create.useMutation();
+  const serviceOrderUpdateMutation = trpc.serviceOrders.update.useMutation();
   const chargeMutation = trpc.finance.charges.create.useMutation();
-  const completeOnboardingMutation = trpc.nexo.onboarding.complete.useMutation();
+  const completeOnboardingMutation = trpc.onboarding.complete.useMutation();
 
   useEffect(() => {
     const raw = localStorage.getItem(storageKey);
@@ -429,7 +429,7 @@ export default function Onboarding() {
                 if (!customerPhone.trim()) throw new Error("Informe o telefone do cliente.");
                 const customerResult = await customerMutation.mutateAsync({ name: customerName.trim(), phone: customerPhone.trim() });
                 setJourneyIds((prev) => ({ ...prev, customerId: extractEntityId(customerResult, ["customerId", "id"]) ?? prev.customerId }));
-                await utils.nexo.customers.list.invalidate();
+                await utils.customers.list.invalidate();
                 completeStep("customer");
                 setFlowMessage("Cliente criado. Agora avance para o agendamento para mostrar previsibilidade operacional.");
               } catch (e) {
@@ -458,7 +458,7 @@ export default function Onboarding() {
                   status: "SCHEDULED",
                 });
                 setJourneyIds((prev) => ({ ...prev, appointmentId: extractEntityId(result, ["appointmentId", "id"]) ?? prev.appointmentId }));
-                await utils.nexo.appointments.list.invalidate();
+                await utils.appointments.list.invalidate();
                 completeStep("appointment");
                 setFlowMessage("Agendamento criado. Agora formalize a entrega na O.S.");
               } catch (e) {
@@ -496,7 +496,7 @@ export default function Onboarding() {
                         : undefined,
                 });
                 setJourneyIds((prev) => ({ ...prev, serviceOrderId: createdServiceOrderId }));
-                await utils.nexo.serviceOrders.list.invalidate();
+                await utils.serviceOrders.list.invalidate();
                 completeStep("serviceOrder");
                 setFlowMessage("Execução registrada. Próximo passo: gerar cobrança para evidenciar valor financeiro.");
               } catch (e) {

@@ -352,15 +352,15 @@ export default function WhatsAppWebhookRecoveryPage() {
   const [replayDialog, setReplayDialog] = useState<ReplayDialogState>(null);
 
   const listParams = useMemo(() => buildWebhookEventListParams(appliedFilters, cursor), [appliedFilters, cursor]);
-  const dlqStatsQuery = trpc.nexo.whatsapp.webhookDlqStats.useQuery(undefined);
-  const eventsQuery = trpc.nexo.whatsapp.listWebhookEvents.useQuery(listParams);
-  const detailQuery = trpc.nexo.whatsapp.getWebhookEvent.useQuery(
+  const dlqStatsQuery = trpc.whatsapp.webhookDlqStats.useQuery(undefined);
+  const eventsQuery = trpc.whatsapp.listWebhookEvents.useQuery(listParams);
+  const detailQuery = trpc.whatsapp.getWebhookEvent.useQuery(
     { id: selectedEvent?.id ?? "" },
     { enabled: Boolean(selectedEvent?.id) }
   );
 
-  const replaySingle = trpc.nexo.whatsapp.replayWebhookEvent.useMutation();
-  const replaySelected = trpc.nexo.whatsapp.replayWebhookEvents.useMutation();
+  const replaySingle = trpc.whatsapp.replayWebhookEvent.useMutation();
+  const replaySelected = trpc.whatsapp.replayWebhookEvents.useMutation();
 
   const events = useMemo(() => filterEventsBySearch(getItems(eventsQuery.data), appliedFilters.search), [eventsQuery.data, appliedFilters.search]);
   const nextCursor = getNextCursor(eventsQuery.data);
@@ -369,9 +369,9 @@ export default function WhatsAppWebhookRecoveryPage() {
 
   const refresh = async () => {
     await Promise.all([
-      utils.nexo.whatsapp.listWebhookEvents.invalidate(),
-      utils.nexo.whatsapp.webhookDlqStats.invalidate(),
-      selectedEvent?.id ? utils.nexo.whatsapp.getWebhookEvent.invalidate({ id: selectedEvent.id }) : Promise.resolve(),
+      utils.whatsapp.listWebhookEvents.invalidate(),
+      utils.whatsapp.webhookDlqStats.invalidate(),
+      selectedEvent?.id ? utils.whatsapp.getWebhookEvent.invalidate({ id: selectedEvent.id }) : Promise.resolve(),
     ]);
   };
 

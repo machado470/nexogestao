@@ -76,7 +76,7 @@ describe("ServiceOrdersPage Nexo Operating System UI contract", () => {
   });
 
   it("uses the active execution contract when completing and exposes execution records", () => {
-    expect(page).toContain("utils.nexo.executions.listByServiceOrder.fetch");
+    expect(page).toContain("utils.executions.listByServiceOrder.fetch");
     expect(page).toContain("executionId: String(execution.id)");
     expect(page).toContain("Registros de execução");
     expect(page).toContain("Comunicação");

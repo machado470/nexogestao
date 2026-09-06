@@ -46,7 +46,7 @@ import { trpc } from "@/lib/trpc";
 // createAvailabilityException.mutate({ personId: selectedPersonId
 // deleteAvailabilityException.mutate({ personId: selectedPerson.personId, exceptionId: exception.id })
 // {isAdmin ? <AppSectionBlock title="Sinais de atribuição"
-// trpc.nexo.timeline.listByOrg.useQuery({ limit: 5 })
+// trpc.timeline.listByOrg.useQuery({ limit: 5 })
 // Próxima melhor ação
 type LoadStatus = "IDLE" | "NORMAL" | "BUSY" | "OVERLOADED";
 type CapacityStatus = "UNDER_CAPACITY" | "AT_CAPACITY" | "OVER_CAPACITY";
@@ -602,7 +602,7 @@ export default function PeoplePage() {
     { personId: selectedPersonId ?? "" },
     { enabled: isAuthenticated && Boolean(selectedPersonId), retry: false }
   );
-  const timelineQuery = trpc.nexo.timeline.listByOrg.useQuery(
+  const timelineQuery = trpc.timeline.listByOrg.useQuery(
     { limit: 5 },
     {
       enabled: isAuthenticated,

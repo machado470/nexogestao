@@ -13,8 +13,8 @@ type ActionState = "idle" | "loading" | "success" | "error";
 
 export default function OperationalCockpitPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const summary = trpc.nexo.operations.summary.useQuery(undefined, { refetchInterval: autoRefresh ? 30_000 : false });
-  const incidents = trpc.nexo.operations.incidents.useQuery(undefined, { refetchInterval: autoRefresh ? 30_000 : false });
+  const summary = trpc.operations.summary.useQuery(undefined, { refetchInterval: autoRefresh ? 30_000 : false });
+  const incidents = trpc.operations.incidents.useQuery(undefined, { refetchInterval: autoRefresh ? 30_000 : false });
   const refresh = async () => { await Promise.all([summary.refetch(), incidents.refetch()]); };
   const criticalIncidents = useMemo(() => getCriticalIncidents(incidents.data ?? []), [incidents.data]);
   const degradedQueues = useMemo(() => getDegradedQueues(summary.data?.queues ?? []), [summary.data?.queues]);
