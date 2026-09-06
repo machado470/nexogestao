@@ -53,6 +53,7 @@ describeReal('WhatsApp stale SENDING reconciliation PostgreSQL real', () => {
       } as any,
       { increment: jest.fn() } as any,
       { enforceMeter: jest.fn().mockResolvedValue({ allowed: true }) } as any,
+    {} as any,
     )
   }
 

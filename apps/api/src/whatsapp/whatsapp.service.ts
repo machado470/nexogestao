@@ -49,10 +49,10 @@ export class WhatsAppService {
     private readonly requestContext: RequestContextService,
     private readonly tenantOps: TenantOperationsService,
     private readonly commercial: CommercialPolicyService,
+    private readonly conversationRead: WhatsAppConversationReadService,
     private readonly templateService?: WhatsAppTemplateService,
     private readonly contextService?: WhatsAppContextService,
     private readonly intelligenceService?: WhatsAppIntelligenceService,
-    private readonly conversationRead: WhatsAppConversationReadService = new WhatsAppConversationReadService(prisma),
   ) {}
 
   async listConversations(orgId: string, filters: any = {}) {

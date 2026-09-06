@@ -16,7 +16,7 @@ supersedes:
 - Catálogo documental, separação entre documentação normativa, documentos em revisão, auditorias temporais e arquivo histórico.
 - Regras operacionais vigentes de agendamentos, ordens de serviço, pessoas/configurações, timeline, eventos e padrões do frontend permanecem explicitamente catalogadas.
 - O BFF foi decomposto em routers canônicos por domínio; `nexo.*` permanece apenas como composição compatível das mesmas implementações, e o transporte BFF → API usa uma fundação compartilhada.
-- Service Orders e WhatsApp preservam facades públicas, com leituras tenant-scoped extraídas para serviços focados conforme o ADR 0004; transações, claims, Timeline, Outbox e autoridade Finance permanecem nas unidades originais.
+- Service Orders e WhatsApp preservam facades públicas, com leituras tenant-scoped extraídas para serviços focados conforme o ADR 0004; as dependências de leitura agora são obrigatoriamente fornecidas pelo container Nest, sem fallback de construção manual, e um guardrail estrutural protege essa composição. Transações, claims, Timeline, Outbox e autoridade Finance permanecem nas unidades originais e cobertas pelos testes de caracterização existentes.
 - Os consumidores de produção do frontend usam os routers canônicos diretamente. A migração eliminou 98 chamadas `trpc.nexo.*` e 71 acessos diretos de cache pelo namespace legado (60 `utils.nexo.*` e 11 `trpcUtils.nexo.*`), além de um acesso dinâmico a `trpcUtils.nexo` sem alterar inputs, outputs ou efeitos das operações.
 
 ## Matriz de migração dos callers `nexo.*`
