@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { PrismaModule } from '../prisma/prisma.module'
 import { WhatsAppService } from './whatsapp.service'
 import { WhatsAppConversationReadService } from './whatsapp-conversation-read.service'
+import { WhatsAppWebhookService } from './whatsapp-webhook.service'
 import { WhatsAppDispatcherJob } from './whatsapp.dispatcher.job'
 import { WhatsAppTestController } from './whatsapp.test.controller'
 import { WhatsAppController } from './whatsapp.controller'
@@ -27,6 +28,7 @@ const testControllers = process.env.NODE_ENV === 'production' ? [] : [WhatsAppTe
   providers: [
     WhatsAppService,
     WhatsAppConversationReadService,
+    WhatsAppWebhookService,
     WhatsAppTemplateService,
     WhatsAppContextService,
     WhatsAppAutomationService,
