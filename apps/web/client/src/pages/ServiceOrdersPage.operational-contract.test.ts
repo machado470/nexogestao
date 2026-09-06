@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const page = readFileSync(resolve(__dirname, "ServiceOrdersPage.tsx"), "utf8");
-const api = readFileSync(
-  resolve(
-    __dirname,
-    "../../../../api/src/service-orders/service-orders.service.ts"
-  ),
+const api = [
+  "service-orders.service.ts",
+  "service-order-read.service.ts",
+].map((file) => readFileSync(
+  resolve(__dirname, `../../../../api/src/service-orders/${file}`),
   "utf8"
-);
+)).join("\n");
 
 describe("ServiceOrders official operational contract guardrail", () => {
   it("keeps decisions and time thresholds owned by the API", () => {

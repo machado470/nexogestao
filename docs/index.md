@@ -27,6 +27,7 @@ Status: `current` descreve a referência vigente; `review` explicita conteúdo �
 | [ADR 0001 — contratos e persistência](architecture/adr/0001-api-bff-contract-and-persistence-boundaries.md) | Autoridade API/BFF, envelopes e tenancy | current | true | — | 2026-09-06 |
 | [ADR 0002 — fronteiras financeiras](architecture/adr/0002-finance-payments-billing-boundaries.md) | Autoridade de Finance, Payments, Billing e Stripe | current | true | — | 2026-09-06 |
 | [ADR 0003 — decomposição dos routers BFF](architecture/adr/0003-bff-router-decomposition.md) | Routers canônicos, compatibilidade `nexo.*` e transporte compartilhado | current | true | — | 2026-09-06 |
+| [ADR 0004 — Decomposição dos serviços operacionais](architecture/adr/0004-operational-service-decomposition.md) | Fronteiras de Service Orders e WhatsApp | accepted | true | — | 2026-09-06 |
 | [Contrato de eventos operacionais](architecture/CONTRATO_EVENTOS_OPERACIONAIS.md) | Envelope e invariantes dos eventos   | current | true            | —                                                  | 2026-09-06     |
 | [Taxonomia da Timeline](TIMELINE_EVENT_TAXONOMY.md)                               | Vocabulário canônico de eventos      | current | true            | —                                                  | 2026-09-06     |
 | [Sinais do Risk Engine](RISK_ENGINE_OPERATIONAL_SIGNALS.md)                       | Sinais operacionais de risco         | current | true            | —                                                  | 2026-09-06     |
