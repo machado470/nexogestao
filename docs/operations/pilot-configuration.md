@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Pilot Configuration Guide (Small Service Company)
 
 This guide prepares a realistic pilot environment for **Serviços Viva** using seeded operational + financial data.
@@ -40,23 +48,27 @@ pnpm tsx prisma/seed-pilot.ts
 ## 4) Pilot Environment Checklist
 
 ### Access & Security
+
 - [ ] Confirm all test users can authenticate.
 - [ ] Force password rotation before external pilot users access the environment.
 - [ ] Validate role permissions (admin/operator/finance) in key screens.
 
 ### Core Operations
+
 - [ ] Check customer listing, details, and notes for all seeded customers.
 - [ ] Validate calendar rendering for all seeded appointments.
 - [ ] Validate service order states transition flow (`OPEN` -> `ASSIGNED` -> `IN_PROGRESS` -> `DONE`).
 - [ ] Confirm overdue and pending charge visibility in finance dashboard.
 
 ### Finance
+
 - [ ] Validate invoice filters by status (`DRAFT`, `ISSUED`, `PAID`).
 - [ ] Confirm paid invoice and paid charge appear in revenue KPIs.
 - [ ] Confirm seeded expenses are grouped by categories (operational, supplies, infra, marketing, payroll).
 - [ ] Validate launch cashflow timeline and totals.
 
 ### Reliability
+
 - [ ] Re-run seed script and ensure it is idempotent (no destructive duplication in core entities).
 - [ ] Validate timeline audit event `PILOT_ENVIRONMENT_SEEDED` was created.
 - [ ] Execute smoke test for pilot critical journey (login -> appointment -> service order -> invoice).
@@ -64,6 +76,7 @@ pnpm tsx prisma/seed-pilot.ts
 ## 5) Rollback (if needed)
 
 Recommended rollback by tenant/org:
+
 1. Delete org-scoped pilot records by `org.slug = PILOT_ORG_SLUG`.
 2. Delete pilot users by test emails.
 3. Re-run seed to restore a clean baseline.

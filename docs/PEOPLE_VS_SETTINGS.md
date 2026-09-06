@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Pessoas vs. Configurações
 
 ## Pessoas

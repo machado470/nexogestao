@@ -1,9 +1,19 @@
+---
+status: review
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Webhook System
 
 ## Visão geral
+
 O sistema de webhooks permite que integrações externas recebam callbacks HTTP sempre que eventos relevantes da plataforma forem registrados na timeline.
 
 ## Fluxo de eventos
+
 1. Um módulo chama `TimelineService.log(...)`.
 2. O evento de timeline é persistido.
 3. `WebhookDispatcher` normaliza o tipo do evento (ex.: `PAYMENT_RECEIVED` -> `payment.received`).
@@ -13,6 +23,7 @@ O sistema de webhooks permite que integrações externas recebam callbacks HTTP 
 7. `WebhookProcessor` consome o job, envia HTTP POST e atualiza status/tentativas.
 
 ## Payload
+
 Formato padrão enviado para o endpoint:
 
 ```json
@@ -31,6 +42,7 @@ Formato padrão enviado para o endpoint:
 ```
 
 ## Retry policy
+
 - Fila: `webhooks`
 - Tentativas: `5`
 - Backoff: exponencial com `delay` inicial de `1000ms`
@@ -40,9 +52,11 @@ Formato padrão enviado para o endpoint:
   - `FAILED`: erro HTTP não-2xx ou erro de rede
 
 ## Assinatura (HMAC)
+
 Cada endpoint possui um `secret` único.
 
 A assinatura é gerada com:
+
 - Algoritmo: `HMAC-SHA256`
 - Mensagem: corpo JSON enviado (`payloadText`)
 - Header: `X-Nexo-Signature` (enviado como `x-nexo-signature`)
@@ -50,32 +64,37 @@ A assinatura é gerada com:
 Exemplo de validação (Node.js):
 
 ```ts
-import { createHmac } from 'crypto'
+import { createHmac } from "crypto";
 
-const expected = createHmac('sha256', WEBHOOK_SECRET)
+const expected = createHmac("sha256", WEBHOOK_SECRET)
   .update(rawBody)
-  .digest('hex')
+  .digest("hex");
 
-const valid = expected === receivedSignature
+const valid = expected === receivedSignature;
 ```
 
 ## Endpoints da API
+
 ### CRUD de endpoints
+
 - `POST /webhooks`
 - `GET /webhooks`
 - `PUT /webhooks/:id`
 - `DELETE /webhooks/:id`
 
 Campos suportados:
+
 - `url`
 - `events` (array de strings)
 - `active`
 
 ### Monitoramento de entregas
+
 - `GET /webhooks/deliveries`
 - Filtros opcionais por `eventType` e `status`.
 
 ## Exemplo de request
+
 ```http
 POST /webhooks
 Content-Type: application/json

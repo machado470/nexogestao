@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Tenant isolation integration test (real infra)
 
 Este diretório contém o teste canônico de isolamento multi-tenant em infraestrutura real.

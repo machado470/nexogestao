@@ -1,3 +1,11 @@
+---
+status: review
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Financeiro — Nexo Operating System UI
 
 Financeiro é o cockpit de conversão **execução → cobrança → pagamento → recebimento**. A página `/finances` não é ERP contábil: ela deve ajudar o operador a decidir, cobrar, reduzir risco de caixa, enxergar evidência e executar apenas ações reais já existentes.

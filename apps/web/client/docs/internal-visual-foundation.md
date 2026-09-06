@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Fundação visual oficial — Front interno NexoGestão
 
 Este guia define o padrão base reutilizável para páginas operacionais internas.
@@ -14,14 +22,18 @@ Este guia define o padrão base reutilizável para páginas operacionais interna
 ## Quando usar cada bloco
 
 ### `AppKpiRow` / `AppMetricCard`
+
 Use para métricas principais da página (4, 2 ou 1 coluna), com:
+
 - título curto,
 - valor principal,
 - delta/contexto subordinado,
 - CTA opcional sem quebrar altura do card.
 
 ### `AppSectionBlock`
+
 Use como container padrão de área operacional:
+
 - listas,
 - tabelas,
 - gráficos,
@@ -31,7 +43,9 @@ Use como container padrão de área operacional:
 Sempre manter header do bloco (título/subtítulo/CTA) e ritmo de espaçamento padronizado.
 
 ### `AppListBlock`
+
 Use para filas e listas de execução rápida:
+
 - gargalos,
 - top O.S.,
 - agenda do dia,
@@ -39,10 +53,13 @@ Use para filas e listas de execução rápida:
 - alertas operacionais.
 
 ### `AppDataTable`
+
 Use para tabelas principais por domínio. Evite tabela “solta” sem container padrão.
 
 ### `AppStatusBadge` / `AppPriorityBadge`
+
 Use para:
+
 - status de execução,
 - risco,
 - confirmação,
