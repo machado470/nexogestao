@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Contrato de eventos operacionais
 
 ## Objetivo e semântica
@@ -6,27 +14,27 @@ A Outbox entrega fatos **pelo menos uma vez**; todo consumidor deve ser idempote
 
 ## Envelope canônico (schema v1)
 
-| Campo | Regra |
-|---|---|
+| Campo                                | Regra                                                                                                                            |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `id` / `eventType` / `schemaVersion` | identidade imutável, tipo no passado (`SERVICE_ORDER_COMPLETED`, `CHARGE_CREATED`, `PAYMENT_RECEIVED`) e versão inteira positiva |
-| `orgId` | sempre obtido da identidade autenticada e copiado para a Outbox; o payload não escolhe tenant |
-| `aggregateType` / `aggregateId` | agregado que originou o fato e sua identidade persistida |
-| `actorId` / origem | ator autenticado quando houver; `payload.origin=operational` distingue evidência primária |
-| `correlationId` / `causationId` | correlação da requisição (ou UUID) e evento causador opcional |
-| `idempotencyKey` | única em conjunto com `orgId`; descreve o fato, não o efeito |
-| `occurredAt` | instante do fato, distinto de `createdAt` |
-| `payload` | JSON mínimo, validado pelo consumidor; não inclui segredos; contém `timelineEventId` |
+| `orgId`                              | sempre obtido da identidade autenticada e copiado para a Outbox; o payload não escolhe tenant                                    |
+| `aggregateType` / `aggregateId`      | agregado que originou o fato e sua identidade persistida                                                                         |
+| `actorId` / origem                   | ator autenticado quando houver; `payload.origin=operational` distingue evidência primária                                        |
+| `correlationId` / `causationId`      | correlação da requisição (ou UUID) e evento causador opcional                                                                    |
+| `idempotencyKey`                     | única em conjunto com `orgId`; descreve o fato, não o efeito                                                                     |
+| `occurredAt`                         | instante do fato, distinto de `createdAt`                                                                                        |
+| `payload`                            | JSON mínimo, validado pelo consumidor; não inclui segredos; contém `timelineEventId`                                             |
 
 Campos de entrega (`status`, `attempts`, `availableAt`, locks, erro e `processedAt`) pertencem à Outbox, não ao evento de domínio.
 
 ## Conceitos separados
 
-* **Evento de domínio:** envelope imutável do fato ocorrido.
-* **Auditoria oficial:** `TimelineEvent`, append-only pela superfície de serviço; correção é novo evento com referência em metadados.
-* **Entrega Outbox:** estado operacional de tentativa e lock; pode mudar sem alterar o fato.
-* **Projeção de leitura:** dado reconstruível, nunca autoriza mutação.
-* **SSE:** aviso efêmero de atualização; falha não reverte negócio.
-* **Comando:** intenção de executar uma ação, não prova de que ela ocorreu.
+- **Evento de domínio:** envelope imutável do fato ocorrido.
+- **Auditoria oficial:** `TimelineEvent`, append-only pela superfície de serviço; correção é novo evento com referência em metadados.
+- **Entrega Outbox:** estado operacional de tentativa e lock; pode mudar sem alterar o fato.
+- **Projeção de leitura:** dado reconstruível, nunca autoriza mutação.
+- **SSE:** aviso efêmero de atualização; falha não reverte negócio.
+- **Comando:** intenção de executar uma ação, não prova de que ela ocorreu.
 
 ## Entrega, erro e evolução
 

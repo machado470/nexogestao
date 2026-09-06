@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Taxonomia canônica de eventos da Timeline
 
 Este documento define a linguagem operacional oficial para Timeline, Dashboard, Risk Engine e Governança do NexoGestão.
@@ -29,20 +37,20 @@ A fonte única no backend é `apps/api/src/timeline/timeline-events.ts`, que exp
 
 ## Aliases legados
 
-| Legado | Canônico |
-| --- | --- |
-| `APPOINTMENT_CANCELED` | `APPOINTMENT_CANCELLED` |
-| `EXECUTION_STARTED` | `SERVICE_ORDER_STARTED` |
-| `EXECUTION_DONE` | `SERVICE_ORDER_COMPLETED` |
-| `EXECUTION_COMPLETED` | `SERVICE_ORDER_COMPLETED` |
-| `SERVICE_ORDER_DONE` | `SERVICE_ORDER_COMPLETED` |
-| `SERVICE_ORDER_CHARGE_CREATED` | `CHARGE_CREATED` |
-| `WHATSAPP_MESSAGE_SENT` | `MESSAGE_SENT` |
-| `WHATSAPP_MESSAGE_FAILED` | `MESSAGE_FAILED` |
-| `CUSTOMER_OPERATIONAL_RISK_UPDATED` | `RISK_UPDATED` |
-| `RISK_SNAPSHOT_CREATED` | `RISK_UPDATED` |
-| `OPERATIONAL_STATE_ENFORCED` | `OPERATIONAL_STATE_CHANGED` |
-| `OPERATIONAL_WARNING_RAISED` | `OPERATIONAL_STATE_CHANGED` |
+| Legado                              | Canônico                    |
+| ----------------------------------- | --------------------------- |
+| `APPOINTMENT_CANCELED`              | `APPOINTMENT_CANCELLED`     |
+| `EXECUTION_STARTED`                 | `SERVICE_ORDER_STARTED`     |
+| `EXECUTION_DONE`                    | `SERVICE_ORDER_COMPLETED`   |
+| `EXECUTION_COMPLETED`               | `SERVICE_ORDER_COMPLETED`   |
+| `SERVICE_ORDER_DONE`                | `SERVICE_ORDER_COMPLETED`   |
+| `SERVICE_ORDER_CHARGE_CREATED`      | `CHARGE_CREATED`            |
+| `WHATSAPP_MESSAGE_SENT`             | `MESSAGE_SENT`              |
+| `WHATSAPP_MESSAGE_FAILED`           | `MESSAGE_FAILED`            |
+| `CUSTOMER_OPERATIONAL_RISK_UPDATED` | `RISK_UPDATED`              |
+| `RISK_SNAPSHOT_CREATED`             | `RISK_UPDATED`              |
+| `OPERATIONAL_STATE_ENFORCED`        | `OPERATIONAL_STATE_CHANGED` |
+| `OPERATIONAL_WARNING_RAISED`        | `OPERATIONAL_STATE_CHANGED` |
 
 ## Emissão por fluxo
 

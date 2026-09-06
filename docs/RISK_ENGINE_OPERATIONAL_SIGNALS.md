@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Risk Engine — Sinais Operacionais Reais
 
 Este documento descreve os sinais operacionais reais consumidos pelo Risk Engine do NexoGestão no lote P1. O objetivo é manter o cálculo no backend, usando entidades existentes e eventos canônicos da Timeline, sem criar mock, dashboard novo ou alteração visual.
@@ -71,12 +79,12 @@ Quando o cálculo é por pessoa, também entram:
 
 O score final é limitado entre `0` e `100`.
 
-| Score | Estado oficial |
-| --- | --- |
-| `0` a `49` | `NORMAL` |
-| `50` a `69` | `WARNING` |
-| `70` a `89` | `RESTRICTED` |
-| `90` a `100` | `SUSPENDED` |
+| Score        | Estado oficial |
+| ------------ | -------------- |
+| `0` a `49`   | `NORMAL`       |
+| `50` a `69`  | `WARNING`      |
+| `70` a `89`  | `RESTRICTED`   |
+| `90` a `100` | `SUSPENDED`    |
 
 Regras principais:
 

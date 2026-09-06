@@ -1,3 +1,11 @@
+---
+status: review
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Automation Engine (Layer 1)
 
 ## Design
@@ -37,7 +45,11 @@ Supported operators:
 
 ```json
 [
-  { "type": "CREATE_NOTIFICATION", "notificationType": "PAYMENT_OVERDUE", "message": "..." },
+  {
+    "type": "CREATE_NOTIFICATION",
+    "notificationType": "PAYMENT_OVERDUE",
+    "message": "..."
+  },
   { "type": "UPDATE_RISK", "reason": "PAYMENT_OVERDUE_AUTOMATION" }
 ]
 ```

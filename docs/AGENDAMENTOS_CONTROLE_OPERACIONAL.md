@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Agendamentos como centro operacional de entrada da execução
 
 A página **Agendamentos** é a entrada operacional do tempo no Nexo Operating System. Ela não deve parecer calendário genérico nem lista administrativa: sua função é decidir o que fazer agora, preparar atendimento, reduzir no-show e conectar o ciclo **Cliente → Agendamento → O.S. → Cobrança → Pagamento** usando somente dados já carregados pelo frontend.

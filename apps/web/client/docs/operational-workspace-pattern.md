@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Padrão de Workspace Operacional (Nexo)
 
 Este padrão consolida o que já funciona em **Ordens de Serviço** e **Agendamentos**, sem criar framework paralelo.

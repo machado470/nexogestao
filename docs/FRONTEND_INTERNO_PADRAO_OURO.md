@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Padrão-ouro do frontend interno
 
 O Executive Dashboard ratifica a fórmula visual das páginas operacionais. Este

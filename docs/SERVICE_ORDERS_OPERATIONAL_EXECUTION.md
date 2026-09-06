@@ -1,3 +1,11 @@
+---
+status: current
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # Ordens de Serviço como execução operacional
 
 A página de Ordens de Serviço do NexoGestão deve ser lida como o centro real de execução da operação, não como um cadastro. A tela organiza a carteira para responder rapidamente: qual serviço precisa andar, quem é responsável, qual prazo está em risco, qual O.S. está concluída sem cobrança e qual ação existente deve ser executada agora.

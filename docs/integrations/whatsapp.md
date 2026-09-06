@@ -1,6 +1,15 @@
+---
+status: review
+owner: nexogestao
+last_reviewed: 2026-09-06
+source_of_truth: true
+supersedes:
+---
+
 # WhatsApp com Z-API (setup local)
 
 ## Objetivo
+
 Deixar a API pronta para envio real via Z-API em ambiente local, exigindo apenas preencher as chaves no `.env`.
 
 ## Variáveis obrigatórias (quando `WHATSAPP_PROVIDER=zapi`)
