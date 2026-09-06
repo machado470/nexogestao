@@ -28,12 +28,10 @@ describe("appointment assignee UI contract", () => {
     const normalizedAppointments = compact(appointments);
 
     expect(appointments).toContain("Contexto da agenda");
-    expect(appointments).toContain("Atenção operacional oficial");
     expect(appointments).toContain("Agenda operacional");
-    expect(appointments).toContain(
-      "Disponibilidade e capacidade indisponíveis"
-    );
-    expect(appointments).toContain("Próxima ação indisponível");
+    expect(appointments).toContain("Detalhe e evidências");
+    expect(appointments).not.toContain("Atenção operacional indisponível");
+    expect(appointments).not.toContain("Próxima ação indisponível");
     expect(appointments).toContain("Evidências oficiais");
     expect(appointments).toContain("Abrir O.S.");
     expect(appointments).toContain("WhatsApp");
@@ -43,7 +41,10 @@ describe("appointment assignee UI contract", () => {
       /deriveAppointmentPriority|riskScore|hasConflict/
     );
     expect(normalizedAppointments).toContain(
-      'responsibleFilter === "all" ? { limit: 100 } : { assignedToPersonId: responsibleFilter, limit: 100 }'
+      'responsibleFilter === "all" ? {} : { assignedToPersonId: responsibleFilter }'
+    );
+    expect(normalizedAppointments).toContain(
+      "routeCustomerId ? { customerId: routeCustomerId } : {}"
     );
     expect(normalizedAppointments).toContain(
       'assignedToPersonId: form.assignedToPersonId === "unassigned" ? null : form.assignedToPersonId'
