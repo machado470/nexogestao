@@ -18,13 +18,12 @@ supersedes:
 
 ## Parcial
 
-- Integrações de WhatsApp, billing, filas, webhooks e automação possuem implementação e documentação, mas dependem de ambiente e/ou mantêm pontos em revisão.
+- Finance, Payments e Billing possuem fronteiras consolidadas no ADR 0002; integrações de WhatsApp, Stripe, filas, webhooks e automação ainda dependem de ambiente e/ou mantêm pontos operacionais em revisão.
 - Cobertura de testes é relevante, porém a matriz de contratos BFF↔API e de isolamento multi-tenant não cobre explicitamente toda a superfície crítica.
 - Deployment possui artefatos para mais de um alvo; a autoridade única de produção ainda não está definida.
 
 ## Precisa de reestruturação
 
-- Fronteiras entre Finance, Payments e Billing.
 - Migração dos normalizadores locais restantes para a fundação única de envelopes do BFF.
 - Runbook autoritativo de produção e estratégia canônica de backup/restauração.
 
@@ -35,4 +34,4 @@ supersedes:
 
 ## Próxima fase
 
-Prosseguir com a próxima etapa de consolidação sem misturar a reestruturação de Finance/Payments/Billing. A autoridade API/BFF, a fronteira de persistência e a estratégia incremental de contratos estão registradas no ADR 0001.
+Prosseguir com a próxima etapa de consolidação sem reabrir as fronteiras financeiras. A autoridade API/BFF está no ADR 0001 e Finance/Payments/Billing, no ADR 0002.

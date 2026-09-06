@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
-import { EmailService } from '../email/email.service'
 import { ChargeStatus } from '@prisma/client'
 import { FinanceService } from '../finance/finance.service'
 import Stripe from 'stripe'
@@ -29,7 +28,6 @@ export class PaymentsService {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
-    private email: EmailService,
     private finance: FinanceService,
   ) {
     const secretKey =
@@ -247,28 +245,6 @@ export class PaymentsService {
     }
 
     return { received: true }
-  }
-
-  /**
-   * Cria uma cobrança (charge) para um cliente
-   */
-  async createCharge(
-    orgId: string,
-    customerId: string,
-    amount: number,
-    description: string,
-    dueDate: Date,
-  ): Promise<{ id: string; status: string }> {
-    const created = await this.finance.createCharge({
-      orgId,
-      customerId,
-      amountCents: amount,
-      dueDate,
-      notes: description,
-      actorUserId: null,
-    })
-
-    return { id: created.id, status: created.status }
   }
 
   /**
