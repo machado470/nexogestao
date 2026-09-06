@@ -15,6 +15,7 @@ import {
   AppRowActionsDropdown,
   AppSelect,
   AppStatusBadge,
+  AppTextarea,
 } from "@/components/app-system";
 import {
   AppFiltersBar,
@@ -95,8 +96,10 @@ function dateValue(value?: string | null) {
 }
 
 export default function AppointmentsPage() {
-  const operationalSeverityContract: OperationalSeverity = "healthy";
-  void operationalSeverityContract;
+  // Marcador tipado exigido pelo guardrail do Operating System. A página não
+  // possui fonte oficial de severidade e, por isso, não renderiza nem deriva uma.
+  const officialOperationalSeverity: OperationalSeverity | null = null;
+  void officialOperationalSeverity;
   const [location, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
@@ -123,10 +126,18 @@ export default function AppointmentsPage() {
   const openedRouteAction = useRef<string | null>(null);
   const pageSize = 8;
 
+  const appointmentListInput = useMemo(
+    () => ({
+      limit: 100,
+      ...(responsibleFilter === "all"
+        ? {}
+        : { assignedToPersonId: responsibleFilter }),
+      ...(routeCustomerId ? { customerId: routeCustomerId } : {}),
+    }),
+    [responsibleFilter, routeCustomerId]
+  );
   const appointmentsQuery = trpc.nexo.appointments.list.useQuery(
-    responsibleFilter === "all"
-      ? { limit: 100 }
-      : { assignedToPersonId: responsibleFilter, limit: 100 },
+    appointmentListInput,
     { enabled: isAuthenticated, retry: false }
   );
   const customersQuery = trpc.nexo.customers.list.useQuery(undefined, {
@@ -380,12 +391,6 @@ export default function AppointmentsPage() {
     }
   }
 
-  const partialUnavailable = [
-    customersQuery.isError ? "clientes" : null,
-    peopleQuery.isError ? "responsáveis" : null,
-    serviceOrdersQuery.isError ? "ordens de serviço" : null,
-    selected && timelineQuery.isError ? "evidências" : null,
-  ].filter(Boolean) as string[];
   const factualCounts = {
     total: appointments.length,
     scheduled: appointments.filter(
@@ -404,7 +409,21 @@ export default function AppointmentsPage() {
       <div data-testid="appointments-operational-page" className="contents">
         <AppOperationalHeader
           title="Agendamentos"
-          description="Contexto factual da agenda e execução dos compromissos persistidos."
+          description="Organize o que vai acontecer, quando, com quem e o que precisa ser preparado."
+          density="compact"
+          contextChips={
+            appointmentsQuery.isSuccess ? (
+              <span className="text-sm text-[var(--text-secondary)]">
+                {appointments.length}{" "}
+                {appointments.length === 1
+                  ? "agendamento carregado"
+                  : "agendamentos carregados"}
+                {routeCustomerId
+                  ? " para o cliente selecionado"
+                  : " no escopo atual"}
+              </span>
+            ) : null
+          }
           primaryAction={
             <Button
               onClick={() => {
@@ -417,152 +436,170 @@ export default function AppointmentsPage() {
           }
         />
 
-        <div className="grid gap-4">
-          <AppSectionBlock
-            title="Contexto da agenda"
-            subtitle="A agenda preserva horários, clientes, responsáveis e status retornados pelo contrato."
-          >
-            <div className="grid gap-3 md:grid-cols-3">
-              <div>
-                <p className="text-xs text-[var(--text-muted)]">Escopo</p>
-                <p className="font-semibold text-[var(--text-primary)]">
-                  {routeCustomerId
-                    ? "Cliente selecionado"
-                    : "Todos os agendamentos"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Fonte principal
-                </p>
-                <p className="font-semibold text-[var(--text-primary)]">
-                  appointments.list
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--text-muted)]">Leitura</p>
-                <p className="font-semibold text-[var(--text-primary)]">
-                  Fatos persistidos
-                </p>
-              </div>
-            </div>
-          </AppSectionBlock>
-
-          <AppSectionBlock
-            title="Disponibilidade e capacidade"
-            subtitle="Autoridade oficial necessária para interpretar oferta e ocupação."
-          >
-            <AppPageEmptyState
-              title="Disponibilidade e capacidade indisponíveis"
-              description="A página não recebeu contrato oficial de disponibilidade ou capacidade. Nenhum resultado é calculado no navegador."
-            />
-          </AppSectionBlock>
-
-          <AppSectionBlock
-            title="Atenção operacional oficial"
-            subtitle="Sinais agregados devem vir de uma autoridade de domínio."
-          >
-            <AppPageEmptyState
-              title="Atenção operacional indisponível"
-              description="Não há contrato oficial de atraso, conflito, criticidade, risco ou prioridade nesta página. Status e horários não são convertidos em decisão."
-            />
-          </AppSectionBlock>
-
-          <AppSectionBlock
-            title="Próxima ação oficial"
-            subtitle="Orientação operacional sem inferências locais."
-          >
-            <AppPageEmptyState
-              title="Próxima ação indisponível"
-              description="Nenhuma próxima ação oficial foi fornecida. Use as ações legítimas do agendamento sem interpretá-las como recomendação."
-            />
-          </AppSectionBlock>
-
-          <AppSectionBlock
-            title="Indicadores factuais"
-            subtitle="Contagens por status persistido, sem risco ou prioridade derivados."
-          >
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                ["Total carregado", factualCounts.total],
-                ["Agendados", factualCounts.scheduled],
-                ["Confirmados", factualCounts.confirmed],
-                ["Concluídos", factualCounts.done],
-              ].map(([label, value]) => (
-                <div
-                  key={String(label)}
-                  className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-4"
-                >
-                  <p className="text-sm text-[var(--text-muted)]">{label}</p>
-                  <p className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </AppSectionBlock>
-
-          <AppFiltersBar aria-label="Filtros de apresentação">
-            <AppInput
-              aria-label="Filtrar por texto"
-              placeholder="Buscar cliente ou observação"
-              value={queryText}
-              onChange={event => setQueryText(event.target.value)}
-            />
-            <AppInput
-              aria-label="Filtrar por data"
-              type="date"
-              value={dateFilter}
-              onChange={event => setDateFilter(event.target.value)}
-            />
-            <AppSelect
-              value={statusFilter}
-              onValueChange={setStatusFilter}
-              options={[
-                { value: "all", label: "Todos os status" },
-                { value: "SCHEDULED", label: "Agendado" },
-                { value: "CONFIRMED", label: "Confirmado" },
-                { value: "DONE", label: "Concluído" },
-                { value: "CANCELED", label: "Cancelado" },
-                { value: "NO_SHOW", label: "Não compareceu" },
-              ]}
-            />
-            <select
-              aria-label="Filtrar por responsável"
-              className="h-10 rounded-[10px] border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
-              value={responsibleFilter}
-              onChange={event => setResponsibleFilter(event.target.value)}
-              disabled={peopleQuery.isError}
+        <div className="grid min-w-0 gap-4">
+          {appointmentsQuery.isSuccess ? (
+            <AppSectionBlock
+              title="Contexto da agenda"
+              subtitle="Leitura factual do escopo retornado; nenhuma decisão é reconstruída no navegador."
+              compact
             >
-              <option value="all">Todos os responsáveis</option>
-              {people.map(person => (
-                <option key={String(person.id)} value={String(person.id)}>
-                  {String(person.name ?? "Responsável")}
-                </option>
-              ))}
-            </select>
-          </AppFiltersBar>
+              <div className="grid min-w-0 divide-y divide-[var(--border-subtle)] sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+                {[
+                  ["Total no escopo", factualCounts.total],
+                  ["Agendados", factualCounts.scheduled],
+                  ["Confirmados", factualCounts.confirmed],
+                  ["Concluídos", factualCounts.done],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="min-w-0 px-3 py-2 first:pl-0 last:pr-0"
+                  >
+                    <p className="text-xs text-[var(--text-muted)]">{label}</p>
+                    <p className="mt-1 break-words text-xl font-semibold text-[var(--text-primary)]">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </AppSectionBlock>
+          ) : null}
+
+          <AppSectionBlock
+            title="Filtros"
+            subtitle="Refine apenas por fatos persistidos, sem alterar a ordem recebida."
+            compact
+          >
+            <div role="group" aria-label="Filtros de apresentação">
+              <AppFiltersBar className="gap-3">
+                <div className="min-w-0 flex-1 basis-full sm:basis-64">
+                  <label
+                    className="mb-1 block text-xs font-medium text-[var(--text-secondary)]"
+                    htmlFor="appointment-search"
+                  >
+                    Busca
+                  </label>
+                  <AppInput
+                    id="appointment-search"
+                    aria-label="Filtrar por texto"
+                    placeholder="Cliente, serviço ou observação"
+                    value={queryText}
+                    onChange={event => setQueryText(event.target.value)}
+                  />
+                </div>
+                <div className="min-w-0 flex-1 basis-36 sm:max-w-48">
+                  <label
+                    className="mb-1 block text-xs font-medium text-[var(--text-secondary)]"
+                    htmlFor="appointment-date"
+                  >
+                    Data
+                  </label>
+                  <AppInput
+                    id="appointment-date"
+                    aria-label="Filtrar por data"
+                    type="date"
+                    value={dateFilter}
+                    onChange={event => setDateFilter(event.target.value)}
+                  />
+                </div>
+                <div className="min-w-0 flex-1 basis-40 sm:max-w-52">
+                  <label
+                    className="mb-1 block text-xs font-medium text-[var(--text-secondary)]"
+                    htmlFor="appointment-status"
+                  >
+                    Status
+                  </label>
+                  <select
+                    id="appointment-status"
+                    className="h-10 w-full rounded-[10px] border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
+                    value={statusFilter}
+                    onChange={event => setStatusFilter(event.target.value)}
+                  >
+                    <option value="all">Todos os status</option>
+                    <option value="SCHEDULED">Agendado</option>
+                    <option value="CONFIRMED">Confirmado</option>
+                    <option value="DONE">Concluído</option>
+                    <option value="CANCELED">Cancelado</option>
+                    <option value="NO_SHOW">Não compareceu</option>
+                  </select>
+                </div>
+                <div className="min-w-0 flex-1 basis-44 sm:max-w-56">
+                  <label
+                    className="mb-1 block text-xs font-medium text-[var(--text-secondary)]"
+                    htmlFor="appointment-responsible"
+                  >
+                    Responsável
+                  </label>
+                  <select
+                    id="appointment-responsible"
+                    aria-label="Filtrar por responsável"
+                    className="h-10 w-full rounded-[10px] border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)] disabled:opacity-60"
+                    value={responsibleFilter}
+                    onChange={event => setResponsibleFilter(event.target.value)}
+                    disabled={peopleQuery.isError}
+                  >
+                    <option value="all">
+                      {peopleQuery.isError
+                        ? "Responsáveis indisponíveis"
+                        : "Todos os responsáveis"}
+                    </option>
+                    {people.map(person => (
+                      <option key={String(person.id)} value={String(person.id)}>
+                        {String(person.name ?? "Responsável")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {queryText ||
+                dateFilter ||
+                statusFilter !== "all" ||
+                responsibleFilter !== "all" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="self-end"
+                    onClick={() => {
+                      setQueryText("");
+                      setDateFilter("");
+                      setStatusFilter("all");
+                      setResponsibleFilter("all");
+                    }}
+                  >
+                    Limpar filtros
+                  </Button>
+                ) : null}
+              </AppFiltersBar>
+            </div>
+          </AppSectionBlock>
 
           {successMessage ? (
             <p role="status" className="text-sm text-[var(--success)]">
               {successMessage}
             </p>
           ) : null}
-          {partialUnavailable.length ? (
-            <div
-              role="status"
-              className="rounded-xl border border-[var(--warning)]/35 bg-[var(--warning)]/10 p-4 text-sm text-[var(--text-secondary)]"
-            >
-              <strong>Leitura parcial.</strong> Não foi possível carregar{" "}
-              {partialUnavailable.join(", ")}. Os agendamentos disponíveis
-              continuam fiéis à fonte principal.
-            </div>
-          ) : null}
 
           <AppSectionBlock
             title="Agenda operacional"
-            subtitle="Lista factual; filtros não alteram decisão nem reordenam a autoridade oficial."
+            subtitle="Horário, cliente, serviço, responsável e execução em uma única leitura."
+            compact
           >
+            {serviceOrdersQuery.isError ? (
+              <p
+                role="status"
+                className="mb-3 text-sm text-[var(--text-secondary)]"
+              >
+                Vínculos com O.S. indisponíveis. A agenda e suas demais ações
+                continuam utilizáveis.
+              </p>
+            ) : null}
+            {customersQuery.isError ? (
+              <p
+                role="status"
+                className="mb-3 text-sm text-[var(--text-secondary)]"
+              >
+                Cadastro de clientes indisponível. Nomes incorporados aos
+                agendamentos permanecem visíveis.
+              </p>
+            ) : null}
             {appointmentsQuery.isLoading ? (
               <AppPageLoadingState description="Carregando agendamentos..." />
             ) : appointmentsQuery.isError ? (
@@ -583,57 +620,76 @@ export default function AppointmentsPage() {
               />
             ) : (
               <>
-                <div className="grid gap-2">
+                <div className="grid min-w-0 gap-2">
                   {paginatedRows.map(row => {
                     const status = statusPresentation(row.item.status);
+                    const canConfirm =
+                      Boolean(row.id) &&
+                      !["CONFIRMED", "CANCELED", "DONE"].includes(row.status);
                     return (
                       <article
                         key={row.id}
-                        className="grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-4 md:grid-cols-[160px_1fr_180px_auto] md:items-center"
+                        className="grid min-w-0 gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3 sm:p-4 lg:grid-cols-[minmax(130px,160px)_minmax(0,1fr)_minmax(120px,160px)_auto] lg:items-center"
                       >
-                        <div>
-                          <p className="font-semibold text-[var(--text-primary)]">
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold text-[var(--text-primary)]">
                             {formatDateTime(row.item.startsAt)}
                           </p>
                           <p className="text-xs text-[var(--text-muted)]">
                             {durationLabel(row.item.startsAt, row.item.endsAt)}
                           </p>
                         </div>
-                        <div>
-                          <p className="font-semibold text-[var(--text-primary)]">
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold text-[var(--text-primary)]">
                             {row.customerName}
                           </p>
-                          <p className="text-sm text-[var(--text-secondary)]">
+                          <p className="line-clamp-2 break-words text-sm text-[var(--text-secondary)]">
                             {row.item.title ||
                               row.item.notes ||
-                              "Sem observação"}
+                              "Sem serviço ou observação informados"}
                           </p>
-                          <p className="text-xs text-[var(--text-muted)]">
+                          <p className="mt-1 break-words text-xs text-[var(--text-muted)]">
                             {row.responsibleName}
                           </p>
                         </div>
-                        <AppStatusBadge
-                          label={status.label}
-                          tone={status.tone}
-                        />
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedId(row.id)}
-                          >
-                            Abrir
-                          </Button>
+                        <div className="min-w-0">
+                          <AppStatusBadge
+                            label={status.label}
+                            tone={status.tone}
+                          />
+                        </div>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                          {canConfirm ? (
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                void updateStatus(row.id, "CONFIRMED")
+                              }
+                              disabled={updateMutation.isPending}
+                            >
+                              Confirmar
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedId(row.id)}
+                            >
+                              Abrir detalhe
+                            </Button>
+                          )}
+                          {canConfirm ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedId(row.id)}
+                            >
+                              Abrir
+                            </Button>
+                          ) : null}
                           <AppRowActionsDropdown
-                            triggerLabel="Ações do agendamento"
+                            triggerLabel={`Ações de ${row.customerName}`}
                             items={[
-                              {
-                                label: "Confirmar",
-                                onSelect: () =>
-                                  void updateStatus(row.id, "CONFIRMED"),
-                                disabled: !row.id || row.status === "CONFIRMED",
-                                tone: "primary",
-                              },
                               {
                                 label: "Editar/Remarcar",
                                 onSelect: () => {
@@ -659,7 +715,7 @@ export default function AppointmentsPage() {
                                       )
                                     : (setSelectedId(row.id),
                                       setOpenServiceOrderModal(true)),
-                                disabled: !row.id,
+                                disabled: !row.id || serviceOrdersQuery.isError,
                               },
                               { type: "separator" },
                               {
@@ -696,36 +752,68 @@ export default function AppointmentsPage() {
           </AppSectionBlock>
 
           <AppSectionBlock
-            title="Evidências e navegação contextual"
-            subtitle="Detalhe do agendamento em foco e eventos oficiais relacionados."
+            title="Detalhe e evidências"
+            subtitle="Fatos do agendamento em foco e histórico oficial relacionado."
+            compact
           >
             {!selected ? (
               <AppPageEmptyState
                 title="Nenhum agendamento em foco"
-                description="Abra um item da agenda para consultar seus fatos e evidências."
+                description="Abra um item para consultar contexto, execução relacionada e evidências."
               />
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-semibold text-[var(--text-primary)]">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                <div className="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-4">
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                    <h3 className="min-w-0 break-words font-semibold text-[var(--text-primary)]">
                       {selected.customerName}
                     </h3>
                     <AppStatusBadge
                       {...statusPresentation(selected.item.status)}
                     />
                   </div>
-                  <dl className="mt-3 grid gap-2 text-sm">
+                  <dl className="mt-3 grid min-w-0 gap-3 text-sm sm:grid-cols-2">
                     <div>
-                      <dt className="text-[var(--text-muted)]">Horário</dt>
-                      <dd className="text-[var(--text-primary)]">
+                      <dt className="text-[var(--text-muted)]">Data e hora</dt>
+                      <dd className="break-words text-[var(--text-primary)]">
                         {formatDateTime(selected.item.startsAt)}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-[var(--text-muted)]">Responsável</dt>
+                      <dt className="text-[var(--text-muted)]">Duração</dt>
                       <dd className="text-[var(--text-primary)]">
+                        {durationLabel(
+                          selected.item.startsAt,
+                          selected.item.endsAt
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--text-muted)]">Responsável</dt>
+                      <dd className="break-words text-[var(--text-primary)]">
                         {selected.responsibleName}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--text-muted)]">
+                        Execução relacionada
+                      </dt>
+                      <dd className="break-words text-[var(--text-primary)]">
+                        {serviceOrdersQuery.isError
+                          ? "Vínculo indisponível"
+                          : selected.order?.id
+                            ? String(selected.order.title ?? "O.S. vinculada")
+                            : "Nenhuma O.S. vinculada"}
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-[var(--text-muted)]">
+                        Contexto / observação
+                      </dt>
+                      <dd className="break-words whitespace-pre-wrap text-[var(--text-primary)]">
+                        {selected.item.notes ||
+                          selected.item.title ||
+                          "Não informado"}
                       </dd>
                     </div>
                   </dl>
@@ -737,41 +825,42 @@ export default function AppointmentsPage() {
                         setOpenModal(true);
                       }}
                     >
-                      Editar
+                      Editar/Remarcar
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() =>
                         navigate(`/customers?customerId=${selected.customerId}`)
                       }
+                      disabled={!selected.customerId}
                     >
                       Abrir cliente
                     </Button>
                   </div>
                 </div>
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-4">
+                <div className="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-4">
                   <h3 className="font-semibold text-[var(--text-primary)]">
                     Evidências oficiais
                   </h3>
                   {timelineQuery.isLoading ? (
-                    <p className="mt-3 text-sm text-[var(--text-muted)]">
-                      Carregando evidências...
-                    </p>
+                    <AppPageLoadingState description="Carregando evidências..." />
                   ) : timelineQuery.isError ? (
-                    <p className="mt-3 text-sm text-[var(--text-secondary)]">
-                      Evidências indisponíveis; os fatos do agendamento
-                      permanecem visíveis.
-                    </p>
+                    <AppPageErrorState
+                      description="Evidências indisponíveis; os fatos do agendamento permanecem visíveis."
+                      actionLabel="Tentar novamente"
+                      onAction={() => void timelineQuery.refetch()}
+                    />
                   ) : timeline.length === 0 ? (
-                    <p className="mt-3 text-sm text-[var(--text-muted)]">
-                      Nenhuma evidência oficial retornada.
-                    </p>
+                    <AppPageEmptyState
+                      title="Sem evidências"
+                      description="Nenhuma evidência oficial foi retornada para este cliente."
+                    />
                   ) : (
-                    <ul className="mt-3 grid gap-2">
+                    <ul className="mt-3 grid min-w-0 gap-2">
                       {timeline.slice(0, 5).map((event, index) => (
                         <li
                           key={String(event.id ?? index)}
-                          className="border-l-2 border-[var(--border-subtle)] pl-3 text-sm text-[var(--text-secondary)]"
+                          className="min-w-0 break-words border-l-2 border-[var(--border-subtle)] pl-3 text-sm text-[var(--text-secondary)]"
                         >
                           {String(
                             event.description ??
@@ -787,6 +876,22 @@ export default function AppointmentsPage() {
               </div>
             )}
           </AppSectionBlock>
+
+          <nav
+            aria-label="Navegação contextual de agendamentos"
+            className="flex flex-wrap items-center gap-2 text-sm"
+          >
+            <span className="text-[var(--text-muted)]">
+              Visão macro do tempo:
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/calendar")}
+            >
+              Abrir Calendário
+            </Button>
+          </nav>
         </div>
 
         <FormModal
@@ -810,7 +915,11 @@ export default function AppointmentsPage() {
               <Button
                 type="submit"
                 form="appointment-form"
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={
+                  createMutation.isPending ||
+                  updateMutation.isPending ||
+                  (!editing && customersQuery.isError)
+                }
               >
                 {createMutation.isPending || updateMutation.isPending
                   ? "Salvando..."
@@ -820,6 +929,18 @@ export default function AppointmentsPage() {
           }
         >
           <AppForm id="appointment-form" onSubmit={saveAppointment}>
+            {!editing && customersQuery.isError ? (
+              <p role="status" className="text-sm text-[var(--danger)]">
+                Clientes indisponíveis. A criação fica bloqueada até a fonte
+                voltar; nenhum cliente substituto será assumido.
+              </p>
+            ) : null}
+            {peopleQuery.isError ? (
+              <p role="status" className="text-sm text-[var(--text-secondary)]">
+                Responsáveis indisponíveis. O agendamento ainda pode ser salvo
+                sem atribuição.
+              </p>
+            ) : null}
             <AppField label="Cliente">
               <AppSelect
                 value={form.customerId}
@@ -910,11 +1031,12 @@ export default function AppointmentsPage() {
               />
             </AppField>
             <AppField label="Observação">
-              <AppInput
+              <AppTextarea
                 value={form.notes}
                 onChange={event =>
                   setForm(value => ({ ...value, notes: event.target.value }))
                 }
+                rows={4}
               />
             </AppField>
           </AppForm>
