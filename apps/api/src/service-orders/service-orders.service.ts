@@ -163,7 +163,7 @@ export class ServiceOrdersService {
     private readonly analytics: AnalyticsService,
     private readonly idempotency: IdempotencyService,
     private readonly outbox: OutboxService,
-    private readonly readService: ServiceOrderReadService = new ServiceOrderReadService(prisma),
+    private readonly readService: ServiceOrderReadService,
   ) {}
 
   private async enqueueServiceOrderCreatedMessage(params: {

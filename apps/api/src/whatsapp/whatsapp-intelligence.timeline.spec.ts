@@ -34,6 +34,7 @@ describe('WhatsAppService operational intelligence timeline', () => {
       { orgId: 'org1', userId: 'u1', requestId: 'r1' } as any,
       { increment: jest.fn() } as any,
       { enforceMeter: jest.fn().mockResolvedValue({ allowed: true }) } as any,
+      {} as any,
       undefined,
       undefined,
       new WhatsAppIntelligenceService(),

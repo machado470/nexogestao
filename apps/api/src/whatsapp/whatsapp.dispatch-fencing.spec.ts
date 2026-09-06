@@ -56,6 +56,7 @@ describe('WhatsApp dispatch fencing', () => {
       } as any,
       {} as any,
       {} as any,
+    {} as any,
     )
 
     return { service, prisma, timeline }

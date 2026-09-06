@@ -18,6 +18,7 @@ describe('WhatsApp timeline semantics', () => {
       } as any,
       {} as any,
       {} as any,
+    {} as any,
     )
 
     jest.spyOn(service, 'enqueueMessage').mockResolvedValue({

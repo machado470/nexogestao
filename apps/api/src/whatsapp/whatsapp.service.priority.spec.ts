@@ -1,5 +1,6 @@
 import { WhatsAppService } from './whatsapp.service'
 import { WhatsAppConversationStatus } from '@prisma/client'
+import { WhatsAppConversationReadService } from './whatsapp-conversation-read.service'
 
 describe('WhatsAppService prioridade autoritativa', () => {
   it('preserva prioridade persistida e posição oficial sem recalcular na leitura', async () => {
@@ -11,7 +12,8 @@ describe('WhatsAppService prioridade autoritativa', () => {
       appointment: { groupBy: jest.fn().mockResolvedValue([]) },
       serviceOrder: { groupBy: jest.fn().mockResolvedValue([]) },
     }
-    const svc = new WhatsAppService(prisma, { addJob: jest.fn() } as any, { log: jest.fn() } as any, {} as any, { orgId: 'test-org', userId: 'test-user', requestId: 'test-request' } as any, { enforceMeter: jest.fn().mockResolvedValue({ allowed: true }) } as any, { enforcePolicy: jest.fn() } as any)
+    const conversationRead = Reflect.construct(WhatsAppConversationReadService, [prisma])
+    const svc = new WhatsAppService(prisma, { addJob: jest.fn() } as any, { log: jest.fn() } as any, {} as any, { orgId: 'test-org', userId: 'test-user', requestId: 'test-request' } as any, { enforceMeter: jest.fn().mockResolvedValue({ allowed: true }) } as any, { enforcePolicy: jest.fn() } as any, conversationRead)
     const res = await svc.listConversations('org1', {})
     expect(res.items[0].priority).toBe('NORMAL')
     expect(res.items[0].inboxPosition).toBe(1)

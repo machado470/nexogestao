@@ -30,6 +30,7 @@ describe('ServiceOrdersService notification failure isolation', () => {
       {} as any, {} as any, notifications as any, onboarding as any, { enqueueMessage: jest.fn() } as any,
       { track: jest.fn() } as any, { begin: jest.fn().mockResolvedValue({ mode: 'execute', recordId: 'idem-1' }), complete: jest.fn(), fail: jest.fn() } as any,
       { enqueue: jest.fn() } as any,
+    {} as any,
     )
     await expect(service.create({ orgId: 'org-1', createdBy: 'user-1', personId: null, customerId: 'customer-1', title: 'Instalação' })).resolves.toBe(created)
     expect(prisma.serviceOrder.create).toHaveBeenCalledTimes(1)
@@ -106,6 +107,7 @@ describe('ServiceOrdersService timeline hardening', () => {
       analytics as any,
       idempotency as any,
       { enqueue: jest.fn().mockResolvedValue({ id: 'outbox-1' }) } as any,
+    {} as any,
     )
 
     await service.update({

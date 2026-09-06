@@ -26,6 +26,7 @@ describe('WhatsAppService stale SENDING reconciliation', () => {
       } as any,
       { increment: jest.fn() } as any,
       { enforceMeter: jest.fn().mockResolvedValue({ allowed: true }) } as any,
+    {} as any,
     )
 
     return { service, timeline }
