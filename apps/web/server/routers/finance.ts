@@ -18,10 +18,6 @@ const listPayloadSchema = z.object({
   }),
 });
 
-function unwrapData(raw: unknown) {
-  return unwrapNexoApiResponse(raw);
-}
-
 export const financeRouter = router({
   payments: router({
     getById: protectedProcedure
@@ -35,7 +31,7 @@ export const financeRouter = router({
           method: "GET",
         });
 
-        return unwrapData(raw);
+        return unwrapNexoApiResponse(raw);
       }),
   }),
 
@@ -45,7 +41,7 @@ export const financeRouter = router({
       const params = new URLSearchParams();
       params.set("limit", String(input?.limit ?? 50));
       const raw = await nexoFetch<unknown>(ctx, `/finance/operational-queue?${params.toString()}`, { method: "GET" });
-      return unwrapData(raw);
+      return unwrapNexoApiResponse(raw);
     }),
 
   charges: router({
@@ -85,7 +81,7 @@ export const financeRouter = router({
             : undefined,
         });
 
-        return unwrapData(raw);
+        return unwrapNexoApiResponse(raw);
       }),
 
     list: protectedProcedure
@@ -134,7 +130,7 @@ export const financeRouter = router({
           method: "GET",
         });
 
-        return unwrapData(raw);
+        return unwrapNexoApiResponse(raw);
       }),
 
     update: protectedProcedure
@@ -166,7 +162,7 @@ export const financeRouter = router({
           }),
         });
 
-        return unwrapData(raw);
+        return unwrapNexoApiResponse(raw);
       }),
 
     cancel: protectedProcedure
@@ -186,7 +182,7 @@ export const financeRouter = router({
           }),
         });
 
-        return unwrapData(raw);
+        return unwrapNexoApiResponse(raw);
       }),
 
     stats: protectedProcedure
@@ -196,7 +192,7 @@ export const financeRouter = router({
           method: "GET",
         });
 
-        return unwrapData(raw);
+        return unwrapNexoApiResponse(raw);
       }),
 
     pay: protectedProcedure
@@ -232,7 +228,7 @@ export const financeRouter = router({
           }
         );
 
-        return unwrapData(raw);
+        return unwrapNexoApiResponse(raw);
       }),
   }),
 });

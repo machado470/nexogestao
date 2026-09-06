@@ -15,6 +15,21 @@ import { aiRouter } from "./routers/ai";
 import { billingRouter } from "./routers/billing";
 import { analyticsRouter } from "./routers/analytics";
 import { integrationsRouter } from "./routers/integrations";
+import { appointmentsRouter } from "./routers/appointments";
+import { auditRouter } from "./routers/audit-router";
+import { authRouter } from "./routers/auth";
+import { customersRouter } from "./routers/customers";
+import { demoRouter } from "./routers/demo";
+import { executionsRouter } from "./routers/executions";
+import { globalSearchRouter } from "./routers/global-search";
+import { invitesRouter } from "./routers/invites";
+import { onboardingRouter } from "./routers/onboarding";
+import { operationsRouter } from "./routers/operational";
+import { riskRouter } from "./routers/risk";
+import { serviceOrdersRouter } from "./routers/service-orders";
+import { settingsRouter } from "./routers/settings";
+import { timelineRouter } from "./routers/timeline";
+import { whatsappRouter } from "./routers/whatsapp";
 
 const SESSION_COOKIES = ["nexo_token", "token", "auth_token"] as const;
 
@@ -34,8 +49,21 @@ export const appRouter = router({
   billing: billingRouter,
   analytics: analyticsRouter,
   integrations: integrationsRouter,
-  audit: nexoProxyRouter.audit,
-  risk: nexoProxyRouter.risk,
+  auth: authRouter,
+  customers: customersRouter,
+  appointments: appointmentsRouter,
+  serviceOrders: serviceOrdersRouter,
+  timeline: timelineRouter,
+  executions: executionsRouter,
+  whatsapp: whatsappRouter,
+  operations: operationsRouter,
+  demo: demoRouter,
+  settings: settingsRouter,
+  onboarding: onboardingRouter,
+  invites: invitesRouter,
+  globalSearch: globalSearchRouter,
+  audit: auditRouter,
+  risk: riskRouter,
 
   session: router({
     me: publicProcedure.query(async ({ ctx }) => {

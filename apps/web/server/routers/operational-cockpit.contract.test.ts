@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const proxy = readFileSync(new URL("./nexo-proxy.ts", import.meta.url), "utf8");
+const operations = readFileSync(new URL("./operational.ts", import.meta.url), "utf8");
+const transport = readFileSync(new URL("../_core/nexoClient.ts", import.meta.url), "utf8");
 const cockpit = readFileSync(new URL("../../client/src/pages/OperationalCockpitPage.tsx", import.meta.url), "utf8");
 
 describe("operational cockpit boundary", () => {
   it("uses authenticated BFF routes and POST mutations", () => {
-    expect(proxy).toContain('Authorization: authHeader');
-    expect(proxy).toContain('"/internal/operational-actions/execute"');
-    expect(proxy).toContain('authedPost(ctx as CtxLike');
+    expect(transport).toContain('Authorization: `Bearer ${token}`');
+    expect(operations).toContain('"/internal/operational-actions/execute"');
+    expect(operations).toContain('authedPost(ctx as NexoContext');
   });
   it("rejects client-owned identity fields", () => {
     expect(() => operationalInput.parse({ actionType: "RECALCULATE_RISK", entityType: "person", entityId: "p", orgId: "other" })).toThrow();
