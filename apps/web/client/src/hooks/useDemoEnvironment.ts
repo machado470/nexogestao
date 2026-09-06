@@ -4,7 +4,7 @@ import { toast } from "sonner";
 export function useDemoEnvironment() {
   const utils = trpc.useUtils();
 
-  const bootstrapDemo = trpc.nexo.demo.bootstrapLive.useMutation();
+  const bootstrapDemo = trpc.demo.bootstrapLive.useMutation();
   const isGenerating = bootstrapDemo.isPending;
 
   const generateDemoEnvironment = async () => {
@@ -17,16 +17,16 @@ export function useDemoEnvironment() {
 
       await Promise.all([
         utils.dashboard.alerts.invalidate(),
-        utils.nexo.customers.list.invalidate(),
-        utils.nexo.appointments.list.invalidate(),
-        utils.nexo.serviceOrders.list.invalidate(),
+        utils.customers.list.invalidate(),
+        utils.appointments.list.invalidate(),
+        utils.serviceOrders.list.invalidate(),
         utils.finance.charges.list.invalidate(),
         utils.finance.charges.stats.invalidate(),
-        utils.nexo.timeline.listByOrg.invalidate(),
+        utils.timeline.listByOrg.invalidate(),
         utils.governance.summary.invalidate(),
         utils.governance.runs.invalidate(),
         utils.governance.autoScore.invalidate(),
-        utils.nexo.whatsapp.messages.invalidate(),
+        utils.whatsapp.messages.invalidate(),
       ]);
 
       const chain =

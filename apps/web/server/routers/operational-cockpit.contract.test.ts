@@ -16,7 +16,7 @@ describe("operational cockpit boundary", () => {
   });
   it("browser has no direct internal fetch", () => {
     expect(cockpit).not.toMatch(/fetch\s*\(\s*["'`]\/internal\//);
-    expect(cockpit).toContain("trpc.nexo.operations.summary.useQuery");
+    expect(cockpit).toContain("trpc.operations.summary.useQuery");
   });
 });
 

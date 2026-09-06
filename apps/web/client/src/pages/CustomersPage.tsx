@@ -453,20 +453,20 @@ export default function CustomersPage() {
   const [showInlineCharges, setShowInlineCharges] = useState(false);
   const timelineAnchorRef = useRef<HTMLDivElement | null>(null);
 
-  const customersQuery = trpc.nexo.customers.list.useQuery(
+  const customersQuery = trpc.customers.list.useQuery(
     { page: 1, limit: 300 },
     { enabled: isAuthenticated, retry: false }
   );
   const customersOperationalSummaryQuery =
-    trpc.nexo.customers.operationalSummary.useQuery(undefined, {
+    trpc.customers.operationalSummary.useQuery(undefined, {
       enabled: isAuthenticated,
       retry: false,
     });
-  const appointmentsQuery = trpc.nexo.appointments.list.useQuery(
+  const appointmentsQuery = trpc.appointments.list.useQuery(
     { page: 1, limit: 500 },
     { enabled: isAuthenticated, retry: false }
   );
-  const serviceOrdersQuery = trpc.nexo.serviceOrders.list.useQuery(
+  const serviceOrdersQuery = trpc.serviceOrders.list.useQuery(
     { page: 1, limit: 500 },
     { enabled: isAuthenticated, retry: false }
   );
@@ -541,7 +541,7 @@ export default function CustomersPage() {
     [operationalProfiles]
   );
 
-  const workspaceQuery = trpc.nexo.customers.workspace.useQuery(
+  const workspaceQuery = trpc.customers.workspace.useQuery(
     { id: activeCustomerId ?? "" },
     { enabled: isAuthenticated && Boolean(activeCustomerId), retry: false }
   );
@@ -903,16 +903,16 @@ export default function CustomersPage() {
     try {
       const includeTimeline = options?.includeTimeline ?? false;
       const operations: Promise<unknown>[] = [
-        trpcUtils.nexo.customers.list.invalidate(),
-        trpcUtils.nexo.customers.operationalSummary.invalidate(),
-        trpcUtils.nexo.customers.workspace.invalidate({ id: customerId }),
-        trpcUtils.nexo.appointments.list.invalidate(),
-        trpcUtils.nexo.serviceOrders.list.invalidate(),
+        trpcUtils.customers.list.invalidate(),
+        trpcUtils.customers.operationalSummary.invalidate(),
+        trpcUtils.customers.workspace.invalidate({ id: customerId }),
+        trpcUtils.appointments.list.invalidate(),
+        trpcUtils.serviceOrders.list.invalidate(),
         trpcUtils.finance.charges.list.invalidate(),
       ];
       if (includeTimeline) {
         operations.push(
-          trpcUtils.nexo.customers.workspace.refetch({ id: customerId })
+          trpcUtils.customers.workspace.refetch({ id: customerId })
         );
       }
       await Promise.all(operations);
@@ -933,7 +933,7 @@ export default function CustomersPage() {
       const dashboardUtils = (trpcUtils as any).dashboard;
       const whatsappUtils = (trpcUtils as any).whatsapp;
       const peopleUtils = (trpcUtils as any).people;
-      const nexoUtils = (trpcUtils as any).nexo;
+      const timelineUtils = (trpcUtils as any).timeline;
       const operations: Promise<unknown>[] = [];
       const safePush = (candidate: unknown) => {
         if (
@@ -944,27 +944,27 @@ export default function CustomersPage() {
         }
       };
 
-      safePush(trpcUtils.nexo.customers.list.invalidate());
-      safePush(trpcUtils.nexo.customers.operationalSummary.invalidate());
+      safePush(trpcUtils.customers.list.invalidate());
+      safePush(trpcUtils.customers.operationalSummary.invalidate());
       safePush(
-        trpcUtils.nexo.customers.workspace.invalidate({ id: customerId })
+        trpcUtils.customers.workspace.invalidate({ id: customerId })
       );
 
       switch (eventType) {
         case "CUSTOMER_APPOINTMENT_CREATED":
-          safePush(trpcUtils.nexo.appointments.list.invalidate());
+          safePush(trpcUtils.appointments.list.invalidate());
           safePush(dashboardUtils?.kpis?.invalidate?.());
           safePush(dashboardUtils?.alerts?.invalidate?.());
-          safePush(nexoUtils?.timeline?.customer?.invalidate?.({ customerId }));
-          safePush(nexoUtils?.timeline?.org?.invalidate?.());
+          safePush(timelineUtils?.listByCustomer?.invalidate?.({ customerId }));
+          safePush(timelineUtils?.listByOrg?.invalidate?.());
           break;
         case "CUSTOMER_SERVICE_ORDER_CREATED":
-          safePush(trpcUtils.nexo.serviceOrders.list.invalidate());
-          safePush(trpcUtils.nexo.appointments.list.invalidate());
+          safePush(trpcUtils.serviceOrders.list.invalidate());
+          safePush(trpcUtils.appointments.list.invalidate());
           safePush(dashboardUtils?.kpis?.invalidate?.());
           safePush(dashboardUtils?.alerts?.invalidate?.());
-          safePush(nexoUtils?.timeline?.customer?.invalidate?.({ customerId }));
-          safePush(nexoUtils?.timeline?.org?.invalidate?.());
+          safePush(timelineUtils?.listByCustomer?.invalidate?.({ customerId }));
+          safePush(timelineUtils?.listByOrg?.invalidate?.());
           safePush(peopleUtils?.stats?.invalidate?.());
           safePush(peopleUtils?.workload?.invalidate?.());
           break;
@@ -972,10 +972,9 @@ export default function CustomersPage() {
           safePush(whatsappUtils?.conversations?.invalidate?.());
           safePush(whatsappUtils?.messages?.invalidate?.());
           safePush(whatsappUtils?.context?.invalidate?.({ customerId }));
-          safePush(nexoUtils?.timeline?.customer?.invalidate?.({ customerId }));
-          safePush(nexoUtils?.timeline?.org?.invalidate?.());
+          safePush(timelineUtils?.listByCustomer?.invalidate?.({ customerId }));
+          safePush(timelineUtils?.listByOrg?.invalidate?.());
           safePush(dashboardUtils?.alerts?.invalidate?.());
-          safePush(nexoUtils?.nextBestAction?.invalidate?.({ customerId }));
           break;
         case "CUSTOMER_CHARGE_CONTEXT_UPDATED":
           safePush(trpcUtils.finance.charges.list.invalidate());
@@ -984,7 +983,7 @@ export default function CustomersPage() {
 
       if (includeTimeline) {
         safePush(
-          trpcUtils.nexo.customers.workspace.refetch({ id: customerId })
+          trpcUtils.customers.workspace.refetch({ id: customerId })
         );
       }
       await Promise.all(operations);

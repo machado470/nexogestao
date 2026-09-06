@@ -12,16 +12,16 @@ export function useActionHandler() {
   const utils = trpc.useUtils();
   const [executingById, setExecutingById] = useState<ExecutionMap>({});
 
-  const generateChargeMutation = trpc.nexo.serviceOrders.generateCharge.useMutation();
+  const generateChargeMutation = trpc.serviceOrders.generateCharge.useMutation();
   const payChargeMutation = trpc.finance.charges.pay.useMutation();
-  const updateAppointmentMutation = trpc.nexo.appointments.update.useMutation();
+  const updateAppointmentMutation = trpc.appointments.update.useMutation();
 
   const invalidateOperationalData = useCallback(async () => {
     await Promise.all([
-      utils.nexo.serviceOrders.list.invalidate(),
+      utils.serviceOrders.list.invalidate(),
       utils.finance.charges.list.invalidate(),
       utils.finance.charges.stats.invalidate(),
-      utils.nexo.appointments.list.invalidate(),
+      utils.appointments.list.invalidate(),
       utils.dashboard.kpis.invalidate(),
       utils.dashboard.alerts.invalidate(),
     ]);

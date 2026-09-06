@@ -151,15 +151,15 @@ export default function AuditPage() {
   const { isAuthenticated, role } = useAuth();
   const canLoadAudit = isAuthenticated && role === "ADMIN";
 
-  const listQuery = trpc.nexo.audit.listEvents.useQuery(
+  const listQuery = trpc.audit.listEvents.useQuery(
     { page, limit: AUDIT_PAGE_SIZE, ...filters },
     { enabled: canLoadAudit, retry: false }
   );
-  const summaryQuery = trpc.nexo.audit.getSummary.useQuery(
+  const summaryQuery = trpc.audit.getSummary.useQuery(
     { from: filters.from, to: filters.to },
     { enabled: canLoadAudit, retry: false }
   );
-  const last24HoursQuery = trpc.nexo.audit.getSummary.useQuery(
+  const last24HoursQuery = trpc.audit.getSummary.useQuery(
     { from: last24HoursFrom },
     { enabled: canLoadAudit, retry: false }
   );

@@ -45,7 +45,7 @@ export function GlobalSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  const globalSearchQuery = trpc.nexo.globalSearch.search.useQuery(
+  const globalSearchQuery = trpc.globalSearch.search.useQuery(
     {
       query: debouncedQuery,
     },

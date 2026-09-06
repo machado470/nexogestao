@@ -301,8 +301,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     shouldBootstrapSession,
   ]);
 
-  const loginMutation = trpc.nexo.auth.login.useMutation();
-  const registerMutation = trpc.nexo.auth.register.useMutation();
+  const loginMutation = trpc.auth.login.useMutation();
+  const registerMutation = trpc.auth.register.useMutation();
   const logoutMutation = trpc.session.logout.useMutation();
   const isLoggingOut = logoutMutation.isPending;
 

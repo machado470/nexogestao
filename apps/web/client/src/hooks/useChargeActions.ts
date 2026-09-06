@@ -116,7 +116,7 @@ export function useChargeActions(options?: UseChargeActionsOptions) {
       ]);
 
       await Promise.all([
-        utils.nexo.timeline.listByOrg.invalidate(),
+        utils.timeline.listByOrg.invalidate(),
         utils.governance.summary.invalidate(),
         utils.governance.runs.invalidate(),
         utils.governance.autoScore.invalidate()

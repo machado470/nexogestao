@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
       "Solicite a redefinição de senha para recuperar o acesso à sua conta NexoGestão.",
   });
   const [, navigate] = useLocation();
-  const forgotPasswordMutation = trpc.nexo.auth.forgotPassword.useMutation();
+  const forgotPasswordMutation = trpc.auth.forgotPassword.useMutation();
 
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);

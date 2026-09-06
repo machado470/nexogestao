@@ -222,7 +222,7 @@ export default function EditServiceOrderModal({
   });
   const [initialSnapshot, setInitialSnapshot] = useState("");
 
-  const getServiceOrder = trpc.nexo.serviceOrders.getById.useQuery(
+  const getServiceOrder = trpc.serviceOrders.getById.useQuery(
     { id: serviceOrderId || "" },
     {
       enabled: isOpen && !!serviceOrderId,
@@ -231,7 +231,7 @@ export default function EditServiceOrderModal({
     }
   );
 
-  const updateServiceOrder = trpc.nexo.serviceOrders.update.useMutation();
+  const updateServiceOrder = trpc.serviceOrders.update.useMutation();
   useCriticalActionGuard({
     isPending: updateServiceOrder.isPending,
     reason: "Atualizando O.S. com sincronização global.",

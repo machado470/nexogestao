@@ -650,7 +650,7 @@ export default function ExecutiveDashboard() {
     }
   );
   const pendingWhatsAppApprovalsQuery =
-    trpc.nexo.whatsapp.listPendingApprovals.useQuery(
+    trpc.whatsapp.listPendingApprovals.useQuery(
       { limit: 10 },
       { enabled: isAuthenticated, retry: false }
     );
@@ -672,7 +672,7 @@ export default function ExecutiveDashboard() {
       retry: false,
     }
   );
-  const timelineQuery = trpc.nexo.timeline.listByOrg.useQuery(
+  const timelineQuery = trpc.timeline.listByOrg.useQuery(
     { limit: 3 },
     { enabled: isAuthenticated, retry: false }
   );

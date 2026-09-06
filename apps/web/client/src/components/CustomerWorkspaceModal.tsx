@@ -25,11 +25,11 @@ type CustomerWorkspaceModalProps = {
 
 export function CustomerWorkspaceModal({ open, customerId, customerName, onOpenChange }: CustomerWorkspaceModalProps) {
   const [, navigate] = useLocation();
-  const workspaceQuery = trpc.nexo.customers.workspace.useQuery(
+  const workspaceQuery = trpc.customers.workspace.useQuery(
     { id: customerId ?? "" },
     { enabled: open && Boolean(customerId), retry: false }
   );
-  const operationalSummaryQuery = trpc.nexo.customers.operationalSummary.useQuery(undefined, {
+  const operationalSummaryQuery = trpc.customers.operationalSummary.useQuery(undefined, {
     enabled: open && Boolean(customerId),
     retry: false,
   });

@@ -24,6 +24,41 @@ describe("BFF router decomposition guardrails", () => {
     expect(proxy).toContain("whatsapp: whatsappRouter");
   });
 
+  it("keeps every legacy alias wired to the canonical router instance", () => {
+    for (const [alias, routerName] of [
+      ["operations", "operationsRouter"], ["auth", "authRouter"],
+      ["customers", "customersRouter"], ["appointments", "appointmentsRouter"],
+      ["serviceOrders", "serviceOrdersRouter"], ["timeline", "timelineRouter"],
+      ["executions", "executionsRouter"], ["whatsapp", "whatsappRouter"],
+      ["demo", "demoRouter"], ["settings", "settingsRouter"],
+      ["onboarding", "onboardingRouter"], ["invites", "invitesRouter"],
+      ["globalSearch", "globalSearchRouter"], ["audit", "auditRouter"],
+      ["risk", "riskRouter"],
+    ]) {
+      expect(proxy).toContain(`${alias}: ${routerName}`);
+      expect(appRouter).toContain(`${alias}: ${routerName}`);
+    }
+    expect(proxy).toContain("me: meProcedure");
+    expect(read("./routers/auth.ts")).toContain("me: meProcedure");
+  });
+
+  it("rejects legacy nexo callers in production frontend sources", () => {
+    const walk = (directory: string): string[] => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(directory, entry.name);
+      return entry.isDirectory() ? walk(path) : entry.isFile() && /\.tsx?$/.test(entry.name) && !/\.(test|spec)\./.test(entry.name) ? [path] : [];
+    });
+    const clientRoot = join(dirname(fileURLToPath(import.meta.url)), "../client/src");
+    const legacyTrpcPrefix = "trpc." + "nexo.";
+    const legacyUtilsPrefix = "utils." + "nexo.";
+    const legacyNamespace = new RegExp("\\.\\s*" + "nexo" + "(?:\\.|\\?|\\s*[;,)])");
+    for (const file of walk(clientRoot)) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toContain(legacyTrpcPrefix);
+      expect(source, file).not.toContain(legacyUtilsPrefix);
+      expect(source, file).not.toMatch(legacyNamespace);
+    }
+  });
+
   it("does not accept browser-owned tenant identity in tenant-scoped domain routers", () => {
     for (const file of ["customers.ts", "appointments.ts", "service-orders.ts", "timeline.ts", "settings.ts"]) {
       const source = read(`./routers/${file}`);

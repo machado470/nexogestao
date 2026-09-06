@@ -114,7 +114,7 @@ export default function Login() {
   const { login, isSubmitting, error, redirectTo } = useAuth();
   const [, navigate] = useLocation();
   const resendVerificationMutation =
-    trpc.nexo.auth.resendEmailVerification.useMutation();
+    trpc.auth.resendEmailVerification.useMutation();
 
   const searchParams = useMemo(() => {
     if (typeof window === "undefined") return new URLSearchParams();

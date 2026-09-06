@@ -91,7 +91,7 @@ export default function TimelinePage() {
   const [module, setModule] = useState("all");
   const [severity, setSeverity] = useState("all");
 
-  const query = trpc.nexo.timeline.listByOrg.useQuery(
+  const query = trpc.timeline.listByOrg.useQuery(
     { limit: PAGE_SIZE },
     { enabled: isAuthenticated, retry: false }
   );

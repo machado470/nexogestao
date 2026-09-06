@@ -40,8 +40,8 @@ export function ExecutionGlobalBar() {
   const canEditMode = role ? can(role, "governance:update") || role === "MANAGER" : false;
 
   const utils = trpc.useUtils();
-  const modeQuery = trpc.nexo.executions.mode.useQuery(undefined, { retry: false, enabled: canRenderBar });
-  const summaryQuery = trpc.nexo.executions.stateSummary.useQuery(
+  const modeQuery = trpc.executions.mode.useQuery(undefined, { retry: false, enabled: canRenderBar });
+  const summaryQuery = trpc.executions.stateSummary.useQuery(
     { sinceMs: 1000 * 60 * 60 * 24 },
     { retry: false, enabled: canRenderBar }
   );
@@ -52,22 +52,22 @@ export function ExecutionGlobalBar() {
   const [nextMode, setNextMode] = useState<ExecutionMode>("manual");
   const [showRunOnceResult, setShowRunOnceResult] = useState(false);
 
-  const updateMode = trpc.nexo.executions.updateMode.useMutation({
+  const updateMode = trpc.executions.updateMode.useMutation({
     onSuccess: async () => {
       await Promise.all([
-        utils.nexo.executions.mode.invalidate(),
-        utils.nexo.executions.stateSummary.invalidate(),
-        utils.nexo.executions.events.invalidate(),
+        utils.executions.mode.invalidate(),
+        utils.executions.stateSummary.invalidate(),
+        utils.executions.events.invalidate(),
       ]);
     },
   });
 
-  const runOnce = trpc.nexo.executions.runOnce.useMutation({
+  const runOnce = trpc.executions.runOnce.useMutation({
     onSuccess: async () => {
       setShowRunOnceResult(true);
       await Promise.all([
-        utils.nexo.executions.stateSummary.invalidate(),
-        utils.nexo.executions.events.invalidate(),
+        utils.executions.stateSummary.invalidate(),
+        utils.executions.events.invalidate(),
       ]);
     },
   });

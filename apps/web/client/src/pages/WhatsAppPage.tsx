@@ -1843,10 +1843,10 @@ export default function WhatsAppPage() {
 
   const filtersInput = useMemo<Record<string, unknown>>(() => ({}), []);
 
-  const healthQuery = trpc.nexo.whatsapp.health.useQuery(undefined, {
+  const healthQuery = trpc.whatsapp.health.useQuery(undefined, {
     retry: false,
   });
-  const conversationsQuery = trpc.nexo.whatsapp.listConversations.useQuery(
+  const conversationsQuery = trpc.whatsapp.listConversations.useQuery(
     filtersInput,
     {
       retry: false,
@@ -1862,14 +1862,14 @@ export default function WhatsAppPage() {
         : [];
     return items.map((item: unknown) => mapConversation(item));
   }, [conversationsQuery.data]);
-  const customersQuery = trpc.nexo.customers.list.useQuery(
+  const customersQuery = trpc.customers.list.useQuery(
     { page: 1, limit: 300 },
     { retry: false, enabled: true }
   );
-  const appointmentsQuery = trpc.nexo.appointments.list.useQuery(undefined, {
+  const appointmentsQuery = trpc.appointments.list.useQuery(undefined, {
     retry: false,
   });
-  const serviceOrdersQuery = trpc.nexo.serviceOrders.list.useQuery(
+  const serviceOrdersQuery = trpc.serviceOrders.list.useQuery(
     { page: 1, limit: 500 },
     { retry: false }
   );
@@ -2257,41 +2257,41 @@ export default function WhatsAppPage() {
     setSelectedConversationId,
   ]);
 
-  const conversationDetailsQuery = trpc.nexo.whatsapp.getConversation.useQuery(
+  const conversationDetailsQuery = trpc.whatsapp.getConversation.useQuery(
     { id: selectedConversationRecordId ?? "" },
     { enabled: Boolean(selectedConversationRecordId), retry: false }
   );
 
-  const messagesQuery = trpc.nexo.whatsapp.getMessages.useQuery(
+  const messagesQuery = trpc.whatsapp.getMessages.useQuery(
     { conversationId: selectedConversationRecordId ?? "" },
     { enabled: Boolean(selectedConversationRecordId), retry: false }
   );
-  const contextQuery = trpc.nexo.whatsapp.getContext.useQuery(
+  const contextQuery = trpc.whatsapp.getContext.useQuery(
     { conversationId: selectedConversationRecordId ?? "" },
     { enabled: Boolean(selectedConversationRecordId), retry: false }
   );
   const pendingApprovalsQuery =
-    trpc.nexo.whatsapp.listPendingApprovals.useQuery(
+    trpc.whatsapp.listPendingApprovals.useQuery(
       { limit: 25 },
       { enabled: Boolean(selectedConversationRecordId), retry: false }
     );
   const executionHistoryQuery =
-    trpc.nexo.whatsapp.listExecutionHistory.useQuery(
+    trpc.whatsapp.listExecutionHistory.useQuery(
       { conversationId: selectedConversationRecordId ?? undefined, limit: 25 },
       { enabled: Boolean(selectedConversationRecordId), retry: false }
     );
 
-  const sendMessageMutation = trpc.nexo.whatsapp.sendMessage.useMutation();
-  const sendTemplateMutation = trpc.nexo.whatsapp.sendTemplate.useMutation();
-  const retryMessageMutation = trpc.nexo.whatsapp.retryMessage.useMutation();
+  const sendMessageMutation = trpc.whatsapp.sendMessage.useMutation();
+  const sendTemplateMutation = trpc.whatsapp.sendTemplate.useMutation();
+  const retryMessageMutation = trpc.whatsapp.retryMessage.useMutation();
   const requestExecutionMutation =
-    trpc.nexo.whatsapp.requestExecution.useMutation();
+    trpc.whatsapp.requestExecution.useMutation();
   const approveExecutionMutation =
-    trpc.nexo.whatsapp.approveExecution.useMutation();
+    trpc.whatsapp.approveExecution.useMutation();
   const executeExecutionMutation =
-    trpc.nexo.whatsapp.executeExecution.useMutation();
+    trpc.whatsapp.executeExecution.useMutation();
   const cancelExecutionMutation =
-    trpc.nexo.whatsapp.cancelExecution.useMutation();
+    trpc.whatsapp.cancelExecution.useMutation();
 
   const pendingApprovals = useMemo(
     () =>

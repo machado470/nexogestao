@@ -15,8 +15,8 @@ const mainLayoutSource = readFileSync(new URL("../components/MainLayout.tsx", im
 
 describe("AuditPage administrative audit contract", () => {
   it("consome os contratos frontend oficiais de lista e resumo", () => {
-    expect(auditPageSource).toContain("trpc.nexo.audit.listEvents.useQuery");
-    expect(auditPageSource).toContain("trpc.nexo.audit.getSummary.useQuery");
+    expect(auditPageSource).toContain("trpc.audit.listEvents.useQuery");
+    expect(auditPageSource).toContain("trpc.audit.getSummary.useQuery");
     expect(auditPageSource).toContain("page, limit: AUDIT_PAGE_SIZE");
     expect(auditPageSource).toContain("actorPersonId: draftFilters.actorPersonId.trim() || undefined");
     expect(auditPageSource).toContain("action: draftFilters.action.trim() || undefined");

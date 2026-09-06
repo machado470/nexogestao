@@ -65,11 +65,11 @@ const stateLabel: Record<OfficialState, string> = {
 export default function SettingsPage() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
-  const settingsQuery = trpc.nexo.settings.get.useQuery(undefined, {
+  const settingsQuery = trpc.settings.get.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
   });
-  const summaryQuery = trpc.nexo.settings.administrativeSummary.useQuery(
+  const summaryQuery = trpc.settings.administrativeSummary.useQuery(
     undefined,
     { enabled: isAuthenticated, retry: false }
   );
@@ -91,12 +91,12 @@ export default function SettingsPage() {
   const persistedName = String(settings?.name ?? "");
   const persistedTimezone = String(settings?.timezone ?? "");
   const unsaved = name !== persistedName || timezone !== persistedTimezone;
-  const updateMutation = trpc.nexo.settings.update.useMutation({
+  const updateMutation = trpc.settings.update.useMutation({
     onSuccess: async () => {
       toast.success("Configurações da empresa salvas.");
       await Promise.all([
-        utils.nexo.settings.get.invalidate(),
-        utils.nexo.settings.administrativeSummary.invalidate(),
+        utils.settings.get.invalidate(),
+        utils.settings.administrativeSummary.invalidate(),
       ]);
     },
     onError: error =>

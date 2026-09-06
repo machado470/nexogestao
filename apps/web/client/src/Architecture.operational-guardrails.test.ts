@@ -168,9 +168,9 @@ describe("Operational page guardrails", () => {
       "client/src/pages/ServiceOrdersPage.tsx",
       "utf8"
     );
-    expect(serviceOrders).toContain("trpc.nexo.executions.start.useMutation()");
+    expect(serviceOrders).toContain("trpc.executions.start.useMutation()");
     expect(serviceOrders).toContain(
-      "trpc.nexo.executions.complete.useMutation()"
+      "trpc.executions.complete.useMutation()"
     );
     expect(serviceOrders).toContain(
       "startExecutionMutation.mutateAsync({ serviceOrderId: orderId })"
@@ -180,13 +180,13 @@ describe("Operational page guardrails", () => {
       "...(outcomeSummary ? { notes: outcomeSummary } : {})"
     );
     expect(serviceOrders).toContain(
-      "utils.nexo.serviceOrders.getById.invalidate({ id: orderId })"
+      "utils.serviceOrders.getById.invalidate({ id: orderId })"
     );
     expect(serviceOrders).toContain(
-      "utils.nexo.executions.listByServiceOrder.invalidate({ serviceOrderId: orderId })"
+      "utils.executions.listByServiceOrder.invalidate({ serviceOrderId: orderId })"
     );
     expect(serviceOrders).toContain(
-      "utils.nexo.timeline.listByServiceOrder.invalidate({ serviceOrderId: orderId })"
+      "utils.timeline.listByServiceOrder.invalidate({ serviceOrderId: orderId })"
     );
     expect(serviceOrders).toContain("utils.finance.charges.list.invalidate()");
     expect(serviceOrders).not.toContain("serviceOrders.update.useMutation()");

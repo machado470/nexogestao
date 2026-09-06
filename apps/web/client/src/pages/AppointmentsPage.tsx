@@ -136,11 +136,11 @@ export default function AppointmentsPage() {
     }),
     [responsibleFilter, routeCustomerId]
   );
-  const appointmentsQuery = trpc.nexo.appointments.list.useQuery(
+  const appointmentsQuery = trpc.appointments.list.useQuery(
     appointmentListInput,
     { enabled: isAuthenticated, retry: false }
   );
-  const customersQuery = trpc.nexo.customers.list.useQuery(undefined, {
+  const customersQuery = trpc.customers.list.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
   });
@@ -148,7 +148,7 @@ export default function AppointmentsPage() {
     enabled: isAuthenticated,
     retry: false,
   });
-  const serviceOrdersQuery = trpc.nexo.serviceOrders.list.useQuery(
+  const serviceOrdersQuery = trpc.serviceOrders.list.useQuery(
     { page: 1, limit: 100 },
     { enabled: isAuthenticated, retry: false }
   );
@@ -266,7 +266,7 @@ export default function AppointmentsPage() {
     setOpenModal(true);
   }, [routeAction, routeAppointmentId, selected]);
 
-  const timelineQuery = trpc.nexo.timeline.listByCustomer.useQuery(
+  const timelineQuery = trpc.timeline.listByCustomer.useQuery(
     { customerId: selected?.customerId ?? "", limit: 25 },
     { enabled: isAuthenticated && Boolean(selected?.customerId), retry: false }
   );
@@ -274,8 +274,8 @@ export default function AppointmentsPage() {
     () => normalizeArrayPayload<any>(timelineQuery.data),
     [timelineQuery.data]
   );
-  const createMutation = trpc.nexo.appointments.create.useMutation();
-  const updateMutation = trpc.nexo.appointments.update.useMutation();
+  const createMutation = trpc.appointments.create.useMutation();
+  const updateMutation = trpc.appointments.update.useMutation();
   const assigneeWarningTelemetry = useAssigneeWarningTelemetry("APPOINTMENT");
   const [form, setForm] = useState({
     customerId: "",
@@ -359,7 +359,7 @@ export default function AppointmentsPage() {
           notes: form.notes.trim() || undefined,
         });
       }
-      await utils.nexo.appointments.list.invalidate();
+      await utils.appointments.list.invalidate();
       setSuccessMessage(
         editing
           ? "Agendamento atualizado com sucesso."
@@ -380,7 +380,7 @@ export default function AppointmentsPage() {
         status,
         expectedUpdatedAt: appointment?.updatedAt ?? undefined,
       });
-      await utils.nexo.appointments.list.invalidate();
+      await utils.appointments.list.invalidate();
       setSuccessMessage(
         status === "CONFIRMED"
           ? "Agendamento confirmado."
@@ -1047,7 +1047,7 @@ export default function AppointmentsPage() {
         onClose={() => setOpenServiceOrderModal(false)}
         onSuccess={() => {
           setSuccessMessage("O.S. criada com sucesso.");
-          void utils.nexo.serviceOrders.list.invalidate({
+          void utils.serviceOrders.list.invalidate({
             page: 1,
             limit: 100,
           });

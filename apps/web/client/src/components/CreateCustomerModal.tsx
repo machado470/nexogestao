@@ -53,7 +53,7 @@ export default function CreateCustomerModal({
 
   const utils = trpc.useUtils();
   const { track } = useProductAnalytics();
-  const createCustomer = trpc.nexo.customers.create.useMutation();
+  const createCustomer = trpc.customers.create.useMutation();
 
   useCriticalActionGuard({
     isPending: createCustomer.isPending,
@@ -118,7 +118,7 @@ export default function CreateCustomerModal({
       ? parsed.data.cpfCnpj.replace(/\D/g, "")
       : "";
 
-    const previousCustomers = utils.nexo.customers.list.getData(undefined);
+    const previousCustomers = utils.customers.list.getData(undefined);
 
     try {
       const tempId = `temp-customer-${Date.now()}`;
@@ -134,7 +134,7 @@ export default function CreateCustomerModal({
         createdAt: new Date().toISOString(),
       };
 
-      utils.nexo.customers.list.setData(undefined, (old: any) => {
+      utils.customers.list.setData(undefined, (old: any) => {
         const raw = old as { data?: any[] } | any[] | undefined;
         if (Array.isArray(raw)) return [optimisticCustomer, ...raw];
         if (raw && Array.isArray(raw.data))
@@ -151,7 +151,7 @@ export default function CreateCustomerModal({
         address: parsed.data.address?.trim() ? parsed.data.address.trim() : undefined,
       });
 
-      utils.nexo.customers.list.setData(undefined, (old: any) => {
+      utils.customers.list.setData(undefined, (old: any) => {
         const raw = old as { data?: any[] } | any[] | undefined;
         const applyReplace = (items: any[]) =>
           items.map(item => (String(item?.id) === tempId ? created : item));
@@ -233,7 +233,7 @@ export default function CreateCustomerModal({
       reset();
       await invalidateOperationalGraph(utils, createdId);
     } catch (err: any) {
-      utils.nexo.customers.list.setData(undefined, previousCustomers as any);
+      utils.customers.list.setData(undefined, previousCustomers as any);
       toast.error("Falha ao criar cliente: " + (err?.message ?? "erro"));
       notify.error(
         "Não foi possível criar o cliente",

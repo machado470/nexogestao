@@ -36,8 +36,8 @@ export default function ConfirmEmailPage() {
   const [resendMessage, setResendMessage] = React.useState<string | null>(null);
   const [localError, setLocalError] = React.useState<string | null>(null);
 
-  const verifyMutation = trpc.nexo.auth.verifyEmail.useMutation();
-  const resendMutation = trpc.nexo.auth.resendEmailVerification.useMutation();
+  const verifyMutation = trpc.auth.verifyEmail.useMutation();
+  const resendMutation = trpc.auth.resendEmailVerification.useMutation();
 
   React.useEffect(() => {
     if (!token || verifyMutation.isSuccess || verifyMutation.isPending) return;

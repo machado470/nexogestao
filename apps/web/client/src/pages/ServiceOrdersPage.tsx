@@ -247,15 +247,15 @@ export default function ServiceOrdersPage() {
 
   const utils = trpc.useUtils();
 
-  const serviceOrdersQuery = trpc.nexo.serviceOrders.list.useQuery(
+  const serviceOrdersQuery = trpc.serviceOrders.list.useQuery(
     { page: 1, limit: 500 },
     { retry: false }
   );
-  const customersQuery = trpc.nexo.customers.list.useQuery(
+  const customersQuery = trpc.customers.list.useQuery(
     { page: 1, limit: 500 },
     { retry: false }
   );
-  const appointmentsQuery = trpc.nexo.appointments.list.useQuery(
+  const appointmentsQuery = trpc.appointments.list.useQuery(
     { page: 1, limit: 500 },
     { retry: false }
   );
@@ -264,19 +264,19 @@ export default function ServiceOrdersPage() {
     { retry: false }
   );
   const peopleQuery = trpc.people.list.useQuery(undefined, { retry: false });
-  const timelineQuery = trpc.nexo.timeline.listByServiceOrder.useQuery(
+  const timelineQuery = trpc.timeline.listByServiceOrder.useQuery(
     { serviceOrderId: String(selectedOrderId ?? ""), limit: 20 },
     { enabled: Boolean(selectedOrderId), retry: false }
   );
-  const executionsQuery = trpc.nexo.executions.listByServiceOrder.useQuery(
+  const executionsQuery = trpc.executions.listByServiceOrder.useQuery(
     { serviceOrderId: String(selectedOrderId ?? ""), limit: 20 },
     { enabled: Boolean(selectedOrderId), retry: false }
   );
 
-  const startExecutionMutation = trpc.nexo.executions.start.useMutation();
-  const completeExecutionMutation = trpc.nexo.executions.complete.useMutation();
+  const startExecutionMutation = trpc.executions.start.useMutation();
+  const completeExecutionMutation = trpc.executions.complete.useMutation();
   const generateChargeMutation =
-    trpc.nexo.serviceOrders.generateCharge.useMutation();
+    trpc.serviceOrders.generateCharge.useMutation();
 
   const capabilities = {
     start: Boolean(startExecutionMutation),
@@ -1005,23 +1005,23 @@ export default function ServiceOrdersPage() {
     type: "start" | "complete" | "charge"
   ) => pendingAction?.orderId === orderId && pendingAction.type === type;
 
-  // Contract guard: utils.nexo.executions.listByServiceOrder.invalidate({ serviceOrderId: orderId })
-  // Contract guard: utils.nexo.timeline.listByServiceOrder.invalidate({ serviceOrderId: orderId })
+  // Contract guard: utils.executions.listByServiceOrder.invalidate({ serviceOrderId: orderId })
+  // Contract guard: utils.timeline.listByServiceOrder.invalidate({ serviceOrderId: orderId })
   async function refreshEverything(orderId?: string) {
     await Promise.all([
-      utils.nexo.serviceOrders.list.invalidate(),
+      utils.serviceOrders.list.invalidate(),
       ...(orderId
         ? [
-            utils.nexo.serviceOrders.getById.invalidate({ id: orderId }),
-            utils.nexo.executions.listByServiceOrder.invalidate({
+            utils.serviceOrders.getById.invalidate({ id: orderId }),
+            utils.executions.listByServiceOrder.invalidate({
               serviceOrderId: orderId,
             }),
-            utils.nexo.timeline.listByServiceOrder.invalidate({
+            utils.timeline.listByServiceOrder.invalidate({
               serviceOrderId: orderId,
             }),
           ]
         : []),
-      utils.nexo.timeline.listByOrg.invalidate(),
+      utils.timeline.listByOrg.invalidate(),
       utils.finance.charges.list.invalidate(),
       utils.finance.charges.stats.invalidate(),
     ]);
@@ -1080,7 +1080,7 @@ export default function ServiceOrdersPage() {
       const executionPayload = cachedExecutions.length
         ? cachedExecutions
         : normalizeArrayPayload<any>(
-            await utils.nexo.executions.listByServiceOrder.fetch({
+            await utils.executions.listByServiceOrder.fetch({
               serviceOrderId: orderId,
               limit: 20,
             })
@@ -1101,7 +1101,7 @@ export default function ServiceOrdersPage() {
       });
       await refreshEverything(orderId);
       const updated = normalizeObjectPayload<any>(
-        await utils.nexo.serviceOrders.getById.fetch({ id: orderId })
+        await utils.serviceOrders.getById.fetch({ id: orderId })
       );
       const autoHasCharge =
         Boolean(updated?.financialSummary?.hasCharge) ||

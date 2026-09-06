@@ -121,13 +121,13 @@ export default function CalendarPage() {
   const [teamFilter, setTeamFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const appointmentsQuery = trpc.nexo.appointments.list.useQuery(
+  const appointmentsQuery = trpc.appointments.list.useQuery(
     teamFilter === "all"
       ? { limit: 1000 }
       : { assignedToPersonId: teamFilter, limit: 1000 },
     { enabled: isAuthenticated, retry: false }
   );
-  const customersQuery = trpc.nexo.customers.list.useQuery(undefined, {
+  const customersQuery = trpc.customers.list.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
   });
