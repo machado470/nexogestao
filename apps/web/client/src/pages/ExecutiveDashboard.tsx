@@ -600,23 +600,21 @@ function AttentionRow({
                   : "Monitorar"
             }
           />
-          <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
+          <p className="min-w-0 break-words text-sm font-semibold text-[var(--text-primary)]">
             {compactIncidentTitle(item.title)}
           </p>
         </div>
         <div className="mt-2 grid gap-1 text-xs leading-4 text-[var(--text-secondary)] sm:grid-cols-2">
-          <p>
+          <p className="break-words">
             <strong className="text-[var(--text-primary)]">Razão:</strong>{" "}
             {item.reason}
           </p>
-          <p>
-            Impacto: {item.impact}
-          </p>
+          <p className="break-words">Impacto: {item.impact}</p>
         </div>
       </div>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:flex-col md:items-end">
         {item.primaryValue ? (
-          <strong className="text-2xl font-semibold leading-none text-[var(--text-primary)]">
+          <strong className="max-w-full break-words text-2xl font-semibold leading-none text-[var(--text-primary)]">
             {item.primaryValue}
           </strong>
         ) : null}
@@ -693,8 +691,26 @@ export default function ExecutiveDashboard() {
   // Métricas e alertas formam a leitura mínima. Sinais auxiliares degradam
   // apenas seus próprios blocos e nunca escondem dados operacionais válidos.
   const pageLoading =
-    operationalStateQuery.isLoading && !operationalStateQuery.data;
-  const pageError = kpisQuery.isError && alertsQuery.isError;
+    kpisQuery.isLoading &&
+    alertsQuery.isLoading &&
+    executivePipelineQuery.isLoading &&
+    operationalStateQuery.isLoading &&
+    operationalSignalsQuery.isLoading &&
+    nextBestActionQuery.isLoading &&
+    timelineQuery.isLoading &&
+    pendingWhatsAppApprovalsQuery.isLoading;
+  // Uma falha global só existe quando nenhuma fonte do cockpit pode sustentar
+  // uma seção. Qualquer contrato válido permanece visível e degrada apenas os
+  // blocos que dependem da fonte indisponível.
+  const pageError =
+    kpisQuery.isError &&
+    alertsQuery.isError &&
+    executivePipelineQuery.isError &&
+    operationalStateQuery.isError &&
+    operationalSignalsQuery.isError &&
+    nextBestActionQuery.isError &&
+    timelineQuery.isError &&
+    pendingWhatsAppApprovalsQuery.isError;
   const unavailableSources = [
     kpisQuery.isError ? "KPIs" : null,
     alertsQuery.isError ? "alertas e fila" : null,
@@ -846,8 +862,9 @@ export default function ExecutiveDashboard() {
     {
       label: "Execução em aberto",
       value: String(readNumber(metrics, "openServiceOrders")),
-      context:
-        overdueOrders > 0
+      context: alertsQuery.isError
+        ? `Atrasos indisponíveis nesta leitura. ${completedOrdersTrend}.`
+        : overdueOrders > 0
           ? `${overdueOrders} atrasada(s) exigem ação. ${completedOrdersTrend}.`
           : `Sem atraso retornado. ${completedOrdersTrend}.`,
       cta: "Abrir execução",
@@ -856,11 +873,12 @@ export default function ExecutiveDashboard() {
     },
     {
       label: "Caixa em risco",
-      value: formatCurrencyFromCents(
-        alerts.overdueCharges?.totalAmountCents ?? 0
-      ),
-      context:
-        overdueCharges > 0
+      value: alertsQuery.isError
+        ? "Indisponível"
+        : formatCurrencyFromCents(alerts.overdueCharges?.totalAmountCents ?? 0),
+      context: alertsQuery.isError
+        ? "O contrato oficial de alertas não respondeu; nenhum zero foi presumido."
+        : overdueCharges > 0
           ? `${formatCurrencyFromCents(alerts.overdueCharges?.totalAmountCents ?? 0)} vencidos exigem cobrança. ${overdueChargesTrend}.`
           : `Sem carteira vencida retornada. ${overdueChargesTrend}.`,
       cta: "Abrir cobranças",
@@ -915,51 +933,85 @@ export default function ExecutiveDashboard() {
   const pulseInsights = [
     {
       label: "Receita",
-      keyword: kpisQuery.isError
-        ? "Indisponível"
-        : formatCurrencyFromCents(weeklyRevenueInCents),
+      keyword: kpisQuery.isLoading
+        ? "Carregando"
+        : kpisQuery.isError
+          ? "Indisponível"
+          : formatCurrencyFromCents(weeklyRevenueInCents),
       Icon: WalletCards,
       iconClass: "text-[var(--text-muted)]",
-      text: kpisQuery.isError
-        ? "O contrato oficial de KPIs não respondeu."
-        : "Recebimentos registrados na semana.",
-      trend: kpisQuery.isError ? "Sem leitura oficial" : revenueTrend,
+      text: kpisQuery.isLoading
+        ? "Aguardando a comparação oficial."
+        : kpisQuery.isError
+          ? "O contrato oficial de KPIs não respondeu."
+          : "Recebimentos registrados na semana.",
+      trend: kpisQuery.isLoading
+        ? "Leitura em andamento"
+        : kpisQuery.isError
+          ? "Sem leitura oficial"
+          : revenueTrend,
     },
     {
       label: "Execução",
-      keyword: kpisQuery.isError
-        ? "Indisponível"
-        : `${readNumber(metrics, "openServiceOrders")} O.S. abertas`,
+      keyword: kpisQuery.isLoading
+        ? "Carregando"
+        : kpisQuery.isError
+          ? "Indisponível"
+          : `${readNumber(metrics, "openServiceOrders")} O.S. abertas`,
       Icon: Clock3,
       iconClass: "text-[var(--text-muted)]",
-      text: kpisQuery.isError
-        ? "O contrato oficial de KPIs não respondeu."
-        : "Volume oficial de ordens em aberto.",
-      trend: kpisQuery.isError ? "Sem leitura oficial" : completedOrdersTrend,
+      text: kpisQuery.isLoading
+        ? "Aguardando a comparação oficial."
+        : kpisQuery.isError
+          ? "O contrato oficial de KPIs não respondeu."
+          : "Volume oficial de ordens em aberto.",
+      trend: kpisQuery.isLoading
+        ? "Leitura em andamento"
+        : kpisQuery.isError
+          ? "Sem leitura oficial"
+          : completedOrdersTrend,
     },
     {
       label: "Contato",
-      keyword: kpisQuery.isError
-        ? "Indisponível"
-        : `${failedMessages} falha(s)`,
+      keyword: kpisQuery.isLoading
+        ? "Carregando"
+        : kpisQuery.isError
+          ? "Indisponível"
+          : `${failedMessages} falha(s)`,
       Icon: MessageSquareWarning,
       iconClass: "text-[var(--text-muted)]",
-      text: kpisQuery.isError
-        ? "O contrato oficial de KPIs não respondeu."
-        : "Falhas registradas no canal oficial.",
-      trend: kpisQuery.isError ? "Sem leitura oficial" : failedMessagesTrend,
+      text: kpisQuery.isLoading
+        ? "Aguardando a comparação oficial."
+        : kpisQuery.isError
+          ? "O contrato oficial de KPIs não respondeu."
+          : "Falhas registradas no canal oficial.",
+      trend: kpisQuery.isLoading
+        ? "Leitura em andamento"
+        : kpisQuery.isError
+          ? "Sem leitura oficial"
+          : failedMessagesTrend,
     },
     {
       label: "Cobranças",
-      keyword: alertsQuery.isError
-        ? "Indisponível"
-        : formatCurrencyFromCents(alerts.overdueCharges?.totalAmountCents ?? 0),
+      keyword: alertsQuery.isLoading
+        ? "Carregando"
+        : alertsQuery.isError
+          ? "Indisponível"
+          : formatCurrencyFromCents(
+              alerts.overdueCharges?.totalAmountCents ?? 0
+            ),
       Icon: WalletCards,
       iconClass: "text-[var(--text-muted)]",
-      text: alertsQuery.isError
-        ? "O contrato oficial de alertas não respondeu."
-        : "Valor vencido retornado pelo contrato.",
-      trend: alertsQuery.isError ? "Sem leitura oficial" : overdueChargesTrend,
+      text: alertsQuery.isLoading
+        ? "Aguardando a comparação oficial."
+        : alertsQuery.isError
+          ? "O contrato oficial de alertas não respondeu."
+          : "Valor vencido retornado pelo contrato.",
+      trend: alertsQuery.isLoading
+        ? "Leitura em andamento"
+        : alertsQuery.isError
+          ? "Sem leitura oficial"
+          : overdueChargesTrend,
     },
   ];
   const statusLabel = executiveDashboardStateLabel[dashboardState];
@@ -972,19 +1024,26 @@ export default function ExecutiveDashboard() {
           ? "Visão operacional"
           : "Visão de consulta";
   const executiveContactSummary = [
-    kpisQuery.isError
-      ? "contato e falhas indisponíveis"
-      : `${readNumber(asRecord(metrics.whatsappSignals), "customersNoResponse")} aguardando resposta`,
-    pendingWhatsAppApprovalsQuery.isError
-      ? "aprovações indisponíveis"
-      : `${pendingWhatsAppApprovals.length} aprovações pendentes`,
-    kpisQuery.isError ? null : `${failedMessages} falhas relevantes`,
+    kpisQuery.isLoading
+      ? "contato e falhas carregando"
+      : kpisQuery.isError
+        ? "contato e falhas indisponíveis"
+        : `${readNumber(asRecord(metrics.whatsappSignals), "customersNoResponse")} aguardando resposta`,
+    pendingWhatsAppApprovalsQuery.isLoading
+      ? "aprovações carregando"
+      : pendingWhatsAppApprovalsQuery.isError
+        ? "aprovações indisponíveis"
+        : `${pendingWhatsAppApprovals.length} aprovações pendentes`,
+    kpisQuery.isLoading || kpisQuery.isError
+      ? null
+      : `${failedMessages} falhas relevantes`,
   ]
     .filter((item): item is string => item !== null)
     .join(" · ");
   return (
     <AppPageShell className="gap-3 sm:gap-4">
       <AppOperationalHeader
+        className="px-4 sm:px-6"
         density="compact"
         title="Operação hoje"
         description="Decida primeiro o que destrava execução e caixa."
@@ -1211,7 +1270,7 @@ export default function ExecutiveDashboard() {
                     icon={<Icon className="h-4 w-4" />}
                     ctaLabel={cta}
                     onClick={() => navigate(path)}
-                    className="rounded-none border-0 bg-[var(--surface-base)] shadow-none"
+                    className="rounded-none border-0 bg-[var(--surface-base)]"
                   />
                 ))}
               </div>
@@ -1232,7 +1291,7 @@ export default function ExecutiveDashboard() {
               />
             ) : executivePipelineQuery.isLoading ? (
               <AppPageLoadingState title="Carregando fluxo operacional" />
-            ) : (
+            ) : flow.length > 0 ? (
               <NexoOperationalPipeline
                 title="Etapas operacionais"
                 subtitle="Volumes, estados e justificativas recebidos do contrato autoritativo do backend."
@@ -1245,6 +1304,11 @@ export default function ExecutiveDashboard() {
                   hrefLabel: stage.action,
                   onClick: () => navigate(stage.path),
                 }))}
+              />
+            ) : (
+              <AppPageEmptyState
+                title="Fluxo operacional sem etapas retornadas"
+                description="O contrato oficial respondeu sem etapas para esta leitura; nenhuma etapa ou sequência foi fabricada no navegador."
               />
             )}
           </AppSectionBlock>
@@ -1281,10 +1345,10 @@ export default function ExecutiveDashboard() {
                               label={presentationStatusLabel(item.status)}
                             />
                           </div>
-                          <strong className="mt-1 block truncate text-sm text-[var(--text-primary)]">
+                          <strong className="mt-1 block break-words text-sm text-[var(--text-primary)]">
                             {item.entity}
                           </strong>
-                          <p className="mt-0.5 line-clamp-1 text-xs">
+                          <p className="mt-0.5 line-clamp-3 break-words text-xs">
                             {item.context}
                           </p>
                           <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-[var(--text-muted)]">
@@ -1420,12 +1484,22 @@ export default function ExecutiveDashboard() {
                 onDetails={() => navigate("/governance")}
               />
 
-              <NexoEvidenceTimeline
-                className="h-full"
-                events={timelineEvents}
-                fullTimelineLabel="Ver Timeline"
-                onFullTimeline={() => navigate("/timeline")}
-              />
+              {timelineQuery.isLoading ? (
+                <AppPageLoadingState title="Carregando evidências oficiais" />
+              ) : timelineQuery.isError ? (
+                <AppPageErrorState
+                  title="Evidências indisponíveis"
+                  description="A Timeline oficial não pôde ser consultada; ausência de prova não foi apresentada como histórico vazio."
+                  onAction={() => void timelineQuery.refetch()}
+                />
+              ) : (
+                <NexoEvidenceTimeline
+                  className="h-full"
+                  events={timelineEvents}
+                  fullTimelineLabel="Ver Timeline"
+                  onFullTimeline={() => navigate("/timeline")}
+                />
+              )}
             </div>
           </AppSectionBlock>
 
@@ -1473,9 +1547,11 @@ export default function ExecutiveDashboard() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-[var(--text-primary)]">
                   Aprovações WhatsApp ·{" "}
-                  {pendingWhatsAppApprovalsQuery.isError
-                    ? "indisponíveis"
-                    : pendingWhatsAppApprovals.length}
+                  {pendingWhatsAppApprovalsQuery.isLoading
+                    ? "carregando"
+                    : pendingWhatsAppApprovalsQuery.isError
+                      ? "indisponíveis"
+                      : pendingWhatsAppApprovals.length}
                 </p>
                 {pendingWhatsAppApprovals.length > 0 ? (
                   <Button
@@ -1489,7 +1565,11 @@ export default function ExecutiveDashboard() {
                   </Button>
                 ) : null}
               </div>
-              {pendingWhatsAppApprovalsQuery.isError ? (
+              {pendingWhatsAppApprovalsQuery.isLoading ? (
+                <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                  Carregando aprovações pendentes.
+                </p>
+              ) : pendingWhatsAppApprovalsQuery.isError ? (
                 <p className="mt-2 text-xs text-[var(--danger)]">
                   Não foi possível carregar aprovações WhatsApp nesta leitura.
                 </p>
@@ -1504,7 +1584,7 @@ export default function ExecutiveDashboard() {
                         navigate(buildWhatsAppExecutionPath(execution))
                       }
                     >
-                      <span>
+                      <span className="min-w-0 break-words">
                         {whatsappActionLabel(execution.suggestedAction)} ·{" "}
                         {formatWhatsAppExecutionDate(execution.createdAt)}
                       </span>

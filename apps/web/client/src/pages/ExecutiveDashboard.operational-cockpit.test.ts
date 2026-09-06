@@ -158,10 +158,19 @@ describe("ExecutiveDashboard decision center", () => {
     expect(source).toContain("ausência de sinal não indica operação");
     expect(source).toContain("saudável.");
     expect(source).toContain("Tentar fontes indisponíveis novamente");
-    expect(source).toContain(
-      "const pageError = kpisQuery.isError && alertsQuery.isError"
+    expect(source).toMatch(
+      /const pageError =[\s\S]*kpisQuery\.isError &&[\s\S]*pendingWhatsAppApprovalsQuery\.isError/
     );
     expect(source).toContain("Tentar próxima ação novamente");
+  });
+
+  it("only promotes loading or error to page scope when every independent source shares that state", () => {
+    expect(source).toMatch(
+      /const pageLoading =[\s\S]*kpisQuery\.isLoading &&[\s\S]*pendingWhatsAppApprovalsQuery\.isLoading/
+    );
+    expect(source).toContain("Evidências indisponíveis");
+    expect(source).toContain("Carregando aprovações pendentes.");
+    expect(source).toContain("nenhum zero foi presumido");
   });
 
   it("degrades independent official contracts without manufacturing empty success", () => {
@@ -177,8 +186,12 @@ describe("ExecutiveDashboard decision center", () => {
   });
 
   it("does not manufacture pulse or WhatsApp zeros when their source fails", () => {
-    expect(source).toContain("keyword: kpisQuery.isError");
-    expect(source).toContain("keyword: alertsQuery.isError");
+    expect(source).toMatch(
+      /keyword: kpisQuery\.isLoading[\s\S]{0,100}kpisQuery\.isError/
+    );
+    expect(source).toMatch(
+      /keyword: alertsQuery\.isLoading[\s\S]{0,100}alertsQuery\.isError/
+    );
     expect(source).toContain('"contato e falhas indisponíveis"');
     expect(source).toContain('"aprovações indisponíveis"');
   });
