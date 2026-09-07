@@ -2,6 +2,32 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { authedGet, authedPatch, authedPost, type NexoContext } from "../_core/nexoTransport";
 
+const executionPayloadFields = {
+  notes: z.string().optional(),
+  checklist: z.array(z.json()).optional(),
+  attachments: z.array(z.json()).optional(),
+};
+
+const executionOutput = z.object({
+  id: z.uuid(),
+  orgId: z.uuid(),
+  serviceOrderId: z.uuid(),
+  customerId: z.uuid(),
+  executorPersonId: z.uuid().nullable(),
+  startedAt: z.iso.datetime().nullable(),
+  endedAt: z.iso.datetime().nullable(),
+  notes: z.string().nullable(),
+  checklist: z.array(z.json()),
+  attachments: z.array(z.json()),
+  status: z.string().min(1),
+  amountCents: z.number().int().nullable(),
+  dueDate: z.iso.datetime().nullable(),
+  mode: z.string().min(1),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  idempotent: z.boolean().optional(),
+}).strict();
+
 export const executionsRouter = router({
     listByServiceOrder: protectedProcedure
       .input(z.object({ serviceOrderId: z.string(), limit: z.number().optional() }))
@@ -14,19 +40,21 @@ export const executionsRouter = router({
         );
       }),
 
-    start: protectedProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      return authedPost(ctx as NexoContext, "/executions/start", input);
-    }),
+    start: protectedProcedure
+      .input(z.object({ serviceOrderId: z.uuid(), ...executionPayloadFields }).strict())
+      .output(executionOutput)
+      .mutation(async ({ ctx, input }) => {
+        return authedPost(ctx as NexoContext, "/executions/start", input);
+      }),
 
     complete: protectedProcedure
       .input(
         z.object({
-          executionId: z.string().min(1),
-          notes: z.string().optional(),
-          checklist: z.array(z.any()).optional(),
-          attachments: z.array(z.any()).optional(),
-        })
+          executionId: z.uuid(),
+          ...executionPayloadFields,
+        }).strict()
       )
+      .output(executionOutput)
       .mutation(async ({ ctx, input }) => {
         const id = input.executionId;
         if (!id || typeof id !== "string") {
