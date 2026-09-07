@@ -6,67 +6,82 @@ const settingsPageSource = readFileSync(
   "utf8"
 );
 
-describe("SettingsPage organization settings contract", () => {
-  it("envia name e timezone no payload canônico", () => {
+describe("SettingsPage golden-standard contract", () => {
+  it("uses the canonical page and form primitives", () => {
+    for (const primitive of [
+      "AppPageShell",
+      "AppOperationalHeader",
+      "AppSectionBlock",
+      "AppForm",
+      "AppField",
+      "AppInput",
+      "AppSelect",
+      "AppFormActions",
+      "AppPageLoadingState",
+      "AppPageErrorState",
+    ]) {
+      expect(settingsPageSource).toContain(primitive);
+    }
+
+    expect(settingsPageSource).not.toContain("OperationalPanel");
+    expect(settingsPageSource).not.toContain("<input");
+    expect(settingsPageSource).not.toContain("<select");
+  });
+
+  it("edits only fields supported by the organization settings contract", () => {
     expect(settingsPageSource).toContain(
-      "updateMutation.mutate({ name, timezone })"
+      "updateMutation.mutate({ name, timezone, currency })"
     );
+    expect(settingsPageSource).toContain("value={settings.slug}");
+    expect(settingsPageSource).toContain("readOnly");
+
+    for (const unsupported of [
+      "CNPJ",
+      "logo",
+      "juros",
+      "multa",
+      "webhook",
+      "threshold",
+      "risk",
+      "score",
+      "policy",
+    ]) {
+      expect(settingsPageSource.toLowerCase()).not.toContain(
+        unsupported.toLowerCase()
+      );
+    }
   });
 
-  it("carrega name após reload sem fallback ambíguo para organizationName", () => {
+  it("does not turn client storage or administrative diagnostics into settings", () => {
+    expect(settingsPageSource).not.toContain("localStorage");
+    expect(settingsPageSource).not.toContain("sessionStorage");
+    expect(settingsPageSource).not.toContain("administrativeSummary");
+    expect(settingsPageSource).not.toContain("activeMembers");
+    expect(settingsPageSource).not.toContain("pendingInvite");
+    expect(settingsPageSource).not.toContain("Date.now");
+    expect(settingsPageSource).not.toContain("new Date");
+  });
+
+  it("keeps loading, unavailable, saving, failure and confirmed-success states explicit", () => {
+    expect(settingsPageSource).toContain("settingsQuery.isLoading");
+    expect(settingsPageSource).toContain("settingsQuery.isError");
+    expect(settingsPageSource).toContain("updateMutation.isPending");
+    expect(settingsPageSource).toContain("updateMutation.isError");
+    expect(settingsPageSource).toContain("updateMutation.isSuccess");
     expect(settingsPageSource).toContain(
-      'setName(String(settings?.name ?? ""))'
+      "await utils.settings.get.invalidate()"
     );
-    expect(settingsPageSource).not.toContain("organizationName");
-  });
-});
-
-describe("SettingsPage internal page architecture contract", () => {
-  it("usa o shell canônico sem PageWrapper legado", () => {
-    expect(settingsPageSource).toContain("<AppPageShell>");
-    expect(settingsPageSource).toContain("<AppOperationalHeader");
-    expect(settingsPageSource).not.toContain("PageWrapper");
-  });
-});
-
-describe("SettingsPage operational control center contract", () => {
-  it("usa componentes operacionais para o centro de controle", () => {
-    expect(settingsPageSource).toContain("Centro de controle do sistema");
-    expect(settingsPageSource).toContain("<OperationalPanel");
-    expect(settingsPageSource).toContain("<OperationalSectionGrid");
-    expect(settingsPageSource).toContain("<OperationalActionPanel");
-    expect(settingsPageSource).toContain("<OperationalPriorityItem");
-  });
-});
-
-describe("SettingsPage authoritative administrative contract", () => {
-  it("consome somente o resumo administrativo para diagnóstico", () => {
-    expect(settingsPageSource).toContain(
-      "settings.administrativeSummary.useQuery"
-    );
-    expect(settingsPageSource).not.toContain("integrations.readiness");
-    expect(settingsPageSource).not.toContain("invites.members");
+    expect(settingsPageSource).toContain('role="alert"');
+    expect(settingsPageSource).toContain('role="status"');
   });
 
-  it.each([
-    "configured(readiness",
-    "hasAnySettingValue",
-    "statusFromConfigured",
-    "stripeReady",
-    "whatsappReady",
-    "permissionsConfigured",
-    "integrationsConfigured",
-    "sectionCards",
-    "members.length",
-  ])("não reintroduz decisão paralela: %s", forbidden => {
-    expect(settingsPageSource).not.toContain(forbidden);
-  });
-
-  it("não inventa timezone saudável e preserva retry", () => {
-    expect(settingsPageSource).toContain(
-      'setTimezone(String(settings?.timezone ?? ""))'
-    );
-    expect(settingsPageSource).toContain("summaryQuery.refetch()");
-    expect(settingsPageSource).toContain("Sua sessão continua ativa");
+  it("associates text controls with visible labels and preserves responsive stacking", () => {
+    expect(settingsPageSource).toContain('htmlFor="settings-name"');
+    expect(settingsPageSource).toContain('id="settings-name"');
+    expect(settingsPageSource).toContain('htmlFor="settings-timezone"');
+    expect(settingsPageSource).toContain('id="settings-timezone"');
+    expect(settingsPageSource).toContain('ariaLabel="Moeda operacional"');
+    expect(settingsPageSource).toContain("<AppFieldGroup>");
+    expect(settingsPageSource).toContain("flex flex-wrap justify-end");
   });
 });

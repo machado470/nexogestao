@@ -1,323 +1,294 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { Building2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
+
 import {
-  AppDataTable,
+  AppField,
+  AppFieldGroup,
+  AppForm,
+  AppFormActions,
+  AppInput,
+  AppSelect,
+} from "@/components/app-system";
+import {
   AppOperationalHeader,
+  AppPageErrorState,
+  AppPageLoadingState,
   AppPageShell,
+  AppSectionBlock,
   AppStatusBadge,
 } from "@/components/internal-page-system";
-import {
-  OperationalActionPanel,
-  OperationalInnerCard,
-  OperationalPanel,
-  OperationalPriorityItem,
-  OperationalSectionGrid,
-} from "@/components/operational";
-import { trpc } from "@/lib/trpc";
-import { normalizeObjectPayload } from "@/lib/query-helpers";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { normalizeObjectPayload } from "@/lib/query-helpers";
+import { trpc } from "@/lib/trpc";
 
-type OfficialState =
-  | "CONFIGURED"
-  | "INCOMPLETE"
-  | "NOT_CONFIGURED"
-  | "NOT_EVALUATED";
-type Summary = {
-  evaluatedAt: string;
-  organization: { name: string | null; timezone: string | null };
-  sections: Array<{
-    key: string;
-    label: string;
-    state: OfficialState;
-    available: boolean;
-    reason: string;
-    target: string | null;
-  }>;
-  pending: Array<{
-    key: string;
-    label: string;
-    state: OfficialState;
-    reason: string;
-    target: string | null;
-    recommendedAction: string;
-  }>;
-  access: {
-    available: boolean;
-    activeMembers: Array<{
-      id: string;
-      email: string;
-      role: string;
-      person?: { name?: string | null } | null;
-    }>;
-    pendingInviteCount: number;
-  };
+type Currency = "BRL" | "USD" | "EUR";
+
+type OrganizationSettings = {
+  id: string;
+  name: string;
+  slug: string;
+  timezone: string;
+  currency: Currency;
 };
 
-const stateLabel: Record<OfficialState, string> = {
-  CONFIGURED: "Configurado",
-  INCOMPLETE: "Incompleto",
-  NOT_CONFIGURED: "Não configurado",
-  NOT_EVALUATED: "Não avaliado",
-};
+const currencyOptions = [
+  { value: "BRL", label: "Real brasileiro (BRL)" },
+  { value: "USD", label: "Dólar americano (USD)" },
+  { value: "EUR", label: "Euro (EUR)" },
+];
 
 export default function SettingsPage() {
-  const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
   const settingsQuery = trpc.settings.get.useQuery(undefined, {
     enabled: isAuthenticated,
     retry: false,
   });
-  const summaryQuery = trpc.settings.administrativeSummary.useQuery(
-    undefined,
-    { enabled: isAuthenticated, retry: false }
+  const settings = normalizeObjectPayload<OrganizationSettings>(
+    settingsQuery.data
   );
-  const utils = trpc.useUtils();
-  const settings = normalizeObjectPayload<{
-    name?: string | null;
-    timezone?: string | null;
-  }>(settingsQuery.data);
-  const summary = normalizeObjectPayload<Summary>(summaryQuery.data);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState("");
+  const [currency, setCurrency] = useState<Currency>("BRL");
 
   useEffect(() => {
-    if (!settingsQuery.data) return;
-    setName(String(settings?.name ?? ""));
-    setTimezone(String(settings?.timezone ?? ""));
-  }, [settings?.name, settings?.timezone, settingsQuery.data]);
+    if (!settings) return;
+    setName(settings.name);
+    setTimezone(settings.timezone);
+    setCurrency(settings.currency);
+  }, [settings?.currency, settings?.name, settings?.timezone]);
 
-  const persistedName = String(settings?.name ?? "");
-  const persistedTimezone = String(settings?.timezone ?? "");
-  const unsaved = name !== persistedName || timezone !== persistedTimezone;
   const updateMutation = trpc.settings.update.useMutation({
     onSuccess: async () => {
-      toast.success("Configurações da empresa salvas.");
-      await Promise.all([
-        utils.settings.get.invalidate(),
-        utils.settings.administrativeSummary.invalidate(),
-      ]);
+      await utils.settings.get.invalidate();
+      toast.success("Configurações da organização salvas.");
     },
-    onError: error =>
-      toast.error(error.message || "Não foi possível salvar as configurações."),
+    onError: error => {
+      toast.error(error.message || "Não foi possível salvar as configurações.");
+    },
   });
 
-  const navigateTo = (target: string | null) => {
-    if (!target) return;
-    if (target.startsWith("/settings#")) {
-      document.getElementById(target.split("#")[1])?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      return;
-    }
-    navigate(target);
+  const hasChanges = Boolean(
+    settings &&
+    (name !== settings.name ||
+      timezone !== settings.timezone ||
+      currency !== settings.currency)
+  );
+  const hasRequiredValues = name.trim() !== "" && timezone.trim() !== "";
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!hasChanges || !hasRequiredValues || updateMutation.isPending) return;
+    updateMutation.mutate({ name, timezone, currency });
   };
-  const retry = () => void summaryQuery.refetch();
-  const nextAction = summary?.pending[0] ?? null;
+
+  const resetForm = () => {
+    if (!settings) return;
+    setName(settings.name);
+    setTimezone(settings.timezone);
+    setCurrency(settings.currency);
+    updateMutation.reset();
+  };
 
   return (
-    <AppPageShell>
+    <AppPageShell className="gap-4 p-3 md:p-5">
       <AppOperationalHeader
         title="Configurações"
-        description="Centro de Controle do Nexo com diagnóstico administrativo oficial."
+        description="Defina os dados que orientam o funcionamento desta organização."
         primaryAction={
           <Button
-            disabled={!unsaved || updateMutation.isPending}
-            onClick={() => updateMutation.mutate({ name, timezone })}
+            type="submit"
+            form="organization-settings-form"
+            disabled={
+              !hasChanges || !hasRequiredValues || updateMutation.isPending
+            }
           >
-            {updateMutation.isPending ? "Salvando..." : "Salvar empresa"}
+            {updateMutation.isPending ? "Salvando..." : "Salvar alterações"}
           </Button>
         }
         secondaryActions={
-          <Button variant="outline" onClick={retry}>
-            Atualizar leitura
+          <Button
+            type="button"
+            variant="outline"
+            disabled={settingsQuery.isFetching || updateMutation.isPending}
+            onClick={() => void settingsQuery.refetch()}
+          >
+            <RefreshCw className="mr-2 size-4" aria-hidden="true" />
+            Atualizar
           </Button>
         }
         contextChips={
-          <>
-            <AppStatusBadge
-              label={unsaved ? "Alterações não salvas" : "Sem alterações"}
-            />
-            <AppStatusBadge
-              label={
-                summary
-                  ? `${summary.pending.length} pendência(s)`
-                  : "Não avaliado"
-              }
-            />
-          </>
+          settings ? (
+            <>
+              <AppStatusBadge label={settings.name} />
+              {hasChanges ? (
+                <AppStatusBadge label="Alterações não salvas" />
+              ) : null}
+            </>
+          ) : undefined
         }
       />
 
-      <OperationalPanel
-        title="Centro de controle do sistema"
-        subtitle="Estados fornecidos pelo resumo administrativo oficial."
-        variant="hero"
+      <AppSectionBlock
+        title="Organização"
+        subtitle="Nome, fuso horário e moeda são as configurações atualmente persistidas para toda a organização."
       >
-        {summaryQuery.isError ? (
-          <OperationalPriorityItem
-            tone="medium"
-            title="Diagnóstico administrativo indisponível"
-            description="Sua sessão continua ativa. Tente carregar o resumo novamente."
-            action={<Button onClick={retry}>Tentar novamente</Button>}
+        {settingsQuery.isLoading ? (
+          <AppPageLoadingState
+            title="Carregando configurações"
+            description="Consultando os valores persistidos da organização."
           />
-        ) : !summary ? (
-          <OperationalPriorityItem
-            tone="low"
-            title="Diagnóstico ainda não avaliado"
-            description="Aguardando o resumo administrativo oficial."
+        ) : settingsQuery.isError ? (
+          <AppPageErrorState
+            title="Configurações indisponíveis"
+            description="A fonte oficial não respondeu. Nenhum valor padrão foi presumido."
+            actionLabel="Tentar novamente"
+            onAction={() => void settingsQuery.refetch()}
+          />
+        ) : !settings ? (
+          <AppPageErrorState
+            title="Configurações não retornadas"
+            description="A consulta terminou sem dados utilizáveis da organização."
+            actionLabel="Consultar novamente"
+            onAction={() => void settingsQuery.refetch()}
           />
         ) : (
-          <OperationalSectionGrid>
-            {summary.sections.map(section => (
-              <OperationalInnerCard key={section.key} interactive>
-                <div className="flex min-h-[132px] flex-col">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">
-                        {section.label}
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
-                        {section.reason}
-                      </p>
-                    </div>
-                    <AppStatusBadge
-                      label={
-                        section.available
-                          ? stateLabel[section.state]
-                          : "Indisponível"
-                      }
-                    />
-                  </div>
-                  {section.target && (
-                    <Button
-                      className="mt-auto self-start"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => navigateTo(section.target)}
-                    >
-                      Revisar
-                    </Button>
-                  )}
-                </div>
-              </OperationalInnerCard>
-            ))}
-          </OperationalSectionGrid>
+          <AppForm id="organization-settings-form" onSubmit={handleSubmit}>
+            <AppFieldGroup>
+              <AppField label="Nome da organização" htmlFor="settings-name">
+                <AppInput
+                  id="settings-name"
+                  name="name"
+                  autoComplete="organization"
+                  value={name}
+                  onChange={event => {
+                    setName(event.target.value);
+                    updateMutation.reset();
+                  }}
+                  aria-invalid={name.trim() === ""}
+                  aria-describedby={
+                    name.trim() === "" ? "settings-name-error" : undefined
+                  }
+                  disabled={updateMutation.isPending}
+                  required
+                />
+                {name.trim() === "" ? (
+                  <p
+                    id="settings-name-error"
+                    className="text-xs text-destructive"
+                  >
+                    Informe o nome da organização.
+                  </p>
+                ) : null}
+              </AppField>
+
+              <AppField
+                label="Fuso horário"
+                htmlFor="settings-timezone"
+                hint="Usado para apresentar datas e horários da operação."
+              >
+                <AppInput
+                  id="settings-timezone"
+                  name="timezone"
+                  value={timezone}
+                  onChange={event => {
+                    setTimezone(event.target.value);
+                    updateMutation.reset();
+                  }}
+                  placeholder="America/Sao_Paulo"
+                  aria-invalid={timezone.trim() === ""}
+                  aria-describedby={
+                    timezone.trim() === ""
+                      ? "settings-timezone-error"
+                      : undefined
+                  }
+                  disabled={updateMutation.isPending}
+                  required
+                />
+                {timezone.trim() === "" ? (
+                  <p
+                    id="settings-timezone-error"
+                    className="text-xs text-destructive"
+                  >
+                    Informe o fuso horário.
+                  </p>
+                ) : null}
+              </AppField>
+
+              <AppField
+                label="Moeda operacional"
+                htmlFor="settings-currency"
+                hint="Define a moeda usada nos valores financeiros da organização."
+              >
+                <AppSelect
+                  value={currency}
+                  onValueChange={value => {
+                    setCurrency(value as Currency);
+                    updateMutation.reset();
+                  }}
+                  options={currencyOptions}
+                  ariaLabel="Moeda operacional"
+                />
+              </AppField>
+
+              <AppField
+                label="Identificador da organização"
+                htmlFor="settings-slug"
+                hint="Informação somente leitura."
+              >
+                <AppInput
+                  id="settings-slug"
+                  value={settings.slug}
+                  readOnly
+                  aria-readonly="true"
+                />
+              </AppField>
+            </AppFieldGroup>
+
+            {updateMutation.isError ? (
+              <p role="alert" className="text-sm text-destructive">
+                A alteração não foi salva. Revise os dados e tente novamente.
+              </p>
+            ) : null}
+            {updateMutation.isSuccess && !hasChanges ? (
+              <p role="status" className="text-sm text-[var(--success)]">
+                Configurações salvas e confirmadas pela fonte oficial.
+              </p>
+            ) : null}
+
+            <AppFormActions className="justify-between border-t border-[var(--border-subtle)] pt-4">
+              <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--text-muted)]">
+                <Building2 className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">{settings.slug}</span>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetForm}
+                  disabled={!hasChanges || updateMutation.isPending}
+                >
+                  Descartar alterações
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    !hasChanges ||
+                    !hasRequiredValues ||
+                    updateMutation.isPending
+                  }
+                >
+                  {updateMutation.isPending
+                    ? "Salvando..."
+                    : "Salvar alterações"}
+                </Button>
+              </div>
+            </AppFormActions>
+          </AppForm>
         )}
-      </OperationalPanel>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <OperationalPanel
-          title="Próxima configuração recomendada"
-          variant="compact"
-        >
-          {nextAction ? (
-            <OperationalActionPanel
-              title={nextAction.recommendedAction}
-              description={nextAction.reason}
-              impact="priorização definida pelo diagnóstico administrativo oficial"
-              safety="a página apenas navega para o alvo oficial"
-              tone={
-                nextAction.state === "NOT_EVALUATED" ? "warning" : "success"
-              }
-              primaryAction={{
-                label: nextAction.recommendedAction,
-                onClick: () => navigateTo(nextAction.target),
-              }}
-            />
-          ) : (
-            <OperationalPriorityItem
-              tone="low"
-              title={summary ? "Sem pendências oficiais" : "Não avaliado"}
-              description={
-                summary
-                  ? "O resumo oficial não retornou pendências."
-                  : "Nenhuma recomendação pode ser exibida sem o resumo oficial."
-              }
-            />
-          )}
-        </OperationalPanel>
-        <OperationalPanel title="Pendências de configuração" variant="compact">
-          {summary?.pending.map(item => (
-            <OperationalPriorityItem
-              key={item.key}
-              tone={item.state === "NOT_EVALUATED" ? "medium" : "high"}
-              title={item.label}
-              description={item.reason}
-              action={<AppStatusBadge label={stateLabel[item.state]} />}
-            />
-          )) ?? (
-            <p className="text-sm text-[var(--text-muted)]">Não disponível.</p>
-          )}
-        </OperationalPanel>
-      </div>
-
-      <div id="settings-company-form">
-        <OperationalPanel
-          title="Empresa"
-          subtitle="Campos persistidos explicitamente."
-          variant="compact"
-        >
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-medium text-[var(--text-secondary)]">
-              Empresa
-              <input
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                value={name}
-                onChange={event => setName(event.target.value)}
-                placeholder="Nome da empresa"
-              />
-            </label>
-            <label className="text-xs font-medium text-[var(--text-secondary)]">
-              Fuso horário
-              <input
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                value={timezone}
-                onChange={event => setTimezone(event.target.value)}
-                placeholder="America/Sao_Paulo"
-              />
-            </label>
-          </div>
-        </OperationalPanel>
-      </div>
-
-      <OperationalPanel
-        title="Usuários e permissões"
-        subtitle="Resumo oficial de acesso do tenant."
-        variant="compact"
-      >
-        <AppDataTable className="min-w-[720px]">
-          <thead>
-            <tr>
-              <th className="px-3 py-2 text-left">Usuário</th>
-              <th className="px-3 py-2 text-left">Função</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary?.access.activeMembers.map(member => (
-              <tr key={member.id} className="border-t">
-                <td className="px-3 py-3">
-                  {member.person?.name ?? member.email}
-                </td>
-                <td className="px-3 py-3">{member.role}</td>
-              </tr>
-            )) ?? (
-              <tr>
-                <td className="px-3 py-4" colSpan={2}>
-                  Não disponível.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </AppDataTable>
-        <p className="mt-3 text-xs text-[var(--text-secondary)]">
-          {summary
-            ? `${summary.access.pendingInviteCount} convite(s) pendente(s).`
-            : "Convites não avaliados."}
-        </p>
-      </OperationalPanel>
+      </AppSectionBlock>
     </AppPageShell>
   );
 }
