@@ -20,6 +20,7 @@ import { CustomersService } from './customers.service'
 import { CustomersOperationalSummaryService } from './customers-operational-summary.service'
 import { CreateCustomerDto } from './dto/create-customer.dto'
 import { UpdateCustomerDto } from './dto/update-customer.dto'
+import { ListCustomersQueryDto } from './dto/list-customers-query.dto'
 import { QuotasService } from '../quotas/quotas.service'
 
 @Controller('customers')
@@ -33,7 +34,7 @@ export class CustomersController {
 
   @Get()
   @Roles('ADMIN', 'MANAGER', 'STAFF', 'VIEWER')
-  list(@Org() orgId: string, @Query() query: any) {
+  list(@Org() orgId: string, @Query() query: ListCustomersQueryDto) {
     return this.customers.list(orgId, query)
   }
 
