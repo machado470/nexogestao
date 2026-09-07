@@ -274,9 +274,13 @@ const forbiddenOperationalVisualPatterns = [
   "blur-",
 ];
 function hasDirectCardClass(source) {
-  const classNamePattern = /className=[{]?["'`]([^"'`]*)["'`]/g;
+  // Restrict the heuristic to native containers. Previously any `p-4` or
+  // `rounded-xl` passed to a canonical primitive (for example AppFiltersBar)
+  // made the whole page look as if it contained an improvised card.
+  const nativeContainerClassNamePattern =
+    /<(?:article|aside|div|section)\b[^>]*\bclassName=[{]?["'`]([^"'`]*)["'`]/g;
 
-  return Array.from(source.matchAll(classNamePattern)).some(([, className]) =>
+  return Array.from(source.matchAll(nativeContainerClassNamePattern)).some(([, className]) =>
     className
       .split(/\s+/)
       .filter(Boolean)
