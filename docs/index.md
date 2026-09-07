@@ -1,7 +1,7 @@
 ---
 status: current
 owner: nexogestao
-last_reviewed: 2026-09-06
+last_reviewed: 2026-09-07
 source_of_truth: true
 supersedes:
 ---
@@ -17,7 +17,7 @@ Status: `current` descreve a referência vigente; `review` explicita conteúdo �
 | Documento                         | Finalidade                           | Status  | source_of_truth | Substitui / substituído por                                     | Última revisão |
 | --------------------------------- | ------------------------------------ | ------- | --------------- | --------------------------------------------------------------- | -------------- |
 | [README](../README.md)            | Entrada curta, requisitos e comandos | current | true            | substitui README mínimo anterior                                | 2026-09-06     |
-| [PROJECT_STATE](PROJECT_STATE.md) | Estado, prioridades e próxima fase   | current | true            | substitui `STATUS.md` e `O_QUE_FALTA.md` (arquivados em audits) | 2026-09-06     |
+| [PROJECT_STATE](PROJECT_STATE.md) | Estado, prioridades e próxima fase   | current | true            | substitui `STATUS.md` e `O_QUE_FALTA.md` (arquivados em audits) | 2026-09-07     |
 
 ## Arquitetura e contratos
 
