@@ -466,15 +466,17 @@ export function AppSelect({
   onValueChange,
   placeholder,
   options,
+  ariaLabel,
 }: {
   value?: string;
   onValueChange?: (value: string) => void;
   placeholder?: string;
   options: Array<{ label: string; value: string }>;
+  ariaLabel?: string;
 }) {
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger>
+      <SelectTrigger aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

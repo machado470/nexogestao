@@ -6,38 +6,55 @@ const source = readFileSync(
   "utf8"
 );
 
-describe("Timeline — Centro de Evidências Operacionais autoritativo", () => {
-  it("keeps the technical metadata secondary and avoids raw tables", () => {
-    expect(source).toContain("Centro de Evidências Operacionais");
-    expect(source).toContain("Metadata técnica segura");
+describe("Timeline — golden standard audit trail", () => {
+  it("uses the canonical internal-page composition", () => {
+    for (const component of [
+      "AppPageShell",
+      "AppOperationalHeader",
+      "AppFiltersBar",
+      "AppSectionBlock",
+      "AppStatusBadge",
+    ]) {
+      expect(source).toContain(component);
+    }
+    expect(source).toContain('title="Timeline"');
+    expect(source).toContain('title="Trilha de auditoria"');
+  });
+
+  it("keeps the audit evidence continuous and readable instead of rendering giant cards or raw JSON", () => {
+    expect(source).toContain('<ol className="relative"');
+    expect(source).toContain("Ver metadados da evidência");
+    expect(source).not.toContain("JSON.stringify");
     expect(source).not.toContain("<table");
   });
 
-  it("renders honest missing-field and unknown-event states", () => {
-    expect(source).toContain("Evento não classificado");
-    expect(source).toContain("Não informado");
-    expect(source).toContain("Não classificado");
-    expect(source).toContain("Não disponível");
-    expect(source).toContain("não significa operação saudável");
-  });
-
-  it("does not include the former local classification and recommendation engine", () => {
-    expect(source).not.toContain("eventSeverity");
-    expect(source).not.toContain("eventModule");
-    expect(source).not.toContain("eventOperationalConsequence");
-    expect(source).not.toContain("eventRecommendedAction");
-    expect(source).not.toContain("Date.now()");
-  });
-
-  it("only navigates using the official API target and never automates", () => {
+  it("preserves official ordering and navigation", () => {
+    expect(source).toContain("A ordem relativa é exatamente a recebida");
+    expect(source).toContain("events.filter(");
+    expect(source).not.toContain("filteredEvents.sort");
     expect(source).toContain("event.entity!.href");
-    expect(source).toContain("Sem CTA: vínculo oficial não informado");
-    expect(source).not.toContain("executeAction");
   });
 
-  it("preserves authenticated identity during partial source failure and offers retry", () => {
-    expect(source).toContain("Sessão autenticada:");
-    expect(source).toContain("A identidade autenticada foi preservada");
+  it("provides labeled factual filters and clear page states", () => {
+    expect(source).toContain('htmlFor="timeline-search"');
+    expect(source).toContain('ariaLabel="Tipo de evento"');
+    expect(source).toContain('ariaLabel="Módulo ou entidade"');
+    expect(source).toContain('ariaLabel="Responsável ou ator"');
     expect(source).toContain("query.refetch()");
+    expect(source).toContain("Nenhum evento correspondente");
+    expect(source).toContain("Nenhum estado alternativo foi presumido");
+  });
+
+  it("does not introduce browser-side operational decisions", () => {
+    for (const forbidden of [
+      "eventSeverity",
+      "eventModule",
+      "eventOperationalConsequence",
+      "eventRecommendedAction",
+      "Date.now()",
+      "executeAction",
+    ]) {
+      expect(source).not.toContain(forbidden);
+    }
   });
 });
