@@ -90,7 +90,9 @@ describe("FinancesPage authoritative finance contract", () => {
     expect(source).toMatch(
       /await pay\.mutateAsync[\s\S]*await refresh\(\);\s*setPaying\(null\)/
     );
-    expect(source).toContain("setPaymentError(error?.message");
+    expect(source).toMatch(
+      /setPaymentError\(\s*error\?\.message\s*\?\?\s*"Não foi possível registrar o pagamento\."/
+    );
     expect(source).toContain(
       'aria-describedby={paymentError ? "payment-error" : undefined}'
     );
