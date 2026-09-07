@@ -1,55 +1,80 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(
-  new URL("./BillingPage.tsx", import.meta.url),
-  "utf8"
-);
+const source = readFileSync(new URL("./BillingPage.tsx", import.meta.url), "utf8");
 
-describe("BillingPage internal page architecture contract", () => {
-  it("usa o shell canônico sem PageWrapper legado", () => {
-    expect(source).toContain('<AppPageShell className="gap-3">');
+describe("BillingPage golden-standard contract", () => {
+  it("uses the canonical internal-page composition", () => {
+    expect(source).toContain("<AppPageShell");
+    expect(source).toContain("<AppOperationalHeader");
+    expect(source).toContain("<AppSectionBlock");
+    expect(source).toContain("<AppStatusBadge");
+    expect(source).toContain("<AppAlert");
+    expect(source).toContain("<ConfirmModal");
+    expect(source).not.toContain("OperationalPanel");
     expect(source).not.toContain("PageWrapper");
   });
-});
 
-describe("BillingPage operational subscription contract", () => {
-  it("usa linguagem operacional premium para assinatura", () => {
-    expect(source).toContain("Controle da assinatura do Nexo");
-    expect(source).toContain("Qual plano eu tenho, quanto pago, quando renova");
-    expect(source).toContain("<OperationalPanel");
-    expect(source).toContain("<OperationalKpiCard");
-    expect(source).toContain("<OperationalActionPanel");
+  it("keeps Billing explicitly separate from operational Finance", () => {
+    expect(source).toContain("Plano e assinatura da organização");
+    expect(source).not.toMatch(/\bCharge\b|\bPayment\b|trpc\.finance|financeiro operacional/i);
   });
 
-  it("mantém histórico como evidência sem criar dados fictícios", () => {
-    expect(source).toContain("Histórico da assinatura");
-    expect(source).toContain("<OperationalTimelineItem");
-    expect(source).toContain("Nenhum histórico fictício foi criado");
-  });
-});
-
-describe("BillingPage canonical commercial catalog contract", () => {
-  it("consome billing.plans sem preços e limites comerciais locais", () => {
+  it("uses only the canonical catalog for commercial data", () => {
     expect(source).toContain("trpc.billing.plans.useQuery");
     expect(source).toContain("normalizeBillingPlanCatalog");
-    expect(source).toContain("Catálogo comercial indisponível");
+    expect(source).toContain("formatPlanPrice(currentPlan.priceCents)");
+    expect(source).not.toMatch(/\b9900\b|\b19900\b|\b39900\b/);
     expect(source).not.toContain("PLAN_META");
-    expect(source).not.toContain("49900");
-    expect(source).not.toContain("99900");
-    expect(source).toContain("Valor não informado");
-    expect(source).not.toContain("currentPlanMeta?.priceCents ?? 0");
   });
-});
 
-describe("BillingPage checkout boundary contract", () => {
-  it("envia somente o nome canônico do plano ao checkout", () => {
-    expect(source).toContain("planName: plan");
-    expect(source).toContain('if (plan === "FREE")');
-    expect(source).not.toContain("PLAN_PRICE_ID");
-    expect(source).not.toContain("price_starter");
-    expect(source).not.toContain("price_pro");
-    expect(source).not.toContain("price_business");
+  it("preserves official statuses without an ACTIVE fallback", () => {
+    expect(source).toContain('const status = String(value ?? "").toUpperCase()');
+    expect(source).toContain("Status não reconhecido");
+    expect(source).not.toContain('value ?? "ACTIVE"');
+    expect(source).not.toContain(': "ACTIVE"');
+  });
+
+  it("distinguishes loading, error, empty, and partial catalog failure", () => {
+    expect(source).toContain("<AppPageLoadingState");
+    expect(source).toContain("<AppPageErrorState");
+    expect(source).toContain("<AppPageEmptyState");
+    expect(source).toContain("Preço do catálogo indisponível");
+    expect(source).toContain('status === "NO_SUBSCRIPTION"');
+  });
+
+  it("uses backend-authoritative usage instead of browser-side counting", () => {
+    expect(source).toContain("trpc.billing.limits.useQuery");
+    expect(source).toContain("limitsQuery.data?.usage");
+    expect(source).not.toContain("trpc.customers");
+    expect(source).not.toContain("trpc.people");
+  });
+
+  it("sends only a catalog plan and authenticated redirects to checkout", () => {
+    expect(source).toContain("planName: checkoutPlan");
+    expect(source).toContain("payload?.url");
+    expect(source).toContain("window.location.assign(destination)");
     expect(source).not.toContain("priceId");
+    expect(source).not.toMatch(/https?:\/\/[^\s"']*stripe/i);
+    expect(source).not.toContain("orgId:");
+  });
+
+  it("does not invent invoices, payment methods, portals, or persistence", () => {
+    expect(source).not.toMatch(/invoice|fatura|paymentMethod|cartão|boleto|pix|portal/i);
+    expect(source).not.toMatch(/localStorage|sessionStorage/);
+  });
+
+  it("confirms the supported immediate cancellation and refetches afterward", () => {
+    expect(source).toContain("trpc.billing.cancel.useMutation");
+    expect(source).toContain("Cancelar assinatura agora?");
+    expect(source).toContain("cancelamento imediato");
+    expect(source).toContain("utils.billing.status.invalidate()");
+  });
+
+  it("keeps responsive structure and accessible named controls", () => {
+    expect(source).toContain("sm:grid-cols-2");
+    expect(source).toContain("lg:grid-cols-3");
+    expect(source).toContain('aria-hidden="true"');
+    expect(source).toContain('type="button"');
   });
 });
