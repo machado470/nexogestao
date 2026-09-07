@@ -3,8 +3,7 @@ import { AlertTriangle, Clock3, RotateCcw, Search, ShieldAlert } from "lucide-re
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ConfirmModal } from "@/components/app-modal-system";
 import {
   AppFiltersBar,
   AppOperationalHeader,
@@ -15,7 +14,10 @@ import {
   AppSectionBlock,
 } from "@/components/internal-page-system";
 import {
+  AppCheckbox,
+  AppInput,
   AppSectionCard,
+  AppSelect,
   AppStatCard,
   AppStatusBadge as AppToneStatusBadge,
 } from "@/components/app-system";
@@ -134,9 +136,6 @@ function FilterField({ label, children }: { label: string; children: React.React
   );
 }
 
-function selectClassName() {
-  return "h-10 rounded-[0.76rem] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]";
-}
 
 export function WebhookFilterToolbar({
   filters,
@@ -155,32 +154,42 @@ export function WebhookFilterToolbar({
     <AppFiltersBar className="gap-3">
       <div className="flex flex-1 flex-wrap gap-3">
         <FilterField label="Status">
-          <select className={selectClassName()} value={filters.status} onChange={event => update({ status: event.target.value as WebhookFilters["status"] })}>
-            <option value="ALL">Todos</option>
-            {WEBHOOK_STATUSES.map(status => (
-              <option key={status} value={status}>{statusLabel(status)}</option>
-            ))}
-          </select>
+          <AppSelect
+            value={filters.status}
+            onValueChange={value =>
+              update({
+                status: value as WebhookFilters["status"],
+              })
+            }
+            ariaLabel="Filtrar webhooks por status"
+            options={[
+              { value: "ALL", label: "Todos" },
+              ...WEBHOOK_STATUSES.map(status => ({
+                value: status,
+                label: statusLabel(status),
+              })),
+            ]}
+          />
         </FilterField>
         <FilterField label="Provider">
-          <Input value={filters.provider} onChange={event => update({ provider: event.target.value })} placeholder="whatsapp-cloud" />
+          <AppInput value={filters.provider} onChange={event => update({ provider: event.target.value })} placeholder="whatsapp-cloud" />
         </FilterField>
         <FilterField label="Trace ID">
-          <Input value={filters.traceId} onChange={event => update({ traceId: event.target.value })} placeholder="trace_..." />
+          <AppInput value={filters.traceId} onChange={event => update({ traceId: event.target.value })} placeholder="trace_..." />
         </FilterField>
         <FilterField label="Provider message ID">
-          <Input value={filters.providerMessageId} onChange={event => update({ providerMessageId: event.target.value })} placeholder="wamid..." />
+          <AppInput value={filters.providerMessageId} onChange={event => update({ providerMessageId: event.target.value })} placeholder="wamid..." />
         </FilterField>
         <FilterField label="Criado de">
-          <Input type="datetime-local" value={filters.createdAtFrom} onChange={event => update({ createdAtFrom: event.target.value })} />
+          <AppInput type="datetime-local" value={filters.createdAtFrom} onChange={event => update({ createdAtFrom: event.target.value })} />
         </FilterField>
         <FilterField label="Criado até">
-          <Input type="datetime-local" value={filters.createdAtTo} onChange={event => update({ createdAtTo: event.target.value })} />
+          <AppInput type="datetime-local" value={filters.createdAtTo} onChange={event => update({ createdAtTo: event.target.value })} />
         </FilterField>
         <FilterField label="Busca local">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-            <Input className="pl-9" value={filters.search} onChange={event => update({ search: event.target.value })} placeholder="erro, id, trace..." />
+            <AppInput className="pl-9" value={filters.search} onChange={event => update({ search: event.target.value })} placeholder="erro, id, trace..." />
           </div>
         </FilterField>
       </div>
@@ -229,11 +238,10 @@ function EventTable({
             {events.map(event => (
               <tr key={event.id} className={cn("cursor-pointer", selectedId === event.id && "bg-[var(--accent-soft)]/60")} onClick={() => onSelect(event)}>
                 <td onClick={click => click.stopPropagation()}>
-                  <input
-                    type="checkbox"
+                  <AppCheckbox
                     aria-label={`Selecionar evento ${event.id}`}
                     checked={selectedIds.has(event.id)}
-                    onChange={() => onToggle(event.id)}
+                    onCheckedChange={() => onToggle(event.id)}
                     disabled={!canReplayEvent(event)}
                   />
                 </td>
@@ -454,17 +462,40 @@ export default function WhatsAppWebhookRecoveryPage() {
         <DetailPanel event={selectedEvent} detailPayload={detailQuery.data} isLoading={detailQuery.isLoading} onReplay={requestSingleReplay} />
       </div>
 
-      <ConfirmDialog
+      <ConfirmModal
         open={Boolean(replayDialog)}
-        title={replayDialog?.force ? "Confirmar force replay" : "Confirmar replay"}
-        description={replayDialog?.kind === "selected"
-          ? `${replayDialog.events.length} evento(s) serão reenfileirados. ${replayDialog.force ? "Há eventos fora de FAILED; confirme explicitamente para evitar duplicidade." : "Somente eventos elegíveis serão enviados."}`
-          : replayDialog ? `Evento ${replayDialog.event.id} será reenfileirado. ${replayDialog.force ? "Esta ação pode duplicar efeitos e exige confirmação." : "O backend preserva a segurança do replay."}` : ""}
-        actionLabel={replayDialog?.force ? "Confirmar force replay" : "Confirmar replay"}
-        isDangerous={Boolean(replayDialog?.force)}
-        isLoading={replaySingle.isPending || replaySelected.isPending}
-        onCancel={() => setReplayDialog(null)}
-        onConfirm={confirmReplay}
+        onOpenChange={nextOpen => {
+          if (!nextOpen) setReplayDialog(null);
+        }}
+        title={
+          replayDialog?.force
+            ? "Confirmar force replay"
+            : "Confirmar replay"
+        }
+        description={
+          replayDialog?.kind === "selected"
+            ? `${replayDialog.events.length} evento(s) serão reenfileirados. ${
+                replayDialog.force
+                  ? "Há eventos fora de FAILED; confirme explicitamente para evitar duplicidade."
+                  : "Somente eventos elegíveis serão enviados."
+              }`
+            : replayDialog
+              ? `Evento ${replayDialog.event.id} será reenfileirado. ${
+                  replayDialog.force
+                    ? "Esta ação pode duplicar efeitos e exige confirmação."
+                    : "O backend preserva a segurança do replay."
+                }`
+              : ""
+        }
+        confirmLabel={
+          replayDialog?.force
+            ? "Confirmar force replay"
+            : "Confirmar replay"
+        }
+        isPending={
+          replaySingle.isPending || replaySelected.isPending
+        }
+        onConfirm={() => void confirmReplay()}
       />
     </AppPageShell>
   );
