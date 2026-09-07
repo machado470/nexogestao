@@ -1,964 +1,376 @@
-// Billing hierarchy keeps subscription status first; plan cards remain secondary AppSectionCard content.
 import { useMemo, useState } from "react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+
+import { ConfirmModal } from "@/components/app-modal-system";
 import {
-  AppDataTable,
+  AppAlert,
+  AppAlertDescription,
+  AppAlertTitle,
   AppPageShell,
   AppSectionCard,
   AppStatusBadge,
 } from "@/components/app-system";
-import { BaseModal } from "@/components/app-modal-system";
 import {
-  OperationalActionPanel,
-  OperationalKpiCard,
-  OperationalPanel,
-  OperationalPriorityItem,
-  OperationalTimelineItem,
-} from "@/components/operational";
-import { trpc } from "@/lib/trpc";
+  AppOperationalHeader,
+  AppPageEmptyState,
+  AppPageErrorState,
+  AppPageLoadingState,
+  AppSectionBlock,
+} from "@/components/internal-page-system";
+import { Button } from "@/components/ui/button";
 import {
+  formatPlanPrice,
   formatPlanQuota,
-  listEnabledPlanFeatures,
   normalizeBillingPlanCatalog,
+  type BillingPlanCatalogEntry,
+  type BillingPlanName,
 } from "@/lib/billing-plan-catalog";
+import { trpc } from "@/lib/trpc";
 
-type PlanName = "FREE" | "STARTER" | "PRO" | "BUSINESS";
-type VisiblePlan = "STARTER" | "PRO" | "BUSINESS";
-type AccountStatus =
+type SubscriptionStatus =
   | "ACTIVE"
-  | "TRIAL"
-  | "PAST_DUE"
+  | "TRIALING"
   | "CANCELED"
-  | "NO_SUBSCRIPTION"
-  | "SUSPENDED";
-type InvoiceStatus = "PAID" | "PENDING" | "FAILED" | "REFUNDED";
-type GovernanceStatus = "NORMAL" | "WARNING" | "RESTRICTED" | "SUSPENDED";
-type PlanRelation = "current" | "upgrade" | "downgrade" | "available";
+  | "PAST_DUE"
+  | "SUSPENDED"
+  | "NO_SUBSCRIPTION";
 
-
-const VISIBLE_PLANS: VisiblePlan[] = ["STARTER", "PRO", "BUSINESS"];
-
-const ACCOUNT_STATUS_LABEL: Record<AccountStatus, string> = {
-  ACTIVE: "Assinatura ativa",
-  TRIAL: "Período de avaliação",
-  PAST_DUE: "Pagamento pendente",
-  CANCELED: "Assinatura cancelada",
-  NO_SUBSCRIPTION: "Sem assinatura ativa",
-  SUSPENDED: "Assinatura suspensa",
+const STATUS_PRESENTATION: Record<
+  SubscriptionStatus,
+  { label: string; tone: "success" | "info" | "warning" | "danger" | "neutral" }
+> = {
+  ACTIVE: { label: "Ativa", tone: "success" },
+  TRIALING: { label: "Em avaliação", tone: "info" },
+  CANCELED: { label: "Cancelada", tone: "danger" },
+  PAST_DUE: { label: "Pagamento pendente", tone: "warning" },
+  SUSPENDED: { label: "Suspensa", tone: "danger" },
+  NO_SUBSCRIPTION: { label: "Sem assinatura", tone: "neutral" },
 };
 
-const GOVERNANCE_STATUS_LABEL: Record<GovernanceStatus, string> = {
-  NORMAL: "Operação saudável",
-  WARNING: "Atenção necessária",
-  RESTRICTED: "Operação comprometida",
-  SUSPENDED: "Operação bloqueada",
+const CHECKOUT_PLANS: BillingPlanName[] = ["STARTER", "PRO", "BUSINESS"];
+const USAGE_LABELS: Record<string, string> = {
+  customers: "Clientes",
+  appointments: "Agendamentos",
+  messages: "Mensagens",
+  serviceOrders: "Ordens de serviço",
+  users: "Usuários",
 };
 
-const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
-  PAID: "Pago",
-  PENDING: "Aguardando pagamento",
-  FAILED: "Falhou",
-  REFUNDED: "Reembolsado",
-};
-const PLAN_ORDER: Record<PlanName, number> = {
-  FREE: 0,
-  STARTER: 1,
-  PRO: 2,
-  BUSINESS: 3,
-};
-
-function brl(valueCents: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(valueCents / 100);
+function parseStatus(value: unknown): SubscriptionStatus | null {
+  const status = String(value ?? "").toUpperCase();
+  return status in STATUS_PRESENTATION ? (status as SubscriptionStatus) : null;
 }
 
-function normalizePlanName(value: unknown): PlanName | null {
-  if (!value) return null;
-  const candidate = String(value).toUpperCase();
-  const normalized = candidate === "SCALE" ? "BUSINESS" : candidate;
-  return ["FREE", "STARTER", "PRO", "BUSINESS"].includes(normalized)
-    ? (normalized as PlanName)
+function parsePlanName(value: unknown): BillingPlanName | null {
+  const name = String(value ?? "").toUpperCase();
+  return ["FREE", "STARTER", "PRO", "BUSINESS"].includes(name)
+    ? (name as BillingPlanName)
     : null;
 }
 
-function safePlanName(value: unknown): PlanName {
-  return normalizePlanName(value) ?? "FREE";
-}
-
-function visibleCurrentPlan(value: unknown): VisiblePlan | null {
-  const plan = normalizePlanName(value);
-  return plan && VISIBLE_PLANS.includes(plan as VisiblePlan)
-    ? (plan as VisiblePlan)
-    : null;
-}
-
-function planRelation(
-  plan: VisiblePlan,
-  currentVisiblePlan: VisiblePlan | null
-): PlanRelation {
-  if (!currentVisiblePlan) return "available";
-  if (plan === currentVisiblePlan) return "current";
-  return PLAN_ORDER[plan] > PLAN_ORDER[currentVisiblePlan]
-    ? "upgrade"
-    : "downgrade";
-}
-
-function planBadgeLabel(relation: PlanRelation) {
-  if (relation === "current") return "Plano atual";
-  if (relation === "upgrade") return "Upgrade";
-  if (relation === "downgrade") return "Downgrade";
-  return "Disponível";
-}
-
-function planCtaLabel(relation: PlanRelation) {
-  if (relation === "current") return "Revisar plano atual";
-  if (relation === "upgrade") return "Fazer upgrade";
-  if (relation === "downgrade") return "Fazer downgrade";
-  return "Revisar plano";
-}
-
-function planRelationTone(
-  relation: PlanRelation
-): "success" | "info" | "warning" | "neutral" {
-  if (relation === "current") return "success";
-  if (relation === "upgrade") return "info";
-  if (relation === "downgrade") return "warning";
-  return "neutral";
-}
-
-function accountStatus(value: unknown): AccountStatus {
-  const status = String(value ?? "ACTIVE").toUpperCase();
-  if (status === "TRIALING") return "TRIAL";
-  if (status === "UNPAID") return "PAST_DUE";
-  return [
-    "ACTIVE",
-    "TRIAL",
-    "PAST_DUE",
-    "CANCELED",
-    "NO_SUBSCRIPTION",
-    "SUSPENDED",
-  ].includes(status)
-    ? (status as AccountStatus)
-    : "ACTIVE";
-}
-
-function formatDate(value: unknown) {
-  if (!value) return "—";
+function formatDate(value: unknown): string {
+  if (!value) return "Não informada";
   const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return Number.isNaN(date.getTime())
+    ? "Não informada"
+    : new Intl.DateTimeFormat("pt-BR").format(date);
 }
 
-function invoiceAmount(
-  event: any,
-  fallbackCents: number | null
-): number | null {
-  const rawAmount =
-    event?.amountCents ??
-    event?.amount ??
-    event?.totalCents ??
-    fallbackCents;
-
-  if (rawAmount === null || rawAmount === undefined || rawAmount === "") {
-    return null;
-  }
-
-  const amount = Number(rawAmount);
-  return Number.isFinite(amount) ? amount : fallbackCents;
-}
-
-function formatInvoiceAmount(
-  event: any,
-  fallbackCents: number | null
-): string {
-  const amount = invoiceAmount(event, fallbackCents);
-  return amount === null ? "Valor não informado" : brl(amount);
-}
-
-function hasPaymentFailure(events: any[]) {
-  return events.some(event => {
-    const status = String(event?.status ?? event?.state ?? "").toUpperCase();
-    const type = String(event?.type ?? event?.description ?? "").toUpperCase();
-    return ["FAILED", "FAILURE", "PAST_DUE", "UNPAID"].some(
-      token => status.includes(token) || type.includes(token)
-    );
-  });
-}
-
-function statusTone(
-  status: AccountStatus
-): "success" | "info" | "warning" | "danger" | "neutral" {
-  if (status === "ACTIVE") return "success";
-  if (status === "TRIAL") return "info";
-  if (status === "PAST_DUE") return "warning";
-  if (status === "CANCELED" || status === "SUSPENDED") return "danger";
-  return "neutral";
-}
-
-function governanceTone(
-  status: GovernanceStatus
-): "success" | "warning" | "danger" | "neutral" {
-  if (status === "NORMAL") return "success";
-  if (status === "WARNING") return "warning";
-  if (status === "RESTRICTED") return "danger";
-  return "neutral";
-}
-
-function timelineLabel(event: any) {
-  const raw = String(event?.type ?? event?.status ?? event?.description ?? "")
-    .toUpperCase()
-    .replace(/[\s-]+/g, "_");
-  if (raw.includes("CREATED") || raw.includes("CREATE")) return "Plano criado";
-  if (raw.includes("TRIAL")) return "Trial iniciado";
-  if (raw.includes("PLAN") || raw.includes("UPDATED")) return "Plano alterado";
-  if (raw.includes("PAID") || raw.includes("SUCCEEDED"))
-    return "Pagamento recebido";
-  if (raw.includes("FAILED") || raw.includes("PAST_DUE"))
-    return "Pagamento falhou";
-  if (raw.includes("RENEW")) return "Renovação executada";
-  if (raw.includes("CANCEL")) return "Assinatura cancelada";
-  return "Fatura gerada";
-}
-
-function invoiceStatus(event: any): InvoiceStatus {
-  const raw = String(event?.status ?? event?.state ?? "PENDING").toUpperCase();
-  if (["PAID", "COMPLETED", "SUCCEEDED"].some(token => raw.includes(token)))
-    return "PAID";
-  if (
-    ["FAILED", "FAILURE", "PAST_DUE", "UNPAID"].some(token =>
-      raw.includes(token)
-    )
-  )
-    return "FAILED";
-  if (raw.includes("REFUND")) return "REFUNDED";
-  return "PENDING";
-}
-
-function invoiceTone(
-  status: InvoiceStatus
-): "success" | "warning" | "danger" | "neutral" {
-  return status === "PAID"
-    ? "success"
-    : status === "FAILED"
-      ? "danger"
-      : status === "PENDING"
-        ? "warning"
-        : "neutral";
+function planDescription(plan: BillingPlanCatalogEntry): string {
+  const quotas = ["users", "customers"]
+    .filter(key => key in plan.quotas)
+    .map(key => `${USAGE_LABELS[key]}: ${formatPlanQuota(plan.quotas[key])}`);
+  return quotas.join(" · ");
 }
 
 export default function BillingPage() {
-  const [selectedPlan, setSelectedPlan] = useState<VisiblePlan | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<BillingPlanName | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const plansQuery = trpc.billing.plans.useQuery(undefined, { retry: false });
   const statusQuery = trpc.billing.status.useQuery(undefined, { retry: false });
   const limitsQuery = trpc.billing.limits.useQuery(undefined, { retry: false });
-  const readinessQuery = trpc.integrations.readiness.useQuery(undefined, {
-    retry: false,
-  });
   const utils = trpc.useUtils();
 
-  const planCatalog = useMemo(
+  const catalog = useMemo(
     () => normalizeBillingPlanCatalog(plansQuery.data),
     [plansQuery.data]
   );
-  const planByName = useMemo(
-    () => new Map(planCatalog.map(plan => [plan.name, plan])),
-    [planCatalog]
+  const status = parseStatus(statusQuery.data?.status);
+  const currentPlanName = parsePlanName(statusQuery.data?.plan);
+  const currentPlan = catalog.find(plan => plan.name === currentPlanName) ?? null;
+  const checkoutOptions = catalog.filter(plan =>
+    CHECKOUT_PLANS.includes(plan.name)
   );
-  const visiblePlanCatalog = useMemo(
-    () =>
-      planCatalog.filter(plan =>
-        VISIBLE_PLANS.includes(plan.name as VisiblePlan)
-      ),
-    [planCatalog]
-  );
+  const usage = Object.entries(limitsQuery.data?.usage ?? {}).filter(
+    ([key, value]) =>
+      key in USAGE_LABELS && value && typeof value === "object"
+  ) as Array<[string, { used?: unknown; limit?: unknown; unlimited?: unknown }]>;
 
-  const rawCurrentPlan = statusQuery.data?.plan ?? limitsQuery.data?.plan;
-  const currentPlan = safePlanName(rawCurrentPlan);
-  const currentVisiblePlan = visibleCurrentPlan(rawCurrentPlan);
-  const currentPlanMeta = planByName.get(currentPlan) ?? null;
-  const status = accountStatus(
-    statusQuery.data?.status ?? limitsQuery.data?.status
-  );
-  const stripeConfigured =
-    readinessQuery.data?.integrations?.stripe === "configured" ||
-    readinessQuery.data?.stripe?.configured === true;
-  const nextRenewal =
-    statusQuery.data?.currentPeriodEnd ?? limitsQuery.data?.trial?.endsAt;
-  const nextChargeAt = statusQuery.data?.nextBillingAt ?? nextRenewal;
-  const rawNextChargeValue =
-    statusQuery.data?.nextAmountCents ??
-    statusQuery.data?.amountCents ??
-    currentPlanMeta?.priceCents ??
-    null;
-
-  const parsedNextChargeValue =
-    rawNextChargeValue === null ? null : Number(rawNextChargeValue);
-
-  const nextChargeValue =
-    parsedNextChargeValue !== null && Number.isFinite(parsedNextChargeValue)
-      ? parsedNextChargeValue
-      : null;
-  const rawPaymentMethod =
-    statusQuery.data?.paymentMethodBrand ?? statusQuery.data?.paymentMethod;
-  const hasPaymentMethod = Boolean(String(rawPaymentMethod ?? "").trim());
-  const paymentMethod = hasPaymentMethod
-    ? String(rawPaymentMethod)
-    : "Não informado";
-  const events = Array.isArray(statusQuery.data?.events)
-    ? statusQuery.data.events
-    : [];
-  const paymentFailed = hasPaymentFailure(events) || status === "PAST_DUE";
-  const activeUsers = Number(
-    limitsQuery.data?.usage?.users?.used ?? statusQuery.data?.activeUsers ?? 1
-  );
-  const governanceStatus: GovernanceStatus =
-    status === "SUSPENDED"
-      ? "SUSPENDED"
-      : status === "CANCELED" || paymentFailed
-        ? "RESTRICTED"
-        : status === "TRIAL" || paymentMethod === "Não informado"
-          ? "WARNING"
-          : "NORMAL";
-  const paymentActionLabel = hasPaymentMethod
-    ? "Atualizar pagamento"
-    : "Configurar pagamento";
-  const primaryActionLabel =
-    status === "CANCELED"
-      ? "Revisar assinatura"
-      : status === "PAST_DUE" || governanceStatus === "WARNING"
-        ? paymentActionLabel
-        : "Trocar plano";
-  const riskDays = nextChargeAt
-    ? Math.max(
-        0,
-        Math.ceil(
-          (new Date(String(nextChargeAt)).getTime() - Date.now()) / 86400000
-        )
-      )
-    : null;
+  const refresh = () => {
+    void Promise.all([
+      statusQuery.refetch(),
+      plansQuery.refetch(),
+      limitsQuery.refetch(),
+    ]);
+  };
 
   const checkoutMutation = trpc.billing.checkout.useMutation({
     onSuccess: payload => {
-      const checkoutUrl = payload?.url ?? payload?.checkoutUrl;
-      if (checkoutUrl) {
-        window.location.assign(checkoutUrl);
+      const destination = payload?.url ?? payload?.checkoutUrl;
+      if (destination) {
+        window.location.assign(destination);
         return;
       }
-      toast.success("Plano atualizado.");
+      setCheckoutPlan(null);
+      toast.success("Assinatura atualizada pelo serviço de Billing.");
       void Promise.all([
         utils.billing.status.invalidate(),
         utils.billing.limits.invalidate(),
       ]);
     },
     onError: error =>
-      toast.error(error.message || "Falha ao iniciar checkout."),
+      toast.error(error.message || "Não foi possível abrir o checkout."),
   });
 
   const cancelMutation = trpc.billing.cancel.useMutation({
     onSuccess: async () => {
-      toast.success("Assinatura cancelada para o próximo ciclo.");
+      setCancelOpen(false);
+      toast.success("Cancelamento confirmado pelo serviço de Billing.");
       await Promise.all([
         utils.billing.status.invalidate(),
         utils.billing.limits.invalidate(),
       ]);
     },
     onError: error =>
-      toast.error(error.message || "Não foi possível cancelar."),
+      toast.error(error.message || "Não foi possível cancelar a assinatura."),
   });
 
-  const startCheckout = (plan: PlanName) => {
-    if (plan === "FREE") {
-      toast.error("Selecione um plano pago para iniciar o checkout.");
-      return;
-    }
-
-    if (!stripeConfigured) {
-      toast.error("Checkout indisponível sem Stripe configurado.");
-      return;
-    }
-
+  const startCheckout = () => {
+    if (!checkoutPlan || checkoutPlan === "FREE") return;
     checkoutMutation.mutate({
-      planName: plan,
+      planName: checkoutPlan,
       successUrl: `${window.location.origin}/billing`,
       cancelUrl: `${window.location.origin}/billing`,
     });
   };
 
-  const timelineEvents = useMemo(() => events.slice(0, 8), [events]);
-  const selectedPlanMeta = selectedPlan
-    ? planByName.get(selectedPlan) ?? null
-    : null;
-  const selectedPlanRelation = selectedPlan
-    ? planRelation(selectedPlan, currentVisiblePlan)
-    : null;
-
   return (
-    <AppPageShell className="gap-3">
-        <OperationalPanel
-          title="Controle da assinatura do Nexo"
-          subtitle="Qual plano eu tenho, quanto pago, quando renova e o que acontece se houver problema?"
-          variant="hero"
-        >
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <div>
-                <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-                  Controle da assinatura do Nexo
-                </h1>
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Empresa → plano → assinatura → renovação → acesso.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <AppStatusBadge
-                  label={ACCOUNT_STATUS_LABEL[status]}
-                  tone={statusTone(status)}
-                />
-                <AppStatusBadge
-                  label={`Operacional: ${governanceStatus} — ${GOVERNANCE_STATUS_LABEL[governanceStatus]}`}
-                  tone={governanceTone(governanceStatus)}
-                />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-[var(--text-primary)]">
-                  Plano {currentPlanMeta?.displayName ?? currentPlan}
-                </h2>
-                <p className="text-sm text-[var(--text-secondary)]">
-                  {nextChargeValue === null
-                    ? "Valor não informado"
-                    : brl(nextChargeValue)}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <OperationalKpiCard
-              label="Próxima renovação"
-              value={formatDate(nextRenewal)}
-              helper="Renovação automática da assinatura."
-            />
-            <OperationalKpiCard
-              label="Próxima cobrança"
-              value={formatDate(nextChargeAt)}
-              helper={
-                paymentFailed
-                  ? "Falha recente registrada."
-                  : "Nenhuma falha registrada."
-              }
-              tone={paymentFailed ? "warning" : "default"}
-            />
-            <OperationalKpiCard
-              label="Método"
-              value={paymentMethod}
-              helper={hasPaymentMethod ? "Método em uso." : "Ação necessária."}
-              tone={hasPaymentMethod ? "default" : "warning"}
-            />
-            <OperationalKpiCard
-              label="Usuários ativos"
-              value={String(activeUsers)}
-              helper="Uso atual da empresa."
-            />
-          </div>
-          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(280px,0.4fr)]">
-            <OperationalPriorityItem
-              tone={paymentFailed || !hasPaymentMethod ? "high" : "low"}
-              title={
-                paymentFailed
-                  ? "Pagamento exige atenção"
-                  : hasPaymentMethod
-                    ? "Assinatura sem bloqueio de pagamento"
-                    : "Método de pagamento pendente"
-              }
-              description={
-                paymentFailed
-                  ? "Há falha recente registrada; atualize o pagamento para evitar restrição de acesso."
-                  : hasPaymentMethod
-                    ? "Plano, renovação e método estão legíveis para a empresa."
-                    : "Adicione um método para manter a renovação previsível."
-              }
-            />
-            <OperationalActionPanel
-              title="Ação principal da assinatura"
-              description={
-                paymentFailed || !hasPaymentMethod
-                  ? "Atualize o pagamento antes da próxima tentativa."
-                  : "Gerencie plano e faturas sem misturar Billing com financeiro operacional."
-              }
-              tone={paymentFailed || !hasPaymentMethod ? "warning" : "success"}
-              display="compactHealthy"
-              primaryAction={{
-                label:
-                  paymentFailed || !hasPaymentMethod
-                    ? "Atualizar pagamento"
-                    : "Ver faturas",
-                onClick: () =>
-                  document
-                    .getElementById(
-                      paymentFailed || !hasPaymentMethod
-                        ? "billing-payment"
-                        : "billing-invoices"
-                    )
-                    ?.scrollIntoView({ behavior: "smooth" }),
-              }}
-              secondaryAction={{
-                label: "Trocar plano",
-                onClick: () =>
-                  document
-                    .getElementById("billing-plans")
-                    ?.scrollIntoView({ behavior: "smooth" }),
-              }}
-            />
-          </div>
-        </OperationalPanel>
+    <AppPageShell className="gap-4 p-3 md:p-5">
+      <AppOperationalHeader
+        title="Billing"
+        description="Plano e assinatura da organização para utilizar o NexoGestão."
+        secondaryActions={
+          <Button
+            type="button"
+            variant="outline"
+            onClick={refresh}
+            disabled={
+              statusQuery.isFetching || plansQuery.isFetching || limitsQuery.isFetching
+            }
+          >
+            <RefreshCw className="mr-2 size-4" aria-hidden="true" />
+            Atualizar
+          </Button>
+        }
+        contextChips={
+          <>
+            {currentPlan ? <AppStatusBadge label={currentPlan.displayName} /> : null}
+            {status ? (
+              <AppStatusBadge
+                label={STATUS_PRESENTATION[status].label}
+                tone={STATUS_PRESENTATION[status].tone}
+              />
+            ) : null}
+          </>
+        }
+      />
 
-        <AppSectionCard className="space-y-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                Ações rápidas
-              </h2>
-              <p className="text-sm text-[var(--text-secondary)]">
-                Próxima melhor ação e demais controles disponíveis para a
-                assinatura atual.
+      <AppSectionBlock
+        title="Assinatura atual"
+        subtitle="Estado retornado pelo Billing e preço vigente do catálogo comercial."
+      >
+        {statusQuery.isLoading ? (
+          <AppPageLoadingState
+            title="Carregando assinatura"
+            description="Consultando a assinatura da organização autenticada."
+          />
+        ) : statusQuery.isError ? (
+          <AppPageErrorState
+            title="Assinatura indisponível"
+            description="A fonte oficial de Billing não pôde ser consultada. Nenhum plano ou status foi presumido."
+            onAction={() => void statusQuery.refetch()}
+          />
+        ) : !status ? (
+          <AppPageErrorState
+            title="Status não reconhecido"
+            description="Billing retornou um estado fora do contrato conhecido. Ele não foi convertido em assinatura ativa."
+            onAction={() => void statusQuery.refetch()}
+          />
+        ) : status === "NO_SUBSCRIPTION" ? (
+          <AppPageEmptyState
+            title="Nenhuma assinatura encontrada"
+            description="Billing informou que esta organização não possui assinatura. Isso não foi convertido em uma assinatura ativa."
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <AppSectionCard className="min-w-0 p-4">
+              <p className="text-xs text-[var(--text-muted)]">Plano</p>
+              <p className="mt-1 truncate font-semibold text-[var(--text-primary)]">
+                {currentPlan?.displayName ?? "Catálogo indisponível"}
               </p>
-            </div>
-            <AppStatusBadge
-              label={`CTA principal: ${primaryActionLabel}`}
-              tone={governanceTone(governanceStatus)}
-            />
+            </AppSectionCard>
+            <AppSectionCard className="min-w-0 p-4">
+              <p className="text-xs text-[var(--text-muted)]">Status oficial</p>
+              <div className="mt-1">
+                <AppStatusBadge
+                  label={STATUS_PRESENTATION[status].label}
+                  tone={STATUS_PRESENTATION[status].tone}
+                />
+              </div>
+            </AppSectionCard>
+            <AppSectionCard className="min-w-0 p-4">
+              <p className="text-xs text-[var(--text-muted)]">Preço no catálogo</p>
+              <p className="mt-1 break-words font-semibold text-[var(--text-primary)]">
+                {currentPlan ? formatPlanPrice(currentPlan.priceCents) : "Não informado"}
+              </p>
+            </AppSectionCard>
+            <AppSectionCard className="min-w-0 p-4">
+              <p className="text-xs text-[var(--text-muted)]">Fim do período atual</p>
+              <p className="mt-1 font-semibold text-[var(--text-primary)]">
+                {formatDate(statusQuery.data?.currentPeriodEnd)}
+              </p>
+            </AppSectionCard>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <Button
-              onClick={() => startCheckout(currentPlan)}
-              disabled={currentPlan === "FREE"}
-              variant={
-                primaryActionLabel === paymentActionLabel
-                  ? "default"
-                  : "outline"
-              }
-            >
-              {paymentActionLabel}
-            </Button>
-            <Button
-              onClick={() =>
-                setSelectedPlan(currentPlan === "BUSINESS" ? "PRO" : "BUSINESS")
-              }
-              variant={
-                primaryActionLabel === "Trocar plano" ? "default" : "outline"
-              }
-            >
-              Trocar plano
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() =>
-                document
-                  .getElementById("billing-history")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
-            >
-              Ver histórico
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending || currentPlan === "FREE"}
-            >
+        )}
+
+        {!plansQuery.isLoading && plansQuery.isError ? (
+          <AppAlert className="mt-4">
+            <AppAlertTitle>Preço do catálogo indisponível</AppAlertTitle>
+            <AppAlertDescription>
+              A assinatura continua visível, mas nenhum preço local foi usado como fallback.
+            </AppAlertDescription>
+          </AppAlert>
+        ) : null}
+      </AppSectionBlock>
+
+      <AppSectionBlock
+        title="Uso e limites"
+        subtitle="Métricas calculadas no backend para a organização autenticada."
+      >
+        {limitsQuery.isLoading ? (
+          <AppPageLoadingState title="Carregando uso e limites" />
+        ) : limitsQuery.isError ? (
+          <AppPageErrorState
+            title="Uso indisponível"
+            description="A consulta de quotas falhou. A página não contou entidades no navegador."
+            onAction={() => void limitsQuery.refetch()}
+          />
+        ) : usage.length ? (
+          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {usage.map(([key, item]) => (
+              <AppSectionCard
+                key={key}
+                className="min-w-0 p-4"
+              >
+                <dt className="text-xs text-[var(--text-muted)]">{USAGE_LABELS[key]}</dt>
+                <dd className="mt-1 break-words font-semibold text-[var(--text-primary)]">
+                  {String(item.used ?? "Não informado")} / {item.unlimited === true ? "Ilimitado" : formatPlanQuota(item.limit)}
+                </dd>
+              </AppSectionCard>
+            ))}
+          </dl>
+        ) : (
+          <AppPageEmptyState
+            title="Uso não retornado"
+            description="O contrato de quotas não retornou métricas para apresentação."
+          />
+        )}
+      </AppSectionBlock>
+
+      <AppSectionBlock
+        title="Gerenciar assinatura"
+        subtitle="Checkout e cancelamento são executados pelo backend com a organização derivada da sessão autenticada."
+      >
+        {plansQuery.isLoading ? (
+          <AppPageLoadingState title="Carregando opções de plano" />
+        ) : plansQuery.isError ? (
+          <AppPageErrorState
+            title="Catálogo indisponível"
+            description="Não foi possível consultar os planos autorizados para checkout."
+            onAction={() => void plansQuery.refetch()}
+          />
+        ) : checkoutOptions.length ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {checkoutOptions.map(plan => (
+              <AppSectionCard
+                key={plan.name}
+                className="flex min-w-0 flex-col justify-between gap-4 p-4"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h3 className="font-semibold text-[var(--text-primary)]">
+                      {plan.displayName}
+                    </h3>
+                    {plan.name === currentPlanName ? (
+                      <AppStatusBadge label="Plano atual" tone="success" />
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-xl font-semibold text-[var(--text-primary)]">
+                    {formatPlanPrice(plan.priceCents)}
+                  </p>
+                  {planDescription(plan) ? (
+                    <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                      {planDescription(plan)}
+                    </p>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  variant={plan.name === currentPlanName ? "outline" : "default"}
+                  onClick={() => setCheckoutPlan(plan.name)}
+                >
+                  <ExternalLink className="mr-2 size-4" aria-hidden="true" />
+                  {plan.name === currentPlanName ? "Abrir checkout" : "Escolher plano"}
+                </Button>
+              </AppSectionCard>
+            ))}
+          </div>
+        ) : (
+          <AppPageEmptyState
+            title="Nenhum plano disponível"
+            description="O catálogo oficial não retornou planos habilitados para checkout."
+          />
+        )}
+
+        {status && !["NO_SUBSCRIPTION", "CANCELED"].includes(status) ? (
+          <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
+            <Button type="button" variant="outline" onClick={() => setCancelOpen(true)}>
               Cancelar assinatura
             </Button>
           </div>
-        </AppSectionCard>
+        ) : null}
+      </AppSectionBlock>
 
-        <AppSectionCard
-          className={`space-y-3 ${governanceStatus === "NORMAL" ? "" : "border-[color-mix(in_srgb,var(--warning)_45%,var(--border-subtle))] bg-[color-mix(in_srgb,var(--warning)_8%,var(--surface-primary))]"}`}
-        >
-          <AppStatusBadge
-            label={
-              governanceStatus === "NORMAL"
-                ? "Sem risco crítico"
-                : "Atenção na assinatura"
-            }
-            tone={governanceTone(governanceStatus)}
-          />
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-            {governanceStatus === "NORMAL"
-              ? "Sem risco crítico de Billing"
-              : "Atenção na assinatura"}
-          </h2>
-          {governanceStatus === "NORMAL" ? (
-            <p className="text-sm text-[var(--text-secondary)]">
-              Sua assinatura está ativa e sem falhas de pagamento retornadas.
-            </p>
-          ) : (
-            <div className="grid gap-3 text-sm text-[var(--text-secondary)] md:grid-cols-2 xl:grid-cols-4">
-              <p>
-                <strong className="text-[var(--text-primary)]">Motivo:</strong>{" "}
-                renovação pendente ou dados de pagamento incompletos.
-              </p>
-              <p>
-                <strong className="text-[var(--text-primary)]">Impacto:</strong>{" "}
-                a assinatura pode entrar em restrição se o pagamento não for
-                processado.
-              </p>
-              <p>
-                <strong className="text-[var(--text-primary)]">Prazo:</strong>{" "}
-                próxima tentativa{" "}
-                {riskDays === null
-                  ? "em data não informada"
-                  : `em ${riskDays} dias`}
-                .
-              </p>
-              <p>
-                <strong className="text-[var(--text-primary)]">
-                  Ação recomendada:
-                </strong>{" "}
-                {paymentActionLabel.toLowerCase()}.
-              </p>
-            </div>
-          )}
-          {governanceStatus === "NORMAL" ? null : (
-            <Button
-              className="w-full sm:w-fit"
-              onClick={() => startCheckout(currentPlan)}
-            >
-              {paymentActionLabel}
-            </Button>
-          )}
-        </AppSectionCard>
+      <ConfirmModal
+        open={checkoutPlan !== null}
+        onOpenChange={open => !open && setCheckoutPlan(null)}
+        title="Abrir checkout da assinatura?"
+        description="O destino será exclusivamente o retornado pelo serviço de Billing. A organização é resolvida pela sessão autenticada."
+        confirmLabel={checkoutMutation.isPending ? "Abrindo..." : "Continuar para checkout"}
+        onConfirm={startCheckout}
+        isPending={checkoutMutation.isPending}
+      />
 
-        <AppSectionCard className="space-y-3">
-          <div className="flex flex-col gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                Estado operacional
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">
-                Governança do Billing
-              </h2>
-            </div>
-            <AppStatusBadge
-              label={`${governanceStatus} — ${GOVERNANCE_STATUS_LABEL[governanceStatus]}`}
-              tone={governanceTone(governanceStatus)}
-            />
-          </div>
-          <p className="text-sm text-[var(--text-secondary)]">
-            <strong className="text-[var(--text-primary)]">Motivo:</strong>{" "}
-            {governanceStatus === "NORMAL"
-              ? "assinatura ativa e pagamento sem falha retornada"
-              : governanceStatus === "WARNING"
-                ? "renovação pendente ou dados de pagamento incompletos"
-                : paymentFailed
-                  ? "pagamento falhou ou está pendente"
-                  : "assinatura sem acesso operacional regular"}
-            .
-          </p>
-          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-primary)] p-3 text-sm text-[var(--text-secondary)]">
-            <strong className="text-[var(--text-primary)]">
-              Próximos passos automáticos:
-            </strong>
-            <ul className="mt-2 space-y-1">
-              <li>• manter acesso quando a assinatura estiver regular</li>
-              <li>• enviar lembrete administrativo quando houver atenção</li>
-              <li>• {paymentActionLabel.toLowerCase()}</li>
-              <li>• aplicar restrição, se necessário</li>
-              <li>• registrar evento na timeline</li>
-            </ul>
-          </div>
-        </AppSectionCard>
-
-        <AppSectionCard id="billing-invoices" className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              Faturas e pagamentos
-            </h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Tabela operacional da cobrança da plataforma Nexo.
-            </p>
-          </div>
-          <AppDataTable className="min-w-[920px]">
-            <thead>
-              <tr className="border-b border-[var(--border-subtle)] text-left text-xs uppercase tracking-wide text-[var(--text-muted)]">
-                <th className="px-3 py-2">Período</th>
-                <th className="px-3 py-2">Valor</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Método</th>
-                <th className="px-3 py-2">Vencimento</th>
-                <th className="px-3 py-2">Pagamento</th>
-                <th className="px-3 py-2">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.length ? (
-                events.slice(0, 10).map((event: any, index: number) => {
-                  const st = invoiceStatus(event);
-                  return (
-                    <tr
-                      key={String(event?.id ?? index)}
-                      className="border-b border-[var(--border-subtle)]/60"
-                    >
-                      <td className="px-3 py-3">
-                        {String(
-                          event?.period ??
-                            event?.invoiceNumber ??
-                            `Ciclo ${index + 1}`
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        {formatInvoiceAmount(
-                          event,
-                          currentPlanMeta?.priceCents ?? null
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <AppStatusBadge
-                          label={INVOICE_STATUS_LABEL[st]}
-                          tone={invoiceTone(st)}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        {String(event?.method ?? paymentMethod)}
-                      </td>
-                      <td className="px-3 py-3">
-                        {formatDate(event?.dueAt ?? event?.dueDate)}
-                      </td>
-                      <td className="px-3 py-3">
-                        {formatDate(event?.paidAt ?? event?.createdAt)}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline">
-                            visualizar
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            baixar
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            reenviar
-                          </Button>
-                          {st === "FAILED" ? (
-                            <Button
-                              size="sm"
-                              onClick={() => startCheckout(currentPlan)}
-                            >
-                              pagar novamente
-                            </Button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-3 py-6">
-                    <div className="space-y-3 text-[var(--text-secondary)]">
-                      <p className="font-medium text-[var(--text-primary)]">
-                        Nenhuma fatura retornada pela fonte de Billing.
-                      </p>
-                      <p className="text-sm">
-                        Quando a primeira cobrança da plataforma for gerada, ela
-                        aparecerá aqui.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void statusQuery.refetch()}
-                        >
-                          Atualizar leitura
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            document
-                              .getElementById("billing-history")
-                              ?.scrollIntoView({ behavior: "smooth" })
-                          }
-                        >
-                          Ver histórico
-                        </Button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </AppDataTable>
-        </AppSectionCard>
-
-        <OperationalPanel
-          id="billing-history"
-          title="Histórico da assinatura"
-          subtitle="Timeline oficial de eventos de Billing."
-        >
-          <div className="space-y-3">
-            {timelineEvents.length ? (
-              timelineEvents.map((event: any, index: number) => (
-                <OperationalTimelineItem
-                  key={String(event?.id ?? index)}
-                  title={String(event?.description ?? timelineLabel(event))}
-                  description={`Responsável: ${String(event?.actor ?? event?.user ?? "Sistema Billing")} • Origem: ${String(event?.provider ?? event?.source ?? "Nexo Billing")}`}
-                  entityLabel={timelineLabel(event)}
-                  time={formatDate(
-                    event?.createdAt ?? event?.date ?? event?.paidAt
-                  )}
-                  tone={
-                    invoiceStatus(event) === "FAILED" ? "warning" : "default"
-                  }
-                  withLine={index < timelineEvents.length - 1}
-                />
-              ))
-            ) : (
-              <OperationalPriorityItem
-                tone="neutral"
-                title="Histórico ainda não disponível para esta assinatura."
-                description="Nenhum evento oficial foi retornado pela fonte de Billing. Nenhum histórico fictício foi criado."
-              />
-            )}
-          </div>
-        </OperationalPanel>
-
-        <AppSectionCard id="billing-plans" className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              Trocar plano
-            </h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Compare limites e recursos antes de alterar sua assinatura.
-            </p>
-          </div>
-          {plansQuery.isLoading ? (
-            <p className="text-sm text-[var(--text-secondary)]">
-              Carregando catálogo comercial...
-            </p>
-          ) : visiblePlanCatalog.length ? (
-            <div className="grid gap-4 lg:grid-cols-3">
-              {visiblePlanCatalog.map(planMeta => {
-                const plan = planMeta.name as VisiblePlan;
-                const relation = planRelation(plan, currentVisiblePlan);
-                const features = listEnabledPlanFeatures(planMeta.features);
-
-                return (
-                  <AppSectionCard key={plan} className="space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-                          {planMeta.displayName}
-                        </h3>
-                        <p className="text-2xl font-semibold text-[var(--text-primary)]">
-                          {brl(planMeta.priceCents)}
-                        </p>
-                      </div>
-                      <AppStatusBadge
-                        label={planBadgeLabel(relation)}
-                        tone={planRelationTone(relation)}
-                      />
-                    </div>
-
-                    <div className="space-y-2 text-sm text-[var(--text-secondary)]">
-                      <p>
-                        Usuários:{" "}
-                        <strong className="text-[var(--text-primary)]">
-                          {formatPlanQuota(planMeta.quotas.users)}
-                        </strong>
-                      </p>
-                      <p>
-                        Clientes:{" "}
-                        <strong className="text-[var(--text-primary)]">
-                          {formatPlanQuota(planMeta.quotas.customers)}
-                        </strong>
-                      </p>
-
-                      {features.map(feature => (
-                        <p key={feature}>• {feature}</p>
-                      ))}
-                    </div>
-
-                    <Button
-                      className="w-full"
-                      variant={relation === "current" ? "outline" : "default"}
-                      onClick={() => setSelectedPlan(plan)}
-                    >
-                      {planCtaLabel(relation)}
-                    </Button>
-                  </AppSectionCard>
-                );
-              })}
-            </div>
-          ) : (
-            <OperationalPriorityItem
-              tone="neutral"
-              title="Catálogo comercial indisponível"
-              description="A fonte canônica de planos não retornou opções comerciais. Nenhum preço ou limite local foi usado como fallback."
-            />
-          )}
-        </AppSectionCard>
-
-        <BaseModal
-          open={Boolean(selectedPlan)}
-          onOpenChange={open => !open && setSelectedPlan(null)}
-          title="Revisar assinatura"
-          description="Esta ação abre o fluxo administrativo de assinatura. Nenhuma cobrança ou alteração será executada automaticamente nesta tela."
-          footer={
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => setSelectedPlan(null)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => selectedPlan && startCheckout(selectedPlan)}
-                disabled={!selectedPlan || checkoutMutation.isPending}
-              >
-                {checkoutMutation.isPending ? "Processando..." : "Confirmar"}
-              </Button>
-            </div>
-          }
-        >
-          {selectedPlanMeta && selectedPlan && selectedPlanRelation ? (
-            <div className="space-y-3 text-sm text-[var(--text-secondary)]">
-              <AppStatusBadge
-                label={planBadgeLabel(selectedPlanRelation).toUpperCase()}
-                tone={planRelationTone(selectedPlanRelation)}
-              />
-              <p className="text-base font-semibold text-[var(--text-primary)]">
-                {selectedPlanRelation === "upgrade"
-                  ? `Você está prestes a fazer upgrade para o plano ${selectedPlanMeta.displayName}.`
-                  : selectedPlanRelation === "downgrade"
-                    ? `Você está prestes a fazer downgrade para o plano ${selectedPlanMeta.displayName}.`
-                    : selectedPlanRelation === "current"
-                      ? "Você está revisando seu plano atual."
-                      : `Você está revisando o plano ${selectedPlanMeta.displayName}.`}
-              </p>
-              <p>
-                Esta ação abre o fluxo administrativo de assinatura. Nenhuma
-                cobrança ou alteração será executada automaticamente nesta tela.
-              </p>
-              <p className="font-medium text-[var(--text-primary)]">
-                {selectedPlanMeta.displayName} — {brl(selectedPlanMeta.priceCents)}
-              </p>
-              <p>
-                Usuários permitidos:{" "}
-                {formatPlanQuota(selectedPlanMeta.quotas.users)}
-              </p>
-              <p>
-                Clientes permitidos:{" "}
-                {formatPlanQuota(selectedPlanMeta.quotas.customers)}
-              </p>
-              <p>
-                Recursos:{" "}
-                {listEnabledPlanFeatures(selectedPlanMeta.features).join(", ") ||
-                  "nenhum recurso adicional habilitado"}.
-              </p>
-            </div>
-          ) : null}
-        </BaseModal>
+      <ConfirmModal
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        title="Cancelar assinatura agora?"
+        description="O contrato atual solicita cancelamento imediato. O backend confirmará a alteração antes de a página mostrar sucesso."
+        confirmLabel={cancelMutation.isPending ? "Cancelando..." : "Confirmar cancelamento"}
+        onConfirm={() => cancelMutation.mutate()}
+        isPending={cancelMutation.isPending}
+      />
     </AppPageShell>
   );
 }
