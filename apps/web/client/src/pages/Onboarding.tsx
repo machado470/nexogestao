@@ -14,6 +14,12 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import { trpc } from "@/lib/trpc";
+import {
+  AppInfoCard,
+  AppInput,
+  AppSectionCard,
+  AppStatusBadge,
+} from "@/components/app-system";
 import { Button } from "@/components/ui/button";
 import { useDemoEnvironment } from "@/hooks/useDemoEnvironment";
 import { useProductAnalytics } from "@/hooks/useProductAnalytics";
@@ -148,10 +154,14 @@ export default function Onboarding() {
   );
   const [chargeAmount, setChargeAmount] = useState("150");
 
-  const storageKey = useMemo(
-    () => `pilot-onboarding:${user?.id ?? "anon"}`,
-    [user?.id]
-  );
+  const storageKey = useMemo(() => {
+    const organizationId = user?.organizationId?.trim();
+    const userId = user?.id?.trim();
+
+    if (!organizationId || !userId) return null;
+
+    return `pilot-onboarding:${organizationId}:${userId}`;
+  }, [user?.organizationId, user?.id]);
 
   const customersQuery = trpc.customers.list.useQuery(undefined, {
     enabled: canQuery,
@@ -182,6 +192,8 @@ export default function Onboarding() {
   const completeOnboardingMutation = trpc.onboarding.complete.useMutation();
 
   useEffect(() => {
+    if (!storageKey) return;
+
     const raw = localStorage.getItem(storageKey);
     if (!raw) return;
 
@@ -193,6 +205,7 @@ export default function Onboarding() {
   }, [storageKey]);
 
   useEffect(() => {
+    if (!storageKey) return;
     localStorage.setItem(storageKey, JSON.stringify(progress));
   }, [progress, storageKey]);
 
@@ -258,7 +271,9 @@ export default function Onboarding() {
 
     try {
       await completeOnboardingMutation.mutateAsync({});
-      localStorage.removeItem(storageKey);
+      if (storageKey) {
+        localStorage.removeItem(storageKey);
+      }
       navigate("/executive-dashboard");
     } catch (e) {
       setError((e as Error).message);
@@ -268,54 +283,53 @@ export default function Onboarding() {
   if (isInitializing) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent-primary)]" />
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="space-y-6 p-6">
-        <div className="rounded-xl border p-4 text-sm text-[var(--text-muted)] dark:border-zinc-800">
+      <div className="p-6">
+        <AppInfoCard className="text-sm text-[var(--text-muted)]">
           Faça login para continuar o onboarding.
-        </div>
+        </AppInfoCard>
       </div>
     );
   }
 
   return (
     <div className="space-y-6 p-6">
-      <section className="relative overflow-hidden rounded-[1.8rem] border border-[var(--border-subtle)] bg-white/90 px-6 py-6 shadow-sm dark:border-white/8 dark:bg-[linear-gradient(135deg,rgba(19,22,30,0.98),rgba(12,14,20,0.96))] dark:shadow-[0_24px_60px_rgba(0,0,0,0.42)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_24%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(96,165,250,0.08),transparent_24%)]" />
+      <section className="relative overflow-hidden rounded-[1.8rem] border border-[var(--border-subtle)] bg-[var(--surface-base)] px-6 py-6 shadow-[var(--app-shadow-soft)]">
 
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-orange-200/80 bg-orange-100/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/12 dark:text-orange-300">
-              <Sparkles className="h-3.5 w-3.5" />
-              Demo guiada
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[var(--accent-primary)]" />
+              <AppStatusBadge label="Demo guiada" tone="accent" />
             </div>
 
-            <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white md:text-4xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-[var(--text-primary)] md:text-4xl">
               Entregue o primeiro valor em 4 passos guiados
             </h1>
 
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)] dark:text-[var(--text-muted)]">
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)]">
               O produto conduz automaticamente o caminho oficial: cliente → agendamento
               → serviço concluído → cobrança gerada.
             </p>
           </div>
 
-          <div className="min-w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="min-w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-[var(--text-secondary)] dark:text-[var(--text-primary)]">Progresso</span>
-              <span className="font-semibold text-zinc-950 dark:text-white">{percent}%</span>
+              <span className="font-medium text-[var(--text-secondary)]">Progresso</span>
+              <span className="font-semibold text-[var(--text-primary)]">{percent}%</span>
             </div>
 
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
-              <div className="h-full rounded-full bg-orange-500 transition-all" style={{ width: `${percent}%` }} />
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-base)]">
+              <div className="h-full rounded-full bg-[var(--accent-primary)] transition-all" style={{ width: `${percent}%` }} />
             </div>
 
-            <p className="mt-3 text-xs text-[var(--text-muted)] dark:text-[var(--text-muted)]">
+            <p className="mt-3 text-xs text-[var(--text-muted)]">
               {completedCount} de {STEP_META.length} etapas concluídas
             </p>
           </div>
@@ -323,37 +337,37 @@ export default function Onboarding() {
       </section>
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+        <AppSectionCard variant="critical" className="p-4 text-sm text-[var(--text-primary)]">
           {error}
-        </div>
+        </AppSectionCard>
       ) : null}
 
       {flowMessage ? (
-        <div className="nexo-info-banner rounded-xl px-4 py-3 text-sm">
+        <AppInfoCard className="text-sm">
           {flowMessage}
-        </div>
+        </AppInfoCard>
       ) : null}
 
       {seedFallback ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+        <AppSectionCard variant="warning" className="p-4 text-sm text-[var(--text-primary)]">
           {seedFallback}
-        </div>
+        </AppSectionCard>
       ) : null}
 
       {degradedMessage ? (
-        <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700 dark:border-yellow-900/60 dark:bg-yellow-950/40 dark:text-yellow-300">
+        <AppSectionCard variant="warning" className="p-4 text-sm text-[var(--text-primary)]">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{degradedMessage}</span>
           </div>
-        </div>
+        </AppSectionCard>
       ) : null}
 
-      <section className="rounded-2xl border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-900/40 dark:bg-orange-950/20">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700 dark:text-orange-300">
+      <AppSectionCard variant="action" className="p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent-primary)]">
           Quer impressionar em 30 segundos?
         </p>
-        <p className="mt-2 text-sm text-orange-900 dark:text-orange-200">
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">
           Preencha dados reais de demo instantaneamente (clientes, agenda, O.S., cobrança, pagamento, timeline e governança).
         </p>
         <Button className="mt-3" variant="secondary" disabled={isGenerating} onClick={async () => {
@@ -383,7 +397,7 @@ export default function Onboarding() {
         }}>
           {isGenerating ? "Preparando ambiente demo..." : "Gerar dados de demo agora"}
         </Button>
-      </section>
+      </AppSectionCard>
 
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="space-y-3">
@@ -393,32 +407,53 @@ export default function Onboarding() {
             const enabled = canRun[step.key];
 
             return (
-              <div key={step.key} className={`rounded-2xl border p-4 transition-colors ${done ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20" : enabled ? "border-orange-200 bg-orange-50 dark:border-orange-900/40 dark:bg-orange-950/20" : "border-slate-200 bg-white dark:border-white/8 dark:bg-white/[0.02]"}`}>
+              <AppSectionCard
+                key={step.key}
+                variant={done ? "success" : enabled ? "action" : "context"}
+                className="p-4 transition-colors"
+              >
                 <div className="flex items-start gap-3">
-                  <div className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl ${done ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" : enabled ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300" : "bg-[var(--surface-base)] text-[var(--text-muted)] dark:bg-[var(--surface-base)] dark:text-[var(--text-muted)]"}`}>
-                    {done ? <CheckCircle2 className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
+                  <div className="nexo-icon-tile mt-0.5">
+                    {done ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <Icon className="h-5 w-5" />
+                    )}
                   </div>
-                  <div className="min-w-0">
-                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] dark:text-[var(--text-muted)]">
+
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
                       Etapa {index + 1}
                     </span>
-                    <h3 className="mt-1 font-semibold text-zinc-950 dark:text-white">{step.title}</h3>
-                    <p className="mt-1 text-sm text-[var(--text-secondary)] dark:text-[var(--text-muted)]">{step.description}</p>
-                    <p className="mt-2 text-xs font-medium text-[var(--text-muted)] dark:text-[var(--text-muted)]">{getStepStatusLabel(done, enabled)}</p>
+
+                    <h3 className="mt-1 font-semibold text-[var(--text-primary)]">
+                      {step.title}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                      {step.description}
+                    </p>
+
+                    <div className="mt-2">
+                      <AppStatusBadge
+                        label={getStepStatusLabel(done, enabled)}
+                        tone={done ? "success" : enabled ? "accent" : "neutral"}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              </AppSectionCard>
             );
           })}
         </aside>
 
         <div className="space-y-6">
-          <section className="rounded-2xl border bg-card p-6 shadow-sm dark:border-zinc-800">
+          <AppSectionCard className="p-6">
             <h2 className="text-lg font-semibold">1. Criar cliente</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Cadastre um cliente e mostre onde a receita começa.</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">Cadastre um cliente e mostre onde a receita começa.</p>
             <div className="mt-4 grid gap-4">
-              <input className="w-full rounded-md border bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-zinc-800" placeholder="Nome do cliente" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-              <input className="w-full rounded-md border bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-zinc-800" placeholder="Telefone / WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+              <AppInput className="w-full" aria-label="Nome do cliente" placeholder="Nome do cliente" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+              <AppInput className="w-full" aria-label="Telefone ou WhatsApp do cliente" placeholder="Telefone / WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
             </div>
             <Button className="mt-4" disabled={!canRun.customer || progress.customer || customerMutation.isPending} onClick={async () => {
               track("cta_click", { screen: "onboarding", ctaId: "step_create_customer" });
@@ -437,12 +472,12 @@ export default function Onboarding() {
                 setFlowMessage(null);
               }
             }}>{customerMutation.isPending ? "Criando..." : progress.customer ? "Concluído" : STEP_META[0].cta}</Button>
-          </section>
+          </AppSectionCard>
 
-          <section className="rounded-2xl border bg-card p-6 shadow-sm dark:border-zinc-800">
+          <AppSectionCard className="p-6">
             <h2 className="text-lg font-semibold">2. Criar agendamento</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Marque o atendimento e mostre previsibilidade de operação.</p>
-            <input className="mt-4 w-full rounded-md border bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-zinc-800" value={appointmentNotes} onChange={(e) => setAppointmentNotes(e.target.value)} placeholder="Observação do agendamento" />
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">Marque o atendimento e mostre previsibilidade de operação.</p>
+            <AppInput className="mt-4 w-full" aria-label="Observação do agendamento" value={appointmentNotes} onChange={(e) => setAppointmentNotes(e.target.value)} placeholder="Observação do agendamento" />
             <Button className="mt-4" disabled={!canRun.appointment || progress.appointment || appointmentMutation.isPending} onClick={async () => {
               setError(null);
               setFlowMessage("Registrando agendamento...");
@@ -466,12 +501,12 @@ export default function Onboarding() {
                 setFlowMessage(null);
               }
             }}>{appointmentMutation.isPending ? "Criando..." : progress.appointment ? "Concluído" : STEP_META[1].cta}</Button>
-          </section>
+          </AppSectionCard>
 
-          <section className="rounded-2xl border bg-card p-6 shadow-sm dark:border-zinc-800">
+          <AppSectionCard className="p-6">
             <h2 className="text-lg font-semibold">3. Concluir serviço</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Crie a O.S. e já conclua a execução para liberar cobrança sem etapas extras.</p>
-            <input className="mt-4 w-full rounded-md border bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-zinc-800" value={serviceOrderTitle} onChange={(e) => setServiceOrderTitle(e.target.value)} placeholder="Título da ordem de serviço" />
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">Crie a O.S. e já conclua a execução para liberar cobrança sem etapas extras.</p>
+            <AppInput className="mt-4 w-full" aria-label="Título da ordem de serviço" value={serviceOrderTitle} onChange={(e) => setServiceOrderTitle(e.target.value)} placeholder="Título da ordem de serviço" />
             <Button className="mt-4" disabled={!canRun.serviceOrder || progress.serviceOrder || serviceOrderMutation.isPending || serviceOrderUpdateMutation.isPending} onClick={async () => {
               track("cta_click", { screen: "onboarding", ctaId: "step_create_service_order" });
               setError(null);
@@ -504,12 +539,12 @@ export default function Onboarding() {
                 setFlowMessage(null);
               }
             }}>{serviceOrderMutation.isPending || serviceOrderUpdateMutation.isPending ? "Concluindo..." : progress.serviceOrder ? "Concluído" : STEP_META[2].cta}</Button>
-          </section>
+          </AppSectionCard>
 
-          <section className="rounded-2xl border bg-card p-6 shadow-sm dark:border-zinc-800">
+          <AppSectionCard className="p-6">
             <h2 className="text-lg font-semibold">4. Gerar cobrança</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Mostre dinheiro em potencial pronto para entrar no caixa.</p>
-            <input className="mt-4 w-full rounded-md border bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-zinc-800" type="number" min="1" value={chargeAmount} onChange={(e) => setChargeAmount(e.target.value)} placeholder="Valor da cobrança" />
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">Mostre dinheiro em potencial pronto para entrar no caixa.</p>
+            <AppInput className="mt-4 w-full" aria-label="Valor da cobrança" type="number" min="1" value={chargeAmount} onChange={(e) => setChargeAmount(e.target.value)} placeholder="Valor da cobrança" />
             <Button className="mt-4" disabled={!canRun.charge || progress.charge || chargeMutation.isPending} onClick={async () => {
               track("cta_click", { screen: "onboarding", ctaId: "step_generate_charge" });
               setError(null);
@@ -529,13 +564,13 @@ export default function Onboarding() {
                 setFlowMessage(null);
               }
             }}>{chargeMutation.isPending ? "Gerando..." : progress.charge ? "Concluído" : STEP_META[3].cta}</Button>
-          </section>
+          </AppSectionCard>
 
-          <section className="rounded-2xl border bg-card p-6 shadow-sm dark:border-zinc-800">
+          <AppSectionCard className="p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Primeiro valor entregue</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">
                   Finalize e siga para o Dashboard Executivo com o fluxo operacional completo.
                 </p>
               </div>
@@ -554,7 +589,7 @@ export default function Onboarding() {
                 )}
               </Button>
             </div>
-          </section>
+          </AppSectionCard>
         </div>
       </div>
     </div>

@@ -12,10 +12,17 @@ import { useOperationalMemoryState } from "@/hooks/useOperationalMemory";
 import { usePageDiagnostics } from "@/hooks/usePageDiagnostics";
 import { Button } from "@/components/ui/button";
 import {
+  AppDropdown,
+  AppDropdownContent,
+  AppDropdownItem,
+  AppDropdownTrigger,
+  AppInfoCard,
+  AppInput,
   AppOperationalStatusBadge,
   AppPageShell,
   AppPriorityBadge,
   AppRowActionsDropdown,
+  AppSelect,
   AppStatusBadge,
   type AppOperationalStatus,
   type AppPriorityLevel,
@@ -878,7 +885,7 @@ export default function ServiceOrdersPage() {
       {[customersQuery, appointmentsQuery, chargesQuery, peopleQuery].some(
         query => Boolean(query.error)
       ) ? (
-        <div
+        <AppInfoCard
           role="status"
           className="flex flex-col gap-3 rounded-xl border border-[var(--warning)] bg-[color-mix(in_srgb,var(--warning)_9%,var(--surface-base))] p-4 text-sm text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between"
         >
@@ -905,7 +912,7 @@ export default function ServiceOrdersPage() {
           >
             Tentar novamente
           </Button>
-        </div>
+        </AppInfoCard>
       ) : null}
 
       <AppFiltersBar className="min-w-0 shrink-0 flex-col items-stretch gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2 md:flex-row md:items-center">
@@ -913,79 +920,73 @@ export default function ServiceOrdersPage() {
           <label className="sr-only" htmlFor="service-order-search">
             Buscar ordens de serviço
           </label>
-          <input
+          <AppInput
             id="service-order-search"
             value={searchTerm}
             onChange={event => setSearchTerm(event.target.value)}
             placeholder="Buscar por código, cliente ou descrição"
-            className="h-9 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
+            className="h-9 w-full"
           />
         </div>
-        <label className="sr-only" htmlFor="service-order-customer-filter">
-          Filtrar por cliente
-        </label>
-        <select
-          id="service-order-customer-filter"
-          value={customerFilter}
-          onChange={event => setCustomerFilter(event.target.value)}
-          className="h-9 max-w-[190px] rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
-        >
-          <option value="all">Todos os clientes</option>
-          {customers.map(customer => (
-            <option key={customer.id} value={String(customer.id)}>
-              {safeText(customer.name, "Cliente")}
-            </option>
-          ))}
-        </select>
-        <label className="sr-only" htmlFor="service-order-responsible-filter">
-          Filtrar por responsável
-        </label>
-        <select
-          id="service-order-responsible-filter"
-          value={responsibleFilter}
-          onChange={event => setResponsibleFilter(event.target.value)}
-          className="h-9 max-w-[190px] rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
-        >
-          <option value="all">Todos os responsáveis</option>
-          <option value="unassigned">Sem responsável</option>
-          {people.map(person => (
-            <option key={person.id} value={String(person.id)}>
-              {safeText(person.name, "Pessoa")}
-            </option>
-          ))}
-        </select>
-        <label className="sr-only" htmlFor="service-order-deadline-filter">
-          Filtrar por prazo
-        </label>
-        <select
-          id="service-order-deadline-filter"
-          value={deadlineFilter}
-          onChange={event =>
-            setDeadlineFilter(event.target.value as DeadlineFilter)
-          }
-          className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
-        >
-          <option value="all">Todos os prazos</option>
-          <option value="overdue">Atrasadas</option>
-          <option value="no_deadline">Sem prazo</option>
-        </select>
-        <label className="sr-only" htmlFor="service-order-priority-filter">
-          Filtrar por prioridade
-        </label>
-        <select
-          id="service-order-priority-filter"
-          value={priorityFilter}
-          onChange={event =>
-            setPriorityFilter(event.target.value as PriorityFilter)
-          }
-          className="h-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
-        >
-          <option value="all">Todas as prioridades</option>
-          <option value="P0">Prioridade P0</option>
-          <option value="P1">Prioridade P1</option>
-          <option value="P2">Prioridade P2</option>
-          <option value="P3">Prioridade P3</option>
-        </select>
+        <div className="w-full md:max-w-[190px]">
+          <AppSelect
+            value={customerFilter}
+            onValueChange={setCustomerFilter}
+            ariaLabel="Filtrar por cliente"
+            options={[
+              { value: "all", label: "Todos os clientes" },
+              ...customers.map(customer => ({
+                value: String(customer.id),
+                label: safeText(customer.name, "Cliente"),
+              })),
+            ]}
+          />
+        </div>
+        <div className="w-full md:max-w-[190px]">
+          <AppSelect
+            value={responsibleFilter}
+            onValueChange={setResponsibleFilter}
+            ariaLabel="Filtrar por responsável"
+            options={[
+              { value: "all", label: "Todos os responsáveis" },
+              { value: "unassigned", label: "Sem responsável" },
+              ...people.map(person => ({
+                value: String(person.id),
+                label: safeText(person.name, "Pessoa"),
+              })),
+            ]}
+          />
+        </div>
+        <div className="w-full md:w-auto md:min-w-[150px]">
+          <AppSelect
+            value={deadlineFilter}
+            onValueChange={value =>
+              setDeadlineFilter(value as DeadlineFilter)
+            }
+            ariaLabel="Filtrar por prazo"
+            options={[
+              { value: "all", label: "Todos os prazos" },
+              { value: "overdue", label: "Atrasadas" },
+              { value: "no_deadline", label: "Sem prazo" },
+            ]}
+          />
+        </div>
+        <div className="w-full md:w-auto md:min-w-[170px]">
+          <AppSelect
+            value={priorityFilter}
+            onValueChange={value =>
+              setPriorityFilter(value as PriorityFilter)
+            }
+            ariaLabel="Filtrar por prioridade"
+            options={[
+              { value: "all", label: "Todas as prioridades" },
+              { value: "P0", label: "Prioridade P0" },
+              { value: "P1", label: "Prioridade P1" },
+              { value: "P2", label: "Prioridade P2" },
+              { value: "P3", label: "Prioridade P3" },
+            ]}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {[
             { key: "all", label: `Todas (${counts.all})` },
@@ -1008,25 +1009,29 @@ export default function ServiceOrdersPage() {
               {filter.label}
             </button>
           ))}
-          <details className="relative">
-            <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-              Mais filtros
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 grid min-w-[240px] gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
-              <button
-                type="button"
+          <AppDropdown>
+            <AppDropdownTrigger asChild>
+              <Button type="button" variant="outline" size="sm" className="h-8">
+                Mais filtros
+              </Button>
+            </AppDropdownTrigger>
+            <AppDropdownContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="min-w-[240px] p-2"
+            >
+              <AppDropdownItem
+                onSelect={() => setActiveFilter("without_charge")}
                 className={cn(
-                  "h-8 rounded-md border px-3 text-left text-xs font-medium transition-colors",
-                  activeFilter === "without_charge"
-                    ? "border-[var(--accent-primary)] bg-[var(--accent-soft)] text-[var(--accent-primary)]"
-                    : "border-[var(--border-subtle)] bg-[var(--surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  activeFilter === "without_charge" &&
+                    "font-semibold text-[var(--accent-primary)]"
                 )}
-                onClick={() => setActiveFilter("without_charge")}
               >
                 Concluídas sem cobrança ({counts.doneWithoutCharge})
-              </button>
-            </div>
-          </details>
+              </AppDropdownItem>
+            </AppDropdownContent>
+          </AppDropdown>
         </div>
         <span className="rounded-md border border-[var(--border-subtle)] px-2 py-1 text-xs text-[var(--text-muted)]">
           {filteredOrders.length} / {counts.all} O.S.
@@ -1071,7 +1076,7 @@ export default function ServiceOrdersPage() {
                   {paginatedOrders.map(item => {
                     const isSelected = selectedOrder?.id === item.id;
                     return (
-                      <article
+                      <AppInfoCard
                         key={item.id}
                         role="button"
                         tabIndex={0}
@@ -1219,7 +1224,7 @@ export default function ServiceOrdersPage() {
                             />
                           </div>
                         </div>
-                      </article>
+                      </AppInfoCard>
                     );
                   })}
                 </div>
@@ -1246,7 +1251,7 @@ export default function ServiceOrdersPage() {
               />
             ) : (
               <div className="space-y-3">
-                <article className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-subtle)]/35 p-3">
+                <AppInfoCard className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-subtle)]/35 p-3">
                   <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
                     Resumo
                   </p>
@@ -1274,7 +1279,7 @@ export default function ServiceOrdersPage() {
                     <span>Responsável: {selectedOrder.responsibleName}</span>
                     <span>Prazo: {selectedOrder.dueDateLabel}</span>
                   </div>
-                </article>
+                </AppInfoCard>
 
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                   {[
@@ -1319,7 +1324,7 @@ export default function ServiceOrdersPage() {
                       detail: selectedOrder.riskLabel,
                     },
                   ].map(card => (
-                    <article
+                    <AppInfoCard
                       key={card.label}
                       className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)]/70 p-3 text-sm"
                     >
@@ -1332,12 +1337,12 @@ export default function ServiceOrdersPage() {
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">
                         {card.detail}
                       </p>
-                    </article>
+                    </AppInfoCard>
                   ))}
                 </div>
 
                 <div className="grid gap-2 md:grid-cols-2">
-                  <article className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3">
+                  <AppInfoCard className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3">
                     <p className="text-xs uppercase text-[var(--text-muted)]">
                       Registros de execução
                     </p>
@@ -1386,8 +1391,8 @@ export default function ServiceOrdersPage() {
                         Nenhum registro de execução retornado.
                       </p>
                     )}
-                  </article>
-                  <article className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3">
+                  </AppInfoCard>
+                  <AppInfoCard className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-3">
                     <p className="text-xs uppercase text-[var(--text-muted)]">
                       Comunicação
                     </p>
@@ -1409,7 +1414,7 @@ export default function ServiceOrdersPage() {
                     >
                       Abrir WhatsApp
                     </Button>
-                  </article>
+                  </AppInfoCard>
                 </div>
 
                 <section aria-labelledby="service-order-timeline-title">
