@@ -153,6 +153,8 @@ const modalContrastScopeFiles = [
   "client/src/components/CreateAppointmentModal.tsx",
   "client/src/components/CreateServiceOrderModal.tsx",
   "client/src/components/EditServiceOrderModal.tsx",
+  "client/src/components/CreatePersonModal.tsx",
+  "client/src/components/EditPersonModal.tsx",
   "client/src/components/CreateChargeModal.tsx",
   "client/src/components/EditChargeModal.tsx",
   "client/src/components/CreateExpenseModal.tsx",

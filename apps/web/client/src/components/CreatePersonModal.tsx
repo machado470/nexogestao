@@ -1,20 +1,16 @@
-import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
 import { Loader2, UserPlus } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
+import { FormModal } from "@/components/app-modal-system";
+import {
+  AppField,
+  AppForm,
+  AppInput,
+} from "@/components/app-system";
+import { Button } from "@/components/ui/button";
 import { registerActionFlowEvent } from "@/lib/actionFlow";
+import { trpc } from "@/lib/trpc";
 
 type Props = {
   open: boolean;
@@ -34,37 +30,39 @@ const DEFAULT_FORM: FormData = {
   email: "",
 };
 
-export default function CreatePersonModal({ open, onClose, onSaved }: Props) {
+export default function CreatePersonModal({
+  open,
+  onClose,
+  onSaved,
+}: Props) {
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
 
   useEffect(() => {
-    if (!open) {
-      setFormData(DEFAULT_FORM);
-    }
+    if (!open) setFormData(DEFAULT_FORM);
   }, [open]);
 
   const createPerson = trpc.people.create.useMutation({
     onSuccess: () => {
-      registerActionFlowEvent("person_created", { pageContext: "people", ctaPath: "/people" });
+      registerActionFlowEvent("person_created", {
+        pageContext: "people",
+        ctaPath: "/people",
+      });
       toast.success("Pessoa criada com sucesso.");
       setFormData(DEFAULT_FORM);
       onSaved();
       onClose();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(error.message || "Erro ao criar pessoa.");
     },
   });
 
   const handleChange = (field: keyof FormData, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
 
     const name = formData.name.trim();
     const role = formData.role.trim();
@@ -88,74 +86,75 @@ export default function CreatePersonModal({ open, onClose, onSaved }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)}>
-      <DialogContent className="nexo-modal-content max-h-[90vh] max-w-2xl overflow-hidden border-[var(--border-subtle)] bg-[var(--bg-surface)] p-0 text-[var(--text-primary)] shadow-2xl backdrop-blur">
-        <DialogHeader className="nexo-modal-header border-b border-[var(--border-subtle)] px-6 py-5">
-          <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
-            <UserPlus className="h-5 w-5 text-orange-500" />
-            Nova pessoa
-          </DialogTitle>
-          <DialogDescription className="text-[var(--text-muted)]">Cadastre colaboradores mantendo a experiência visual unificada.</DialogDescription>
-        </DialogHeader>
+    <FormModal
+      open={open}
+      onOpenChange={nextOpen => {
+        if (!nextOpen) onClose();
+      }}
+      size="md"
+      closeBlocked={createPerson.isPending}
+      title={
+        <span className="flex items-center gap-2">
+          <UserPlus className="h-5 w-5 text-[var(--accent-primary)]" />
+          Nova pessoa
+        </span>
+      }
+      description="Cadastre colaboradores mantendo a experiência operacional unificada."
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={createPerson.isPending}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            form="create-person-form"
+            disabled={createPerson.isPending}
+            className="inline-flex items-center gap-2"
+          >
+            {createPerson.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <UserPlus className="h-4 w-4" />
+            )}
+            Criar pessoa
+          </Button>
+        </>
+      }
+    >
+      <AppForm id="create-person-form" onSubmit={handleSubmit}>
+        <AppField label="Nome" htmlFor="person-name">
+          <AppInput
+            id="person-name"
+            value={formData.name}
+            onChange={event => handleChange("name", event.target.value)}
+            placeholder="Ex: João da Silva"
+          />
+        </AppField>
 
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="nexo-modal-body space-y-4 px-6 py-5 pb-28">
-          <div className="space-y-2">
-            <Label htmlFor="person-name">Nome</Label>
-            <Input
-              id="person-name"
-              value={formData.name}
-              onChange={(e) => handleChange("name", e.target.value)}
-              className="border-[var(--border-subtle)]"
-              placeholder="Ex: João da Silva"
-            />
-          </div>
+        <AppField label="Cargo / Papel" htmlFor="person-role">
+          <AppInput
+            id="person-role"
+            value={formData.role}
+            onChange={event => handleChange("role", event.target.value)}
+            placeholder="Ex: Técnico, Supervisor, Administrativo"
+          />
+        </AppField>
 
-          <div className="space-y-2">
-            <Label htmlFor="person-role">Cargo / Papel</Label>
-            <Input
-              id="person-role"
-              value={formData.role}
-              onChange={(e) => handleChange("role", e.target.value)}
-              className="border-[var(--border-subtle)]"
-              placeholder="Ex: Técnico, Supervisor, Administrativo"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="person-email">Email</Label>
-            <Input
-              id="person-email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleChange("email", e.target.value)}
-              className="border-[var(--border-subtle)]"
-              placeholder="Ex: pessoa@empresa.com"
-            />
-          </div>
-
-          </div>
-
-          <DialogFooter className="nexo-modal-footer border-t border-[var(--border-subtle)] px-6 py-4">
-            <Button type="button" variant="outline" onClick={onClose} disabled={createPerson.isPending}>
-              Cancelar
-            </Button>
-
-            <Button
-              type="submit"
-              disabled={createPerson.isPending}
-              className="inline-flex items-center gap-2"
-            >
-              {createPerson.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <UserPlus className="h-4 w-4" />
-              )}
-              Criar pessoa
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <AppField label="Email" htmlFor="person-email">
+          <AppInput
+            id="person-email"
+            type="email"
+            value={formData.email}
+            onChange={event => handleChange("email", event.target.value)}
+            placeholder="Ex: pessoa@empresa.com"
+          />
+        </AppField>
+      </AppForm>
+    </FormModal>
   );
 }

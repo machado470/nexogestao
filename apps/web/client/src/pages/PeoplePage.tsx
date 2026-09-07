@@ -5,11 +5,14 @@ import CreatePersonModal from "@/components/CreatePersonModal";
 import EditPersonModal from "@/components/EditPersonModal";
 import { Button } from "@/components/ui/button";
 import {
+  AppField,
+  AppInput,
   AppOperationalStatusBadge,
   AppPageShell,
   AppPriorityBadge,
   AppRowActionsDropdown,
   AppSectionCard,
+  AppSelect,
   AppStatusBadge,
   type AppOperationalStatus,
   type AppPriorityLevel,
@@ -375,83 +378,79 @@ export default function PeoplePage() {
           <label htmlFor="people-search" className="sr-only">
             Buscar pessoas
           </label>
-          <input
+          <AppInput
             id="people-search"
             value={queryText}
             onChange={event => setQueryText(event.target.value)}
             placeholder="Buscar por nome, função ou contato"
-            className="h-9 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)]"
+            className="h-9 w-full"
           />
         </div>
-        <label htmlFor="people-role-filter" className="sr-only">
-          Filtrar por função
-        </label>
-        <select
-          id="people-role-filter"
-          value={roleFilter}
-          onChange={event => setRoleFilter(event.target.value)}
-          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm"
-        >
-          <option value="all">Todas as funções</option>
-          {roles.map(personRole => (
-            <option key={personRole} value={personRole}>
-              {personRole}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="people-status-filter" className="sr-only">
-          Filtrar por situação cadastral
-        </label>
-        <select
-          id="people-status-filter"
-          value={registrationFilter}
-          onChange={event =>
-            setRegistrationFilter(event.target.value as RegistrationFilter)
-          }
-          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm"
-        >
-          <option value="all">Todas as situações</option>
-          <option value="ACTIVE">Ativos</option>
-          <option value="INACTIVE">Inativos</option>
-          <option value="SUSPENDED">Suspensos</option>
-          <option value="INVITED">Convidados</option>
-        </select>
-        <label htmlFor="people-availability-filter" className="sr-only">
-          Filtrar por disponibilidade oficial
-        </label>
-        <select
-          id="people-availability-filter"
-          value={availabilityFilter}
-          onChange={event =>
-            setAvailabilityFilter(event.target.value as AvailabilityFilter)
-          }
-          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm"
-        >
-          <option value="all">Toda disponibilidade</option>
-          {Object.entries(availabilityLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="people-priority-filter" className="sr-only">
-          Filtrar por prioridade oficial
-        </label>
-        <select
-          id="people-priority-filter"
-          value={priorityFilter}
-          onChange={event =>
-            setPriorityFilter(event.target.value as PriorityFilter)
-          }
-          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm"
-        >
-          <option value="all">Todas as prioridades</option>
-          {(["P0", "P1", "P2", "P3"] as const).map(priority => (
-            <option key={priority} value={priority}>
-              Prioridade {priority}
-            </option>
-          ))}
-        </select>
+        <div className="w-full md:min-w-[160px] md:w-auto">
+          <AppSelect
+            value={roleFilter}
+            onValueChange={setRoleFilter}
+            ariaLabel="Filtrar por função"
+            options={[
+              { value: "all", label: "Todas as funções" },
+              ...roles.map(personRole => ({
+                value: personRole,
+                label: personRole,
+              })),
+            ]}
+          />
+        </div>
+
+        <div className="w-full md:min-w-[160px] md:w-auto">
+          <AppSelect
+            value={registrationFilter}
+            onValueChange={value =>
+              setRegistrationFilter(value as RegistrationFilter)
+            }
+            ariaLabel="Filtrar por situação cadastral"
+            options={[
+              { value: "all", label: "Todas as situações" },
+              { value: "ACTIVE", label: "Ativos" },
+              { value: "INACTIVE", label: "Inativos" },
+              { value: "SUSPENDED", label: "Suspensos" },
+              { value: "INVITED", label: "Convidados" },
+            ]}
+          />
+        </div>
+
+        <div className="w-full md:min-w-[180px] md:w-auto">
+          <AppSelect
+            value={availabilityFilter}
+            onValueChange={value =>
+              setAvailabilityFilter(value as AvailabilityFilter)
+            }
+            ariaLabel="Filtrar por disponibilidade oficial"
+            options={[
+              { value: "all", label: "Toda disponibilidade" },
+              ...Object.entries(availabilityLabels).map(([value, label]) => ({
+                value,
+                label,
+              })),
+            ]}
+          />
+        </div>
+
+        <div className="w-full md:min-w-[160px] md:w-auto">
+          <AppSelect
+            value={priorityFilter}
+            onValueChange={value =>
+              setPriorityFilter(value as PriorityFilter)
+            }
+            ariaLabel="Filtrar por prioridade oficial"
+            options={[
+              { value: "all", label: "Todas as prioridades" },
+              { value: "P0", label: "Prioridade P0" },
+              { value: "P1", label: "Prioridade P1" },
+              { value: "P2", label: "Prioridade P2" },
+              { value: "P3", label: "Prioridade P3" },
+            ]}
+          />
+        </div>
         <span className="text-xs text-[var(--text-muted)]">
           {filteredPeople.length} resultado(s)
         </span>
@@ -805,34 +804,40 @@ export default function PeoplePage() {
                 >
                   <h3 className="font-semibold">Registrar indisponibilidade</h3>
                   <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-                    <label className="text-sm">
-                      Início
-                      <input
+                    <AppField
+                      label="Início"
+                      htmlFor="availability-exception-start"
+                    >
+                      <AppInput
+                        id="availability-exception-start"
                         type="datetime-local"
                         value={startsAt}
                         onChange={event => setStartsAt(event.target.value)}
-                        className="mt-1 w-full min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2"
                       />
-                    </label>
-                    <label className="text-sm">
-                      Fim
-                      <input
+                    </AppField>
+                    <AppField
+                      label="Fim"
+                      htmlFor="availability-exception-end"
+                    >
+                      <AppInput
+                        id="availability-exception-end"
                         type="datetime-local"
                         value={endsAt}
                         onChange={event => setEndsAt(event.target.value)}
-                        className="mt-1 w-full min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2"
                       />
-                    </label>
+                    </AppField>
                   </div>
-                  <label className="block text-sm">
-                    Motivo
-                    <input
+                  <AppField
+                    label="Motivo"
+                    htmlFor="availability-exception-reason"
+                  >
+                    <AppInput
+                      id="availability-exception-reason"
                       value={reason}
                       maxLength={200}
                       onChange={event => setReason(event.target.value)}
-                      className="mt-1 w-full min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2"
                     />
-                  </label>
+                  </AppField>
                   <Button
                     disabled={
                       !startsAt ||

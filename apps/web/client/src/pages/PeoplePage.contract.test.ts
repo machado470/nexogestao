@@ -5,6 +5,10 @@ const source = readFileSync(
   new URL("./PeoplePage.tsx", import.meta.url),
   "utf8"
 );
+const createModal = readFileSync(
+  new URL("../components/CreatePersonModal.tsx", import.meta.url),
+  "utf8"
+);
 const editModal = readFileSync(
   new URL("../components/EditPersonModal.tsx", import.meta.url),
   "utf8"
@@ -52,16 +56,14 @@ describe("PeoplePage golden-standard contract", () => {
   });
 
   it("offers factual and official filters with accessible labels", () => {
-    [
-      "people-search",
-      "people-role-filter",
-      "people-status-filter",
-      "people-availability-filter",
-      "people-priority-filter",
-    ].forEach(id => {
-      expect(source).toContain(`htmlFor="${id}"`);
-      expect(source).toContain(`id="${id}"`);
-    });
+    expect(source).toContain('htmlFor="people-search"');
+    expect(source).toContain('id="people-search"');
+    expect(source).toContain('ariaLabel="Filtrar por função"');
+    expect(source).toContain('ariaLabel="Filtrar por situação cadastral"');
+    expect(source).toContain(
+      'ariaLabel="Filtrar por disponibilidade oficial"'
+    );
+    expect(source).toContain('ariaLabel="Filtrar por prioridade oficial"');
     expect(source).toContain("person.status !== registrationFilter");
     expect(source).toContain(
       "person.availabilityStatus !== availabilityFilter"
@@ -140,4 +142,20 @@ describe("PeoplePage golden-standard contract", () => {
       "aria-label={`Remover indisponibilidade de ${selectedPerson.name}`}"
     );
   });
+
+  it("uses canonical modals and fields for people maintenance", () => {
+    expect(createModal).toContain("<FormModal");
+    expect(editModal).toContain("<FormModal");
+    expect(createModal).toContain("<AppField");
+    expect(editModal).toContain("<AppField");
+    expect(editModal).toContain("<AppTextarea");
+    expect(editModal).toContain("<AppCheckbox");
+    expect(createModal).not.toContain("@/components/ui/dialog");
+    expect(editModal).not.toContain("@/components/ui/dialog");
+    expect(editModal).not.toContain("border-zinc");
+    expect(editModal).not.toContain("bg-red-950");
+    expect(source).toContain("<AppInput");
+    expect(source).toContain("<AppSelect");
+  });
+
 });
