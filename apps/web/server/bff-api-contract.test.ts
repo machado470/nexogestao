@@ -15,6 +15,39 @@ function makeRes() {
   return { cookie: vi.fn(), clearCookie: vi.fn() } as any;
 }
 
+function financeListCharge(id: string) {
+  const date = "2026-09-07T12:00:00.000Z";
+  return {
+    id,
+    orgId: "org-1",
+    customerId: "customer-1",
+    idempotencyKey: null,
+    serviceOrderId: null,
+    amountCents: 1000,
+    currency: "BRL",
+    status: "PENDING",
+    dueDate: date,
+    paidAt: null,
+    canceledAt: null,
+    cancellationReason: null,
+    canceledByUserId: null,
+    notes: null,
+    createdAt: date,
+    updatedAt: date,
+    customer: {
+      id: "customer-1", orgId: "org-1", name: "Cliente", phone: "+5511999999999",
+      email: null, cpfCnpj: null, address: null, notes: null, active: true,
+      createdAt: date, updatedAt: date,
+    },
+    serviceOrder: null,
+    payments: [],
+    paidAmountCents: 0,
+    balanceCents: 1000,
+    daysOverdue: null,
+    evaluatedAt: date,
+  };
+}
+
 describe("BFF↔API contract - lote 1", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -578,7 +611,7 @@ describe("BFF↔API contract - lote 1", () => {
       new Response(
         JSON.stringify({
           data: {
-            items: [{ id: "ch-1" }],
+            items: [financeListCharge("ch-1")],
             meta: { page: 1, limit: 20, total: 1, pages: 1 },
           },
         }),
@@ -594,7 +627,7 @@ describe("BFF↔API contract - lote 1", () => {
     const result = await caller.finance.charges.list({ page: 1, limit: 20 });
 
     expect(result).toEqual({
-      data: [{ id: "ch-1" }],
+      data: [financeListCharge("ch-1")],
       pagination: { page: 1, limit: 20, total: 1, pages: 1 },
     });
   });
@@ -607,7 +640,7 @@ describe("BFF↔API contract - lote 1", () => {
           data: {
             ok: true,
             data: {
-              items: [{ id: "ch-2" }],
+              items: [financeListCharge("ch-2")],
               meta: { page: 1, limit: 20, total: 1, pages: 1 },
             },
           },
@@ -624,7 +657,7 @@ describe("BFF↔API contract - lote 1", () => {
     const result = await caller.finance.charges.list({ page: 1, limit: 20 });
 
     expect(result).toEqual({
-      data: [{ id: "ch-2" }],
+      data: [financeListCharge("ch-2")],
       pagination: { page: 1, limit: 20, total: 1, pages: 1 },
     });
   });
