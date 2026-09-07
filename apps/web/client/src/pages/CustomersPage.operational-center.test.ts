@@ -13,10 +13,8 @@ describe("CustomersPage operational client center", () => {
   it("follows the official operational hierarchy", () => {
     const markers = [
       "Centro Operacional do Cliente",
-      "Estado operacional oficial",
-      "operationalCopy.immediateAttention",
-      "Próxima ação oficial",
-      "Painel operacional do cliente",
+      "AppOperationalHeader",
+      "Decisão e próxima ação",
       'aria-label="Filtros de apresentação"',
       "Carteira operacional",
       "Evidências e navegação contextual",
@@ -25,10 +23,10 @@ describe("CustomersPage operational client center", () => {
   });
 
   it("shows unavailable decision instead of inferring normality", () => {
-    expect(source).toContain("Decisão oficial indisponível");
-    expect(source).toContain("nenhuma normalidade é inferida");
+    expect(source).toContain("Decisão operacional indisponível");
+    expect(source).toContain("Estado operacional indisponível");
     expect(source).toContain(
-      "Sem o contrato oficial não é possível afirmar risco, prioridade, justificativa ou próxima ação."
+      "O resumo operacional oficial não está disponível para este cliente."
     );
   });
 
@@ -48,7 +46,9 @@ describe("CustomersPage operational client center", () => {
     expect(source).not.toMatch(/riskScore\s*[-+<>=]/);
     expect(source).not.toMatch(/sort\([^)]*priority/);
     expect(source).not.toMatch(/sil[eê]ncio prolongado/i);
-    expect(source).toContain("summary.recommendedActionLabel");
+    expect(source).toContain(
+      "selectedOperationalSummary?.recommendedActionLabel"
+    );
     expect(source).toContain("summary?.recommendedActionTarget");
   });
 
@@ -57,9 +57,8 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("Hero Executivo do Cliente");
     expect(source).toContain("Sinal principal:");
     expect(source).toContain("Decisão e próxima ação");
-    expect(source).toContain("Painel operacional do cliente");
-    expect(source).toContain("Mini-dashboard com financeiro");
-    expect(source).toContain("saúde do cliente.");
+    expect(source).not.toContain("Saúde do cliente");
+    expect(source).not.toContain("Mini-dashboard com financeiro");
   });
 
   it("moves the selected customer experience before the operational wallet", () => {
@@ -82,19 +81,13 @@ describe("CustomersPage operational client center", () => {
     expect(source).not.toContain("detectOperationalInterventions");
   });
 
-  it("keeps the client pipeline focused on operational flow instead of raw cadastro", () => {
-    ["Cliente", "Agendamento", "O.S.", "Cobrança", "Pagamento"].forEach(stage =>
-      expect(source).toContain(`label: "${stage}"`)
-    );
+  it("does not reconstruct a customer pipeline from auxiliary data", () => {
+    expect(source).not.toContain("<NexoOperationalPipeline");
+    expect(source).not.toContain("customerOperationalFlowStages");
     expect(source).toContain(
-      "Cliente → Agendamento → O.S. → Cobrança → Pagamento"
+      "Preserve the order returned by the workspace contract"
     );
-    expect(source).toContain("Editar cadastro");
-    expect(source).not.toContain('id: "timeline"');
-    expect(source).not.toContain('id: "risk"');
-    expect(source).not.toContain(
-      'selectedProfile?.contact ?? "Cadastro carregado."'
-    );
+    expect(source).not.toContain("Date.now()");
   });
 
   it("humanizes the embedded customer timeline and does not render raw technical identifiers", () => {
@@ -181,7 +174,6 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("const lastService = serviceOrders.find(");
     expect(source).toContain("lastService,");
     expect(source).not.toContain("lastService: serviceOrders[0]");
-    expect(source).toContain("summary.interventionReason");
     expect(source).toContain('Último serviço:{" "}');
     expect(source).toContain('Próximo agendamento:{" "}');
     expect(source).toContain("Sem serviço concluído");
@@ -208,18 +200,17 @@ describe("CustomersPage operational client center", () => {
     expect(heroSource).toContain('ctaLabel="Ver O.S."');
   });
 
-  it("shows canonical total spent from the customer workspace", () => {
-    expect(source).toContain("const workspaceTotalSpentCents = Math.max(");
+  it("preserves canonical total spent, including legitimate zero", () => {
     expect(source).toContain("totalSpentCents?: number;");
+    expect(source).toContain("raw.totalSpentCents !== null");
+    expect(source).toContain("raw.totalSpentCents !== undefined");
     expect(source).toContain(
-      "totalSpentCents: Number.isFinite(Number(raw.totalSpentCents))"
+      "const workspaceTotalSpentCents = workspace.totalSpentCents"
     );
-    expect(source).toContain("Number(workspace.totalSpentCents ?? 0)");
     expect(source).toContain('title="Total gasto"');
-    expect(source).toContain(
-      "value={formatCurrency(workspaceTotalSpentCents)}"
-    );
-    expect(source).toContain('context="Pagamentos registrados"');
+    expect(source).toContain("workspaceTotalSpentCents === undefined");
+    expect(source).toContain("formatCurrency(workspaceTotalSpentCents)");
+    expect(source).toContain('"Financeiro indisponível"');
   });
 
   it("keeps the operational wallet command-centered with real CTAs", () => {
@@ -255,5 +246,27 @@ describe("CustomersPage operational client center", () => {
     expect(source).toContain("pendingAuxiliaryData");
     expect(source).toContain("de completar os detalhes auxiliares da carteira");
     expect(source).toContain('aria-live="polite"');
+  });
+
+  it("filters only by factual registration state and official decision fields", () => {
+    expect(source).toContain('id="customer-priority-filter"');
+    expect(source).toContain('id="customer-risk-filter"');
+    expect(source).toContain(
+      "profile.operationalSummary?.priority !== priorityFilter"
+    );
+    expect(source).toContain(
+      "profile.operationalSummary?.riskState !== riskFilter"
+    );
+    expect(source).not.toContain("differenceInDays");
+  });
+
+  it("isolates Timeline loading, empty and error states from customer data", () => {
+    expect(source).toContain("trpc.timeline.listByCustomer.useQuery");
+    expect(source).toContain("timelineQuery.isLoading");
+    expect(source).toContain("timelineQuery.error");
+    expect(source).toContain("Tentar Timeline novamente");
+    expect(source).toContain(
+      "Os dados e as ações do cliente permanecem acessíveis"
+    );
   });
 });

@@ -24,12 +24,7 @@ import { usePageDiagnostics } from "@/hooks/usePageDiagnostics";
 import { useOperationalMemoryState } from "@/hooks/useOperationalMemory";
 import { presentationStatusLabel } from "@/lib/presentation-status";
 import { Button } from "@/components/ui/button";
-import {
-  NexoEvidenceTimeline,
-  NexoOperationalPipeline,
-  NexoExecutiveMetric,
-  type OperationalFlowStageState,
-} from "@/components/app";
+import { NexoEvidenceTimeline, NexoExecutiveMetric } from "@/components/app";
 import {
   AppDataTable,
   AppAlert,
@@ -53,7 +48,6 @@ import {
   AppSectionBlock,
 } from "@/components/internal-page-system";
 import { cn } from "@/lib/utils";
-import { operationalCopy } from "@/lib/operational-semantics";
 
 function sanitizeCustomerTimelineText(
   value: unknown,
@@ -149,6 +143,13 @@ type Workspace = {
 };
 
 type CustomerFilter = "all" | "active" | "inactive";
+type OfficialPriorityFilter = "all" | "P0" | "P1" | "P2" | "P3";
+type OfficialRiskFilter =
+  | "all"
+  | "NORMAL"
+  | "WARNING"
+  | "RESTRICTED"
+  | "SUSPENDED";
 
 type CustomerProfile = {
   customer: Customer;
@@ -166,16 +167,6 @@ type CustomerProfile = {
   nextAppointment?: Appointment;
   contact: string;
   pendingChargeId: string | null;
-};
-
-type AttentionItem = {
-  key: string;
-  customerId: string;
-  title: string;
-  context: string;
-  status: string;
-  actionLabel: string;
-  priority: "P0" | "P1" | "P2" | "P3";
 };
 
 type CustomerOperationalEventType =
@@ -216,9 +207,12 @@ function normalizeWorkspace(input: unknown): Workspace {
     serviceOrders: normalizeArrayPayload(raw.serviceOrders ?? raw.orders),
     charges: normalizeArrayPayload(raw.charges ?? raw.finance),
     timeline: normalizeArrayPayload(raw.timeline ?? raw.events),
-    totalSpentCents: Number.isFinite(Number(raw.totalSpentCents))
-      ? Math.max(0, Number(raw.totalSpentCents))
-      : 0,
+    totalSpentCents:
+      raw.totalSpentCents !== null &&
+      raw.totalSpentCents !== undefined &&
+      Number.isFinite(Number(raw.totalSpentCents))
+        ? Math.max(0, Number(raw.totalSpentCents))
+        : undefined,
   };
 }
 
@@ -403,10 +397,9 @@ function buildCustomerProfiles(input: {
       order => String(order.status ?? "").toUpperCase() === "COMPLETED"
     );
     const hasOpenServiceOrder = Boolean(activeServiceOrder);
-    const nextAppointment = appointments.find(item => {
-      const startsAt = toDate(item.startsAt);
-      return startsAt && startsAt.getTime() >= Date.now();
-    });
+    // Keep the API order: this is a factual related appointment, not a
+    // browser-inferred "next appointment" or operational recommendation.
+    const nextAppointment = appointments.find(item => Boolean(item.startsAt));
     const pendingChargeId =
       String(charges.find(isChargePending)?.id ?? "").trim() || null;
 
@@ -435,6 +428,16 @@ export default function CustomersPage() {
   const [activeFilter, setActiveFilter] =
     useOperationalMemoryState<CustomerFilter>(
       "nexo.customers.filter.v2",
+      "all"
+    );
+  const [priorityFilter, setPriorityFilter] =
+    useOperationalMemoryState<OfficialPriorityFilter>(
+      "nexo.customers.priority.v1",
+      "all"
+    );
+  const [riskFilter, setRiskFilter] =
+    useOperationalMemoryState<OfficialRiskFilter>(
+      "nexo.customers.risk.v1",
       "all"
     );
   const [activeCustomerId, setActiveCustomerId] = useOperationalMemoryState<
@@ -545,6 +548,10 @@ export default function CustomersPage() {
     { id: activeCustomerId ?? "" },
     { enabled: isAuthenticated && Boolean(activeCustomerId), retry: false }
   );
+  const timelineQuery = trpc.timeline.listByCustomer.useQuery(
+    { customerId: activeCustomerId ?? "", limit: 5 },
+    { enabled: isAuthenticated && Boolean(activeCustomerId), retry: false }
+  );
 
   const workspace = useMemo(
     () => normalizeWorkspace(workspaceQuery.data),
@@ -561,6 +568,16 @@ export default function CustomersPage() {
         return false;
       if (activeFilter === "inactive" && profile.customer.active !== false)
         return false;
+      if (
+        priorityFilter !== "all" &&
+        profile.operationalSummary?.priority !== priorityFilter
+      )
+        return false;
+      if (
+        riskFilter !== "all" &&
+        profile.operationalSummary?.riskState !== riskFilter
+      )
+        return false;
       if (!query) return true;
 
       return [
@@ -572,7 +589,13 @@ export default function CustomersPage() {
         .join(" ")
         .includes(query);
     });
-  }, [activeFilter, operationalProfiles, searchTerm]);
+  }, [
+    activeFilter,
+    operationalProfiles,
+    priorityFilter,
+    riskFilter,
+    searchTerm,
+  ]);
 
   const isLoading = customersQuery.isLoading && customers.length === 0;
   const hasBlockingError =
@@ -598,50 +621,6 @@ export default function CustomersPage() {
     const start = (currentPage - 1) * pageSize;
     return filteredProfiles.slice(start, start + pageSize);
   }, [currentPage, filteredProfiles]);
-
-  const authoritativeAttentionItems = useMemo<AttentionItem[]>(
-    () =>
-      operationalProfiles.flatMap(profile => {
-        const summary = profile.operationalSummary;
-
-        if (!summary || summary.operationalStatus === "NORMAL") {
-          return [];
-        }
-
-        return [
-          {
-            key: profile.customerId,
-            customerId: profile.customerId,
-            title: String(profile.customer.name ?? "Cliente sem nome"),
-            context: summary.interventionReason ?? summary.riskSignal,
-            status: `${summary.operationalStatus} · ${summary.priority}`,
-            actionLabel: summary.recommendedActionLabel ?? "Abrir cliente",
-            priority: summary.priority,
-          },
-        ];
-      }),
-    [operationalProfiles]
-  );
-
-  const attentionItems = useMemo(
-    () => authoritativeAttentionItems.slice(0, 4),
-    [authoritativeAttentionItems]
-  );
-
-  const attentionSummary = useMemo(() => {
-    const hidden = Math.max(
-      0,
-      authoritativeAttentionItems.length - attentionItems.length
-    );
-
-    return {
-      hidden,
-      hiddenMessage:
-        hidden > 0
-          ? `${hidden} outra(s) atenção(ões) oficial(is) fora da visão imediata.`
-          : "",
-    };
-  }, [attentionItems.length, authoritativeAttentionItems.length]);
 
   const selectedProfile = activeCustomerId
     ? (profileById.get(String(activeCustomerId)) ?? null)
@@ -700,10 +679,7 @@ export default function CustomersPage() {
     if (!isChargePending(charge)) return total;
     return total + Number(charge.amountCents ?? charge.amount ?? 0);
   }, 0);
-  const workspaceTotalSpentCents = Math.max(
-    0,
-    Number(workspace.totalSpentCents ?? 0)
-  );
+  const workspaceTotalSpentCents = workspace.totalSpentCents;
   const workspaceOverdueCharges = workspaceCharges.filter(
     charge => String(charge.status ?? "").toUpperCase() === "OVERDUE"
   );
@@ -718,20 +694,11 @@ export default function CustomersPage() {
         ).getTime() -
         new Date(String(a.paidAt ?? a.updatedAt ?? a.createdAt ?? 0)).getTime()
     )[0];
-  const workspaceNextAppointment = workspaceAppointments
-    .filter(item => {
-      const startsAt = toDate(item.startsAt ?? item.scheduledAt);
-      return startsAt && startsAt.getTime() >= Date.now();
-    })
-    .sort(
-      (a, b) =>
-        new Date(
-          String(a.startsAt ?? a.scheduledAt ?? a.createdAt ?? 0)
-        ).getTime() -
-        new Date(
-          String(b.startsAt ?? b.scheduledAt ?? b.createdAt ?? 0)
-        ).getTime()
-    )[0];
+  // Preserve the order returned by the workspace contract. The UI does not
+  // infer recency, frequency or the next operational action from dates.
+  const workspaceNextAppointment = workspaceAppointments.find(item =>
+    Boolean(item.startsAt ?? item.scheduledAt)
+  );
   const workspaceOpenServiceOrder = workspaceServiceOrders
     .filter(isServiceOrderOpen)
     .sort(
@@ -750,11 +717,10 @@ export default function CustomersPage() {
   const workspacePendingCharges = workspaceCharges.filter(isChargePending);
   const workspaceOpenServiceOrders =
     workspaceServiceOrders.filter(isServiceOrderOpen);
-  const workspaceOverdueServiceOrders = workspaceServiceOrders.filter(
-    isServiceOrderOverdue
-  );
   const selectedCustomerName = String(selectedCustomer?.name ?? "Cliente");
-  const customerOfficialTimelineEvents = (workspace.timeline ?? [])
+  const customerOfficialTimelineEvents = normalizeArrayPayload<
+    Record<string, any>
+  >(timelineQuery.data)
     .slice(0, 5)
     .map((event, index) => ({
       id: String(event.id ?? `event-${index}`),
@@ -785,114 +751,6 @@ export default function CustomersPage() {
     if (!selectedProfile || !selectedOperationalSummary) return;
     runAuthoritativeCustomerAction(selectedProfile);
   };
-
-  const customerOperationalFlowStages = [
-    {
-      id: "customer",
-      label: "Cliente",
-      state: selectedCustomer ? "done" : "idle",
-      summary: selectedCustomer
-        ? `${selectedCustomerName} · ${
-            selectedProfile?.operationalSummary?.operationalStatus ??
-            "estado indisponível"
-          }`
-        : "Selecione um cliente.",
-      countOrValue: selectedCustomer ? "1" : "0",
-      hrefLabel: "Editar cadastro",
-      onClick: selectedCustomer
-        ? () => setEditingCustomerId(activeCustomerId)
-        : undefined,
-    },
-    {
-      id: "appointment",
-      label: "Agendamento",
-      state: workspaceNextAppointment ? "active" : "idle",
-      summary: workspaceNextAppointment
-        ? `Próximo em ${formatDateTime(
-            workspaceNextAppointment.startsAt ??
-              workspaceNextAppointment.scheduledAt
-          )}.`
-        : "Sem agenda futura retornada.",
-      countOrValue: String(workspaceAppointments.length),
-      hrefLabel: "Abrir agenda",
-      onClick: () => navigate(`/appointments?customerId=${activeCustomerId}`),
-    },
-    {
-      id: "service-order",
-      label: "O.S.",
-      state:
-        workspaceOpenServiceOrders.length > 0
-          ? "active"
-          : workspaceLastCompletedServiceOrder
-            ? "done"
-            : "idle",
-      summary:
-        workspaceOverdueServiceOrders.length > 0
-          ? "O.S. aberta com prazo vencido segundo a decisão oficial."
-          : workspaceOpenServiceOrders.length > 0
-            ? `${workspaceOpenServiceOrders.length} O.S. em execução.`
-            : workspaceLastCompletedServiceOrder
-              ? "Última O.S. concluída."
-              : "Sem O.S. relacionada retornada.",
-      countOrValue: String(workspaceServiceOrders.length),
-      hrefLabel: "Abrir O.S.",
-      onClick: () => navigate(`/service-orders?customerId=${activeCustomerId}`),
-    },
-    {
-      id: "charge",
-      label: "Cobrança",
-      state:
-        workspacePendingCharges.length > 0
-          ? "active"
-          : workspaceCharges.length > 0
-            ? "done"
-            : "idle",
-      summary:
-        workspaceOverdueCharges.length > 0
-          ? "Cobrança vencida retornada pelo financeiro."
-          : workspacePendingCharges.length > 0
-            ? "Cobrança pendente retornada."
-            : workspaceCharges.length > 0
-              ? "Sem cobrança pendente retornada."
-              : "Sem cobrança retornada.",
-      countOrValue: formatCurrency(
-        workspacePendingCents || selectedProfile?.pendingCents
-      ),
-      hrefLabel: "Abrir financeiro",
-      onClick: () => navigate(`/finances?customerId=${activeCustomerId}`),
-    },
-    {
-      id: "payment",
-      label: "Pagamento",
-      state: workspaceLastPayment ? "done" : "idle",
-      summary: workspaceLastPayment
-        ? `Último pagamento em ${formatDateTime(
-            workspaceLastPayment.paidAt ??
-              workspaceLastPayment.updatedAt ??
-              workspaceLastPayment.createdAt
-          )}.`
-        : "Sem pagamento retornado.",
-      countOrValue: workspaceLastPayment
-        ? formatCurrency(
-            Number(
-              workspaceLastPayment.amountCents ??
-                workspaceLastPayment.amount ??
-                0
-            )
-          )
-        : undefined,
-      hrefLabel: "Ver pagamentos",
-      onClick: () => navigate(`/finances?customerId=${activeCustomerId}`),
-    },
-  ] satisfies Array<{
-    id: string;
-    label: string;
-    summary: string;
-    state: OperationalFlowStageState;
-    countOrValue?: string;
-    hrefLabel?: string;
-    onClick?: () => void;
-  }>;
 
   async function refreshCustomerWorkspace(
     customerId: string,
@@ -946,9 +804,7 @@ export default function CustomersPage() {
 
       safePush(trpcUtils.customers.list.invalidate());
       safePush(trpcUtils.customers.operationalSummary.invalidate());
-      safePush(
-        trpcUtils.customers.workspace.invalidate({ id: customerId })
-      );
+      safePush(trpcUtils.customers.workspace.invalidate({ id: customerId }));
 
       switch (eventType) {
         case "CUSTOMER_APPOINTMENT_CREATED":
@@ -982,9 +838,7 @@ export default function CustomersPage() {
       }
 
       if (includeTimeline) {
-        safePush(
-          trpcUtils.customers.workspace.refetch({ id: customerId })
-        );
+        safePush(trpcUtils.customers.workspace.refetch({ id: customerId }));
       }
       await Promise.all(operations);
     } finally {
@@ -1003,13 +857,6 @@ export default function CustomersPage() {
     navigate(
       `/whatsapp?customerId=${customerId}${chargeId ? `&chargeId=${chargeId}` : ""}`
     );
-  }
-
-  function runAttentionAction(item: AttentionItem) {
-    const profile = profileById.get(item.customerId);
-    if (!profile) return;
-
-    runAuthoritativeCustomerAction(profile);
   }
 
   useEffect(() => {
@@ -1190,121 +1037,60 @@ export default function CustomersPage() {
         </AppAlert>
       ) : null}
 
-      <AppSectionCard
-        className={cn("space-y-2.5", selectedProfile ? "order-3" : undefined)}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="nexo-overline">
-              Estado operacional oficial · Próxima ação oficial
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">
-              {attentionItems[0]
-                ? attentionItems[0].title
-                : !customersOperationalSummary
-                  ? "Decisão oficial indisponível"
-                  : "Nenhuma atenção oficial retornada"}
-            </h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {attentionItems[0]
-                ? attentionItems[0].context
-                : !customersOperationalSummary
-                  ? "O contrato customers.operationalSummary não está disponível; nenhuma normalidade é inferida."
-                  : "O resumo operacional oficial não retornou cliente em atenção para esta carteira."}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <AppStatusBadge label="Financeiro" tone="info" />
-              <AppStatusBadge label="Execução" tone="accent" />
-              <AppStatusBadge label="Comunicação" tone="neutral" />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {portfolioOperationalStatusBadge}
-            {attentionItems[0] ? (
-              <AppPriorityBadge priority={attentionItems[0].priority} />
-            ) : null}
-            {attentionItems[0] ? (
-              <Button
-                size="sm"
-                onClick={() => runAttentionAction(attentionItems[0])}
-              >
-                {attentionItems[0].actionLabel}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setCreateOpen(true)}
-              >
-                Novo cliente
-              </Button>
-            )}
-          </div>
-        </div>
-      </AppSectionCard>
-
-      <AppSectionBlock
-        className={selectedProfile ? "order-4" : undefined}
-        title={operationalCopy.immediateAttention}
-        subtitle={`Clientes que podem travar caixa, execução ou resposta no turno. ${attentionSummary.hidden > 0 ? attentionSummary.hiddenMessage : ""}`}
-        compact
-      >
-        {isLoading ? (
-          <AppPageLoadingState description="Carregando sinais dos clientes..." />
-        ) : !customersOperationalSummary ? (
-          <AppPageEmptyState
-            title="Decisão operacional indisponível"
-            description="Sem o contrato oficial não é possível afirmar risco, prioridade, justificativa ou próxima ação."
-          />
-        ) : attentionItems.length === 0 ? (
-          <AppPageEmptyState
-            title="Nenhuma atenção oficial retornada"
-            description="O resumo operacional foi consultado e não retornou cliente em atenção; isso não é inferido a partir dos demais dados."
-          />
-        ) : (
-          <div className="grid gap-2 lg:grid-cols-3">
-            {attentionItems.slice(0, 3).map(item => (
-              <article
-                key={item.key}
-                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AppStatusBadge label={item.status} />
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">
-                        {item.title}
-                      </p>
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
-                      {item.context}
-                    </p>
-                  </div>
-                  <Button size="sm" onClick={() => runAttentionAction(item)}>
-                    {item.actionLabel}
-                  </Button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </AppSectionBlock>
-
       <AppFiltersBar
         aria-label="Filtros de apresentação"
         className={cn(
-          "shrink-0 gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2",
+          "min-w-0 shrink-0 flex-col items-stretch gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2 md:flex-row md:items-center",
           selectedProfile ? "order-2" : undefined
         )}
       >
         <div className="min-w-[220px] flex-1">
+          <label className="sr-only" htmlFor="customer-search">
+            Buscar clientes
+          </label>
           <input
+            id="customer-search"
             value={searchTerm}
             onChange={event => setSearchTerm(event.target.value)}
             placeholder="Buscar por nome, telefone ou e-mail"
             className="h-9 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)]"
           />
         </div>
+        <label className="sr-only" htmlFor="customer-priority-filter">
+          Filtrar pela prioridade oficial
+        </label>
+        <select
+          id="customer-priority-filter"
+          value={priorityFilter}
+          onChange={event =>
+            setPriorityFilter(event.target.value as OfficialPriorityFilter)
+          }
+          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
+        >
+          <option value="all">Todas as prioridades</option>
+          {(["P0", "P1", "P2", "P3"] as const).map(priority => (
+            <option key={priority} value={priority}>
+              Prioridade oficial {priority}
+            </option>
+          ))}
+        </select>
+        <label className="sr-only" htmlFor="customer-risk-filter">
+          Filtrar pelo risco oficial
+        </label>
+        <select
+          id="customer-risk-filter"
+          value={riskFilter}
+          onChange={event =>
+            setRiskFilter(event.target.value as OfficialRiskFilter)
+          }
+          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm text-[var(--text-primary)]"
+        >
+          <option value="all">Todos os riscos oficiais</option>
+          <option value="NORMAL">Normal</option>
+          <option value="WARNING">Atenção</option>
+          <option value="RESTRICTED">Restrito</option>
+          <option value="SUSPENDED">Suspenso</option>
+        </select>
         <div
           className="flex flex-wrap items-center gap-2"
           aria-label="Filtros de situação cadastral"
@@ -1790,8 +1576,17 @@ export default function CustomersPage() {
                   />
                   <NexoExecutiveMetric
                     title="Total gasto"
-                    value={formatCurrency(workspaceTotalSpentCents)}
-                    context="Pagamentos registrados"
+                    value={
+                      isChargesUnavailable ||
+                      workspaceTotalSpentCents === undefined
+                        ? "Financeiro indisponível"
+                        : formatCurrency(workspaceTotalSpentCents)
+                    }
+                    context={
+                      isChargesUnavailable
+                        ? "Não foi possível confirmar pagamentos"
+                        : "Pagamentos registrados"
+                    }
                     ctaLabel="Ver financeiro"
                     onClick={() =>
                       navigate(`/finances?customerId=${activeCustomerId}`)
@@ -1800,7 +1595,7 @@ export default function CustomersPage() {
                   <NexoExecutiveMetric
                     title="Saldo"
                     value={formatCurrency(
-                      workspacePendingCents || selectedProfile.pendingCents
+                      workspacePendingCents ?? selectedProfile.pendingCents
                     )}
                     context={`Vencidas: ${workspaceOverdueCharges.length}`}
                     ctaLabel="Cobrar"
@@ -1989,96 +1784,11 @@ export default function CustomersPage() {
                 </div>
               </AppSectionCard>
 
-              <NexoOperationalPipeline
-                title="Fluxo operacional do cliente"
-                subtitle="Cliente → Agendamento → O.S. → Cobrança → Pagamento"
-                stages={customerOperationalFlowStages}
-              />
-
               {isRefreshingWorkspace ? (
                 <p className="text-xs text-[var(--text-muted)]">
                   Atualizando dados do cliente...
                 </p>
               ) : null}
-
-              <article className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-primary)]/35 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="nexo-overline">
-                      Painel operacional do cliente
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      Mini-dashboard com financeiro, execução, agenda,
-                      comunicação e saúde do cliente.
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowInlineCharges(value => !value)}
-                  >
-                    {showInlineCharges ? "Ocultar cobranças" : "Ver cobranças"}
-                  </Button>
-                </div>
-                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-5">
-                  {[
-                    {
-                      title: "Financeiro",
-                      value: formatCurrency(
-                        workspacePendingCents || selectedProfile.pendingCents
-                      ),
-                      context: `Cobranças vencidas: ${workspaceOverdueCharges.length}`,
-                    },
-                    {
-                      title: "Execução",
-                      value: `${workspaceOpenServiceOrders.length} O.S.`,
-                      context: workspaceLastCompletedServiceOrder
-                        ? `Última O.S.: ${formatDateTime(workspaceLastCompletedServiceOrder.updatedAt ?? workspaceLastCompletedServiceOrder.createdAt)}`
-                        : "Última O.S.: sem conclusão",
-                    },
-                    {
-                      title: "Agenda",
-                      value: workspaceNextAppointment
-                        ? formatDateTime(
-                            workspaceNextAppointment.startsAt ??
-                              workspaceNextAppointment.scheduledAt
-                          )
-                        : "Sem agenda",
-                      context: `Agendamentos: ${workspaceAppointments.length}`,
-                    },
-                    {
-                      title: "Comunicação",
-                      value: formatDateTime(
-                        selectedProfile.lastInteractionAt,
-                        "Sem registro"
-                      ),
-                      context: "Canal: WhatsApp",
-                    },
-                    {
-                      title: "Saúde do cliente",
-                      value:
-                        selectedProfile.operationalSummary?.operationalStatus ??
-                        "Indisponível",
-                      context:
-                        selectedProfile.operationalSummary?.riskSignal ??
-                        "Sinal operacional indisponível",
-                    },
-                  ].map(item => (
-                    <div
-                      key={item.title}
-                      className="rounded-xl border border-[var(--border-subtle)]/70 bg-[var(--surface-base)]/80 p-3"
-                    >
-                      <p className="nexo-overline">{item.title}</p>
-                      <p className="mt-1 truncate text-xl font-black text-[var(--text-primary)]">
-                        {item.value}
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[var(--text-secondary)]">
-                        {item.context}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </article>
 
               {showInlineCharges ? (
                 <article className="rounded-xl border border-[var(--border-subtle)] p-3">
@@ -2124,15 +1834,30 @@ export default function CustomersPage() {
                 <p className="nexo-overline mb-2">
                   Evidências e navegação contextual
                 </p>
-                <NexoEvidenceTimeline
-                  title="Últimos eventos oficiais"
-                  subtitle="Prova operacional do cliente e histórico oficial ligado ao cliente."
-                  events={customerOfficialTimelineEvents}
-                  fullTimelineLabel="Abrir Timeline completa"
-                  onFullTimeline={() =>
-                    navigate(`/timeline?customerId=${activeCustomerId}`)
-                  }
-                />
+                {timelineQuery.isLoading ? (
+                  <AppPageLoadingState description="Carregando Timeline do cliente..." />
+                ) : timelineQuery.error ? (
+                  <AppPageErrorState
+                    description="A Timeline está indisponível. Os dados e as ações do cliente permanecem acessíveis."
+                    actionLabel="Tentar Timeline novamente"
+                    onAction={() => void timelineQuery.refetch()}
+                  />
+                ) : customerOfficialTimelineEvents.length === 0 ? (
+                  <AppPageEmptyState
+                    title="Timeline sem eventos"
+                    description="Nenhuma evidência histórica foi retornada para este cliente."
+                  />
+                ) : (
+                  <NexoEvidenceTimeline
+                    title="Últimos eventos oficiais"
+                    subtitle="Prova operacional do cliente e histórico oficial ligado ao cliente."
+                    events={customerOfficialTimelineEvents}
+                    fullTimelineLabel="Abrir Timeline completa"
+                    onFullTimeline={() =>
+                      navigate(`/timeline?customerId=${activeCustomerId}`)
+                    }
+                  />
+                )}
               </div>
             </div>
           )}
