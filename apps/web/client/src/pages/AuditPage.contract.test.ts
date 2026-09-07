@@ -4,6 +4,7 @@ import {
   AUDIT_PAGE_SIZE,
   getAuditEmptyState,
   getAuditEventMetadata,
+  getSafeMetadataEntries,
   getNextAuditPage,
   normalizeAuditList,
   normalizeAuditSummary,
@@ -13,7 +14,7 @@ const auditPageSource = readFileSync(new URL("./AuditPage.tsx", import.meta.url)
 const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 const mainLayoutSource = readFileSync(new URL("../components/MainLayout.tsx", import.meta.url), "utf8");
 
-describe("AuditPage administrative audit contract", () => {
+describe("AuditPage golden-standard audit contract", () => {
   it("consome os contratos frontend oficiais de lista e resumo", () => {
     expect(auditPageSource).toContain("trpc.audit.listEvents.useQuery");
     expect(auditPageSource).toContain("trpc.audit.getSummary.useQuery");
@@ -51,7 +52,7 @@ describe("AuditPage administrative audit contract", () => {
     });
   });
 
-  it("expõe metadata completo no detalhe do evento", () => {
+  it("mantém a evidência oficial e expõe somente metadata primitiva segura", () => {
     const metadata = { before: { name: "Antes" }, after: { name: "Depois" } };
     expect(getAuditEventMetadata({
       id: "event-1",
@@ -61,6 +62,8 @@ describe("AuditPage administrative audit contract", () => {
       orgId: "org-1",
       metadata,
     })).toEqual(metadata);
+    expect(getSafeMetadataEntries({ status: "UPDATED", attempts: 2, token: "secret", nested: { raw: true } }))
+      .toEqual([["status", "UPDATED"], ["attempts", "2"]]);
   });
 
   it("avança paginação sem ultrapassar a última página", () => {
@@ -72,5 +75,35 @@ describe("AuditPage administrative audit contract", () => {
     expect(getAuditEmptyState([], false)).toBe(true);
     expect(getAuditEmptyState([], true)).toBe(false);
     expect(getAuditEmptyState([{ id: "event-1" } as any], false)).toBe(false);
+  });
+
+  it("usa composição, estados, tabela, paginação e modal canônicos", () => {
+    for (const primitive of [
+      "AppPageShell",
+      "AppOperationalHeader",
+      "AppFiltersBar",
+      "AppSectionBlock",
+      "AppDataTable",
+      "AppPagination",
+      "AppLoadingState",
+      "AppEmptyState",
+      "BaseModal",
+      "AppField",
+      "AppInput",
+    ]) expect(auditPageSource).toContain(primitive);
+
+    expect(auditPageSource).not.toMatch(/from "@\/components\/ui\/(card|table|dialog|input|empty)"/);
+    expect(auditPageSource).not.toContain("JSON.stringify");
+    expect(auditPageSource).not.toContain(".sort(");
+    expect(auditPageSource).not.toContain("Date.now");
+    expect(auditPageSource).not.toContain("localStorage");
+    expect(auditPageSource).not.toContain("sessionStorage");
+  });
+
+  it("preserva ordem, paginação e investigação sem fabricar navegação", () => {
+    expect(auditPageSource).toContain("events.map(event =>");
+    expect(auditPageSource).toContain("onPageChange={setPage}");
+    expect(auditPageSource).toContain("getSafeMetadataEntries");
+    expect(auditPageSource).not.toMatch(/href=.*entity/i);
   });
 });
