@@ -19,11 +19,11 @@ describe("ServiceOrdersPage golden-standard composition", () => {
     expect(page).toContain("<AppFiltersBar");
     expect(page).toContain("flex-col items-stretch");
     expect(page).toContain('id="service-order-search"');
-    expect(page).toContain("service-order-customer-filter");
-    expect(page).toContain("service-order-responsible-filter");
-    expect(page).toContain("service-order-deadline-filter");
-    expect(page).toContain("service-order-priority-filter");
-    expect(page).toContain('<option value="P0">Prioridade P0</option>');
+    expect(page).toContain('ariaLabel="Filtrar por cliente"');
+    expect(page).toContain('ariaLabel="Filtrar por responsável"');
+    expect(page).toContain('ariaLabel="Filtrar por prazo"');
+    expect(page).toContain('ariaLabel="Filtrar por prioridade"');
+    expect(page).toContain('{ value: "P0", label: "Prioridade P0" }');
   });
 
   it("renders canonical main loading, error and legitimate empty states", () => {
@@ -65,4 +65,15 @@ describe("ServiceOrdersPage golden-standard composition", () => {
     expect(page).not.toContain("linkedCharge?.amountCents ?? 0");
     expect(page).not.toContain("trpc.nexo.");
   });
+
+  it("uses canonical fields, surfaces and dropdowns throughout the O.S. workspace", () => {
+    expect(page).toContain("<AppInput");
+    expect(page).toContain("<AppSelect");
+    expect(page).toContain("<AppInfoCard");
+    expect(page).toContain("<AppDropdown");
+    expect(page).not.toContain("<details");
+    expect(page).not.toContain("<article");
+    expect(page).not.toContain("<select");
+  });
+
 });
