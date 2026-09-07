@@ -21,6 +21,8 @@ Status: `current` descreve a referência vigente; `review` explicita conteúdo �
 
 ## Arquitetura e contratos
 
+- [Auditoria executável da Fase 2](audits/2026/PHASE_2_CONTRACTS_ISOLATION_READINESS.md) — inventário priorizado de contratos, isolamento multi-tenant e telemetria; status `review`.
+
 | Documento                                                                         | Finalidade                           | Status  | source_of_truth | Substitui / substituído por                        | Última revisão |
 | --------------------------------------------------------------------------------- | ------------------------------------ | ------- | --------------- | -------------------------------------------------- | -------------- |
 | [Contexto do sistema](architecture/system-context.md)                             | Arquitetura macro e limites          | current | true            | `ARCHITECTURE_OVERVIEW.md`, `SAAS_ARCHITECTURE.md` | 2026-09-06     |
