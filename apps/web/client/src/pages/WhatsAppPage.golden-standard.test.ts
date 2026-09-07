@@ -58,3 +58,27 @@ describe("WhatsApp golden-standard workspace", () => {
     expect(source).not.toContain("Date.now()");
   });
 });
+
+describe("WhatsApp overlay consolidation guardrails", () => {
+  it("uses canonical dropdowns without cascade or local stacking", () => {
+    expect(source).toContain("<AppDropdown>");
+    expect(source).toContain("<AppDropdownContent");
+    expect(source).toContain("<AppDropdownItem");
+    expect(source).not.toContain("DropdownMenuSub");
+    expect(source).not.toContain("@/components/ui/dropdown-menu");
+    expect(source).not.toMatch(
+      /\bz-\[(?:\d+|[^\]]+)\]|\bz-(?:10|20|30|40|50|60|70)\b/
+    );
+    expect(source).not.toContain("nexo-cascade");
+  });
+
+  it("uses accessible modal primitives for workflow decisions", () => {
+    expect(source).toContain("<ConfirmModal");
+    expect(source).toContain("<FormModal");
+    expect(source).toContain('htmlFor="whatsapp-cancel-reason"');
+    expect(source).not.toContain("window.confirm");
+    expect(source).not.toContain("window.prompt");
+    expect(source).not.toContain("document.addEventListener");
+    expect(source).not.toContain("<details");
+  });
+});

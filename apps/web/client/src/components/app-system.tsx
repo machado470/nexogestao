@@ -30,6 +30,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -519,6 +520,8 @@ export const AppDropdown = DropdownMenu;
 export const AppDropdownTrigger = DropdownMenuTrigger;
 export const AppDropdownContent = DropdownMenuContent;
 export const AppDropdownItem = DropdownMenuItem;
+export const AppDropdownLabel = DropdownMenuLabel;
+export const AppDropdownSeparator = DropdownMenuSeparator;
 
 export const AppPopover = Popover;
 export const AppPopoverTrigger = PopoverTrigger;
