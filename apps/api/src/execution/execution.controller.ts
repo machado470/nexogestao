@@ -10,6 +10,9 @@ import { ExecutionRunner } from './execution.runner'
 import { ExecutionEventsService } from './execution.events'
 import { ExecutionConfigService } from './execution.config'
 import type { ExecutionMode, ExecutionPolicyConfig } from './execution.types'
+import { ApiBody, ApiCreatedResponse } from '@nestjs/swagger'
+import { ExecutionResponseDto, StartExecutionDto } from './dto/start-execution.dto'
+import { CompleteExecutionDto } from './dto/complete-execution.dto'
 
 const VALID_MODES = new Set<ExecutionMode>(['manual', 'semi_automatic', 'automatic'])
 
@@ -108,14 +111,18 @@ export class ExecutionController {
 
   @Post('start')
   @Roles('ADMIN', 'MANAGER', 'STAFF')
-  start(@Org() orgId: string, @User() user: any, @Body() body: any) {
+  @ApiBody({ type: StartExecutionDto })
+  @ApiCreatedResponse({ type: ExecutionResponseDto })
+  start(@Org() orgId: string, @User() user: any, @Body() body: StartExecutionDto) {
     return this.execution.start({ orgId, serviceOrderId: body.serviceOrderId, notes: body.notes, checklist: body.checklist, attachments: body.attachments, executorPersonId: user?.personId ?? null })
   }
 
   @Post(':id/complete')
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   @Roles('ADMIN', 'MANAGER', 'STAFF')
-  complete(@Org() orgId: string, @Param('id') id: string, @Body() body: any) {
+  @ApiBody({ type: CompleteExecutionDto })
+  @ApiCreatedResponse({ type: ExecutionResponseDto })
+  complete(@Org() orgId: string, @Param('id') id: string, @Body() body: CompleteExecutionDto) {
     return this.execution.complete({ orgId, executionId: id, notes: body.notes, checklist: body.checklist, attachments: body.attachments })
   }
 
