@@ -12,6 +12,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
   Bell,
+  ArrowLeft,
   Bot,
   CalendarCheck,
   CheckCheck,
@@ -49,7 +50,15 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { AppPageLoadingState } from "@/components/internal-page-system";
+import {
+  AppContextChip,
+  AppFiltersBar,
+  AppOperationalHeader,
+  AppPageEmptyState,
+  AppPageErrorState,
+  AppPageLoadingState,
+  AppSectionBlock,
+} from "@/components/internal-page-system";
 import {
   WhatsAppActionExecutionPanel,
   type WhatsAppActionExecution,
@@ -65,7 +74,7 @@ type WhatsAppConversationStatus =
   | "PENDING"
   | "RESOLVED"
   | "FAILED";
-type WhatsAppPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+type WhatsAppPriority = "LOW" | "NORMAL" | "MEDIUM" | "HIGH" | "CRITICAL";
 type ContextType =
   | "CUSTOMER"
   | "CHARGE"
@@ -225,7 +234,7 @@ type Conversation = {
   title?: string | null;
   lastMessage: string;
   lastMessageAt?: string | null;
-  status: WhatsAppConversationStatus;
+  status: WhatsAppConversationStatus | null;
   contextType: ContextType;
   priority: WhatsAppPriority | null;
   priorityReason?: string | null;
@@ -238,7 +247,7 @@ type Conversation = {
   failedMessageCount?: number;
   lastFailedAt?: string | null;
   hasNoResponse?: boolean;
-  unreadCount: number;
+  unreadCount: number | null;
   contextId?: string | null;
   operationalStatus?: string;
   contextHint?: string | null;
@@ -296,6 +305,14 @@ export type WhatsAppContext = {
     entityId?: string | null;
   } | null;
   officialActions?: OfficialComposerAction[];
+  intelligence?: {
+    intent?: string | null;
+    intentReason?: string | null;
+    priority?: string | null;
+    priorityReason?: string | null;
+    slaStatus?: string | null;
+    responseDueAt?: string | null;
+  } | null;
   governanceSignal?: {
     communicationFailure?: boolean;
     failedMessageCount?: number;
@@ -335,7 +352,7 @@ const statusUi: Record<
   FAILED: { label: "Falha", dot: "bg-rose-400" },
 };
 
-const ROW_HEIGHT = 92;
+const ROW_HEIGHT = 116;
 const NO_APPOINTMENT_TEXT = "Sem agendamento futuro";
 const NO_SERVICE_ORDER_TEXT = "Nenhuma O.S. ativa";
 const NO_CHARGE_TEXT = "Nenhuma cobrança pendente";
@@ -411,7 +428,8 @@ export function getMessageDeliveryPresentation(message: ChatMessage) {
   };
 }
 
-function mapConversation(item: any): Conversation {
+/** Transport mapping only: official ordering and operational semantics are copied. */
+export function mapConversation(item: any): Conversation {
   const governanceSignal =
     item?.governanceSignal ?? item?.metadata?.governanceSignal ?? null;
   return {
@@ -425,14 +443,17 @@ function mapConversation(item: any): Conversation {
       item?.lastMessagePreview ?? item?.title ?? "Sem mensagens"
     ),
     lastMessageAt: item?.lastMessageAt ?? null,
-    status: (item?.status ?? "OPEN") as WhatsAppConversationStatus,
+    status: (item?.status ?? null) as WhatsAppConversationStatus | null,
     contextType: (item?.contextType ?? "GENERAL") as ContextType,
-    priority: item?.priority === "NORMAL" ? "MEDIUM" : (item?.priority ?? null),
+    priority: item?.priority ?? null,
     priorityReason: item?.priorityReason ?? null,
     inboxPosition: Number.isInteger(item?.inboxPosition)
       ? item.inboxPosition
       : null,
-    unreadCount: Number(item?.unreadCount ?? 0),
+    unreadCount:
+      item?.unreadCount === null || item?.unreadCount === undefined
+        ? null
+        : Number(item.unreadCount),
     contextId: item?.contextId ?? null,
     operationalStatus: item?.operationalStatus ?? "Não informado",
     contextHint: item?.title ?? item?.lastMessagePreview ?? null,
@@ -573,6 +594,7 @@ function getPriorityLabel(priority?: WhatsAppPriority | null) {
   if (priority === "HIGH") return "Alta";
   if (priority === "MEDIUM") return "Média";
   if (priority === "LOW") return "Baixa";
+  if (priority === "NORMAL") return "Normal";
   return "Não classificada";
 }
 
@@ -641,7 +663,9 @@ const ConversationRow = memo(function ConversationRow({
   onSelect: (id: string) => void;
   style: CSSProperties;
 }) {
-  const status = statusUi[conversation.status] ?? statusUi.OPEN;
+  const status = conversation.status
+    ? (statusUi[conversation.status] ?? statusUi.OPEN)
+    : { label: "Status indisponível", dot: "bg-slate-400" };
   const isSelected = selectedId === conversation.id;
   const primaryBadge = getInboxContextLabel(conversation.contextType);
   const statusBadge = getConversationBadges(conversation)[0];
@@ -655,6 +679,8 @@ const ConversationRow = memo(function ConversationRow({
       <button
         type="button"
         onClick={() => onSelect(conversation.id)}
+        aria-current={isSelected ? "true" : undefined}
+        aria-label={`Abrir conversa com ${conversation.name}`}
         className={cn(
           "relative grid h-full w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2.5 text-left text-app-primary transition duration-150",
           isSelected
@@ -703,6 +729,24 @@ const ConversationRow = memo(function ConversationRow({
               </span>
             ) : null}
           </div>
+          <p className="truncate text-[10px] text-[var(--text-muted)]">
+            Prioridade oficial: {getPriorityLabel(conversation.priority)}
+            {conversation.responsibleName
+              ? ` · ${conversation.responsibleName}`
+              : " · Sem responsável"}
+          </p>
+          {conversation.governanceSignal?.communicationFailure ? (
+            <p className="truncate text-[10px] font-medium text-[var(--danger)]">
+              Falha de comunicação oficial
+              {conversation.priorityReason
+                ? ` · ${conversation.priorityReason}`
+                : ""}
+            </p>
+          ) : conversation.priorityReason ? (
+            <p className="truncate text-[10px] text-[var(--text-muted)]">
+              {conversation.priorityReason}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex h-full shrink-0 flex-col items-end justify-between gap-1 text-right">
@@ -726,37 +770,21 @@ function InboxQueueColumn({
   rows,
   selectedId,
   onSelect,
-  filter,
-  onFilter,
   search,
-  onSearch,
   isLoading,
   hasError,
   errorMessage,
   emptyStateMessage,
-  priorityFilter,
-  onPriorityFilter,
-  responsibleFilter,
-  onResponsibleFilter,
-  responsibles,
   onRetry,
 }: {
   rows: Conversation[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  filter: ConversationFilter;
-  onFilter: (next: ConversationFilter) => void;
   search: string;
-  onSearch: (next: string) => void;
   isLoading: boolean;
   hasError: boolean;
   errorMessage?: string;
   emptyStateMessage: string;
-  priorityFilter: "ALL" | WhatsAppPriority;
-  onPriorityFilter: (value: "ALL" | WhatsAppPriority) => void;
-  responsibleFilter: string;
-  onResponsibleFilter: (value: string) => void;
-  responsibles: string[];
   onRetry: () => void;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -790,70 +818,6 @@ function InboxQueueColumn({
             {rows.length} itens
           </span>
         </div>
-        <div className="flex h-9 items-center gap-2 border-b border-[var(--app-border)]/45 bg-transparent px-1 focus-within:border-[var(--app-border)]/80">
-          <Search className="size-3.5 shrink-0 text-[var(--text-muted)]" />
-          <input
-            value={search}
-            onChange={e => onSearch(e.target.value)}
-            placeholder="Buscar conversa..."
-            className="h-full min-w-0 flex-1 !border-transparent !bg-transparent text-xs text-app-primary !outline-none placeholder:text-app-muted/75 focus-visible:!border-transparent focus-visible:!outline-none"
-          />
-        </div>
-        <div className="scrollbar-thin-nexo flex gap-1.5 overflow-x-auto whitespace-nowrap pb-1">
-          {FILTERS.map(item => (
-            <button
-              key={item.value}
-              type="button"
-              className={cn(
-                "relative h-7 shrink-0 rounded-lg px-2.5 text-[11px] font-medium text-app-muted transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-px after:rounded-full after:bg-transparent after:content-[''] hover:bg-app-card/70 hover:text-app-primary focus-visible:outline-none",
-                filter === item.value &&
-                  "bg-app-card/60 text-[var(--accent-primary)] after:bg-[var(--accent-primary)]/70"
-              )}
-              onClick={() => onFilter(item.value)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <div
-          className="grid grid-cols-2 gap-2"
-          aria-label="Filtros operacionais"
-        >
-          <label className="sr-only" htmlFor="whatsapp-priority-filter">
-            Prioridade
-          </label>
-          <select
-            id="whatsapp-priority-filter"
-            value={priorityFilter}
-            onChange={event =>
-              onPriorityFilter(event.target.value as "ALL" | WhatsAppPriority)
-            }
-            className="h-8 rounded-lg border border-[var(--app-border)]/50 bg-app-surface px-2 text-[11px] text-app-primary"
-          >
-            <option value="ALL">Todas as prioridades</option>
-            <option value="CRITICAL">Crítica</option>
-            <option value="HIGH">Alta</option>
-            <option value="MEDIUM">Média</option>
-            <option value="LOW">Baixa</option>
-          </select>
-          <label className="sr-only" htmlFor="whatsapp-responsible-filter">
-            Responsável
-          </label>
-          <select
-            id="whatsapp-responsible-filter"
-            value={responsibleFilter}
-            onChange={event => onResponsibleFilter(event.target.value)}
-            className="h-8 rounded-lg border border-[var(--app-border)]/50 bg-app-surface px-2 text-[11px] text-app-primary"
-          >
-            <option value="ALL">Todos responsáveis</option>
-            <option value="UNASSIGNED">Sem responsável</option>
-            {responsibles.map(name => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
       <div
         ref={viewportRef}
@@ -861,37 +825,30 @@ function InboxQueueColumn({
         onScroll={e => setScrollTop(e.currentTarget.scrollTop)}
       >
         {isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, idx) => (
-              <AppSkeleton key={idx} className="h-20 rounded-xl" />
-            ))}
-          </div>
+          <AppPageLoadingState
+            title="Carregando inbox"
+            description="Buscando a ordem oficial das conversas."
+          />
         ) : rows.length === 0 ? (
-          <div className="border-t border-[var(--app-border)]/40 px-1 py-4">
-            <p className="text-xs text-[var(--text-secondary)]">
-              {hasError
-                ? (errorMessage ?? "Não foi possível carregar conversas")
-                : emptyStateMessage}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-              {hasError
-                ? "Tente novamente em instantes."
-                : search.trim()
+          hasError ? (
+            <AppPageErrorState
+              title="Inbox indisponível"
+              description={
+                errorMessage ?? "Não foi possível carregar conversas"
+              }
+              actionLabel="Tentar novamente"
+              onAction={onRetry}
+            />
+          ) : (
+            <AppPageEmptyState
+              title={emptyStateMessage}
+              description={
+                search.trim()
                   ? "Limpe a busca ou altere os filtros."
-                  : "As conversas reais aparecerão aqui quando clientes responderem ou mensagens forem enviadas."}
-            </p>
-            {hasError ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={onRetry}
-              >
-                Tentar novamente
-              </Button>
-            ) : null}
-          </div>
+                  : "Conversas reais aparecerão aqui quando houver contato pelo canal."
+              }
+            />
+          )
         ) : (
           <div style={{ height: totalHeight, position: "relative" }}>
             <div
@@ -916,10 +873,13 @@ function InboxQueueColumn({
 
 function ExecutionChatColumn({
   conversation,
+  onBack,
   canCompose,
   composePlaceholder,
   messages,
   isLoading,
+  messagesError,
+  onRetryMessages,
   sendMessage,
   content,
   setContent,
@@ -941,10 +901,13 @@ function ExecutionChatColumn({
   onRunSuggestedAction,
 }: {
   conversation?: Conversation;
+  onBack: () => void;
   canCompose: boolean;
   composePlaceholder: string;
   messages: ChatMessage[];
   isLoading: boolean;
+  messagesError?: boolean;
+  onRetryMessages: () => void;
   sendMessage: () => void;
   content: string;
   setContent: (value: string) => void;
@@ -1055,7 +1018,11 @@ function ExecutionChatColumn({
     action: WhatsAppComposerAction,
     key = action.key
   ) => {
-    const isDisabled = Boolean(action.disabled);
+    const isDisabled = Boolean(
+      action.disabled ||
+      action.availability === "unavailable" ||
+      action.availability === "upcoming"
+    );
     const isPrimary = action.availability === "primary";
     const isUpcoming = action.availability === "upcoming";
     const isUnavailable = action.availability === "unavailable";
@@ -1206,6 +1173,16 @@ function ExecutionChatColumn({
     <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-transparent xl:border-r xl:border-[var(--app-border)]/40 text-app-primary">
       <header className="flex shrink-0 items-start justify-between border-b border-[var(--app-border)]/55 bg-[color-mix(in_srgb,var(--app-surface)_70%,transparent)] px-5 py-3">
         <div className="flex items-start gap-3.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="md:hidden"
+            onClick={onBack}
+            aria-label="Voltar para o inbox"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
           <div className="flex size-12 items-center justify-center rounded-2xl border border-[var(--accent-primary)]/20 bg-[var(--accent-soft)]/45 text-base font-semibold text-[var(--accent-primary)]">
             {conversation?.name?.slice(0, 1) ?? "-"}
           </div>
@@ -1228,6 +1205,7 @@ function ExecutionChatColumn({
             className="rounded-lg p-1.5 transition enabled:hover:bg-app-surface disabled:opacity-45"
             onClick={onToggleFavorite}
             disabled={!hasConversation}
+            aria-label="Favoritar conversa"
           >
             <Star
               className={cn(
@@ -1241,6 +1219,7 @@ function ExecutionChatColumn({
             className="rounded-lg p-1.5 transition enabled:hover:bg-app-surface disabled:opacity-45"
             onClick={onInfo}
             disabled={!hasConversation}
+            aria-label="Abrir contexto operacional"
           >
             <Info className="size-4.5" />
           </button>
@@ -1249,6 +1228,7 @@ function ExecutionChatColumn({
             className="rounded-lg p-1.5 transition enabled:hover:bg-app-surface disabled:opacity-45"
             onClick={onMoreActions}
             disabled={!hasConversation}
+            aria-label="Repetir última mensagem com falha"
           >
             <EllipsisVertical className="size-4.5" />
           </button>
@@ -1258,13 +1238,14 @@ function ExecutionChatColumn({
       {hasConversation ? (
         <div className="mx-5 mt-3 rounded-xl border border-[color-mix(in_srgb,var(--warning)_18%,transparent)] bg-[color-mix(in_srgb,var(--warning)_10%,var(--app-surface))] px-3 py-2 text-xs">
           {suggestedActionLabel ? (
-            <button
+            <Button
               type="button"
               onClick={onRunSuggestedAction}
-              className="font-medium text-[var(--warning)] underline-offset-2 hover:underline"
+              size="sm"
+              className="h-8"
             >
               {suggestedActionLabel}
-            </button>
+            </Button>
           ) : (
             <span className="font-medium text-app-muted">
               Sem recomendação oficial
@@ -1292,6 +1273,13 @@ function ExecutionChatColumn({
               <AppSkeleton key={idx} className="h-12 rounded-xl" />
             ))}
           </div>
+        ) : messagesError ? (
+          <AppPageErrorState
+            title="Histórico indisponível"
+            description="A conversa e o contexto continuam disponíveis. Tente carregar as mensagens novamente."
+            actionLabel="Tentar novamente"
+            onAction={onRetryMessages}
+          />
         ) : messages.length === 0 ? (
           <div className="px-1 py-4 text-xs text-[var(--text-muted)]">
             Sem mensagens nesta conversa.
@@ -1348,7 +1336,11 @@ function ExecutionChatColumn({
         ) : null}
         <div className="rounded-2xl border border-[var(--app-border)]/40 bg-app-surface/75 p-2">
           <div className="flex items-center gap-2">
+            <label htmlFor="whatsapp-composer" className="sr-only">
+              Mensagem da conversa
+            </label>
             <input
+              id="whatsapp-composer"
               value={content}
               onChange={event => canCompose && setContent(event.target.value)}
               onKeyDown={event => {
@@ -1443,12 +1435,9 @@ function OperationalContextColumn({
   conversation,
   selectedCustomer,
   isLoading,
+  hasError,
+  onRetry,
   onNavigate,
-  onSendCharge,
-  onSendReminder,
-  onResolveConversation,
-  canResolveConversation,
-  onMoreActions,
   pendingApprovals,
   executionHistory,
   isExecutionLoading,
@@ -1458,20 +1447,14 @@ function OperationalContextColumn({
   isExecutionMutating,
   isExecutionError,
   onRetryExecution,
-  highlightedChargeId,
-  highlightedAppointmentId,
-  highlightedServiceOrderId,
 }: {
   context?: WhatsAppContext | null;
   conversation?: Conversation;
   selectedCustomer?: any | null;
   isLoading: boolean;
+  hasError: boolean;
+  onRetry: () => void;
   onNavigate: (path: string) => void;
-  onSendCharge: () => void;
-  onSendReminder: () => void;
-  onResolveConversation: () => void;
-  canResolveConversation: boolean;
-  onMoreActions: () => void;
   pendingApprovals: WhatsAppActionExecution[];
   executionHistory: WhatsAppActionExecution[];
   isExecutionLoading: boolean;
@@ -1481,9 +1464,6 @@ function OperationalContextColumn({
   isExecutionMutating: boolean;
   isExecutionError?: boolean;
   onRetryExecution?: () => void;
-  highlightedChargeId?: string | null;
-  highlightedAppointmentId?: string | null;
-  highlightedServiceOrderId?: string | null;
 }) {
   if (!conversation && !selectedCustomer) {
     return (
@@ -1523,6 +1503,13 @@ function OperationalContextColumn({
             <AppSkeleton key={idx} className="h-20 rounded-xl" />
           ))}
         </div>
+      ) : hasError ? (
+        <AppPageErrorState
+          title="Contexto indisponível"
+          description="O histórico e o composer permanecem disponíveis. Tente carregar apenas o contexto novamente."
+          actionLabel="Tentar novamente"
+          onAction={onRetry}
+        />
       ) : (
         <div className="space-y-1.5 text-xs">
           <OperationalInnerCard className="border-transparent bg-app-card/20">
@@ -1536,10 +1523,11 @@ function OperationalContextColumn({
                 "Sem nome"}
             </p>
             <p className="text-[11px] text-[var(--text-muted)]">
-              {context?.customer?.phone ??
-                selectedCustomer?.phone ??
-                conversation?.phone ??
-                "--"}
+              {maskPhone(
+                context?.customer?.phone ??
+                  selectedCustomer?.phone ??
+                  conversation?.phone
+              )}
             </p>
             <Button
               type="button"
@@ -1556,6 +1544,43 @@ function OperationalContextColumn({
             >
               Ver cliente
             </Button>
+          </OperationalInnerCard>
+
+          <OperationalInnerCard className="border-[var(--app-border)]/30 bg-app-card/20">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[var(--text-muted)]">
+              Inteligência oficial
+            </p>
+            {context?.intelligence ? (
+              <dl className="mt-2 space-y-1 text-[11px]">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-[var(--text-muted)]">Intenção</dt>
+                  <dd className="text-right font-medium">
+                    {context.intelligence.intent ?? "Indisponível"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-[var(--text-muted)]">Prioridade</dt>
+                  <dd className="text-right font-medium">
+                    {context.intelligence.priority ?? "Indisponível"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-[var(--text-muted)]">SLA oficial</dt>
+                  <dd className="text-right font-medium">
+                    {context.intelligence.slaStatus ?? "Indisponível"}
+                  </dd>
+                </div>
+                {context.intelligence.priorityReason ? (
+                  <div className="pt-1 text-[var(--text-secondary)]">
+                    {context.intelligence.priorityReason}
+                  </div>
+                ) : null}
+              </dl>
+            ) : (
+              <p className="mt-2 text-[11px] text-[var(--text-muted)]">
+                Inteligência indisponível para esta conversa.
+              </p>
+            )}
           </OperationalInnerCard>
 
           <WhatsAppActionExecutionPanel
@@ -1590,12 +1615,6 @@ function OperationalContextColumn({
             <span className="mt-2 inline-flex whitespace-nowrap rounded-full bg-[color-mix(in_srgb,var(--warning)_14%,var(--app-surface))] px-2 py-0.5 text-[10px] text-[var(--warning)]">
               {presentationStatusLabel(context?.nextAppointment?.status)}
             </span>
-            {highlightedAppointmentId &&
-            context?.nextAppointment?.id === highlightedAppointmentId ? (
-              <p className="mt-1 text-[10px] text-[var(--accent-primary)]">
-                Sugestão: Confirmar agendamento.
-              </p>
-            ) : null}
             <Button
               type="button"
               size="sm"
@@ -1629,12 +1648,6 @@ function OperationalContextColumn({
             <p className="text-[11px] text-[var(--text-muted)]">
               Técnico: {context?.activeServiceOrder?.technician ?? "--"}
             </p>
-            {highlightedServiceOrderId &&
-            context?.activeServiceOrder?.id === highlightedServiceOrderId ? (
-              <p className="mt-1 text-[10px] text-[var(--accent-primary)]">
-                Sugestão: Atualizar cliente sobre serviço.
-              </p>
-            ) : null}
             <Button
               type="button"
               size="sm"
@@ -1671,12 +1684,6 @@ function OperationalContextColumn({
             <span className="mt-2 inline-flex whitespace-nowrap rounded-full bg-[color-mix(in_srgb,var(--danger)_12%,var(--app-surface))] px-2 py-0.5 text-[10px] text-[var(--danger)]">
               {presentationStatusLabel(context?.openCharge?.status)}
             </span>
-            {highlightedChargeId &&
-            context?.openCharge?.id === highlightedChargeId ? (
-              <p className="mt-1 text-[10px] text-[var(--accent-primary)]">
-                Sugestão: Enviar cobrança.
-              </p>
-            ) : null}
             <Button
               type="button"
               size="sm"
@@ -1711,80 +1718,6 @@ function OperationalContextColumn({
                 Sem eventos recentes.
               </p>
             )}
-          </OperationalInnerCard>
-
-          <OperationalInnerCard className="border-[var(--app-border)]/30 bg-app-card/20">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-              Próxima melhor ação
-            </p>
-            <div className="mt-2.5 rounded-lg border border-[var(--app-border)]/35 bg-app-surface/55 p-2.5">
-              <p className="text-[11px] font-semibold">Enviar cobrança</p>
-              <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Cliente possui cobrança pendente ou conversa sem resolução.
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                className="mt-2 h-8 w-full min-w-0 justify-start truncate bg-[var(--accent-primary)] px-2.5 text-[11px] font-semibold text-[var(--primary-foreground)] hover:bg-[var(--accent-primary-hover)]"
-                onClick={onSendCharge}
-              >
-                Enviar cobrança
-              </Button>
-            </div>
-            <div className="mt-2 grid grid-cols-1 gap-1.5">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 w-full min-w-0 justify-start truncate border-[color-mix(in_srgb,var(--app-border)_78%,transparent)] bg-[color-mix(in_srgb,var(--app-card)_86%,transparent)] px-2.5 text-[11px] font-semibold text-[var(--text-primary)] hover:bg-[var(--accent-soft)] hover:text-[var(--text-primary)]"
-                onClick={() =>
-                  onNavigate(
-                    context?.openCharge?.id
-                      ? `/finances?chargeId=${context.openCharge.id}&action=register-payment`
-                      : "/finances"
-                  )
-                }
-              >
-                Registrar pagamento
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 w-full min-w-0 justify-start truncate border-[color-mix(in_srgb,var(--app-border)_78%,transparent)] bg-[color-mix(in_srgb,var(--app-card)_86%,transparent)] px-2.5 text-[11px] font-semibold text-[var(--text-primary)] hover:bg-[var(--accent-soft)] hover:text-[var(--text-primary)]"
-                onClick={onSendReminder}
-              >
-                Confirmar agenda / enviar lembrete
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 w-full min-w-0 justify-start truncate border-[color-mix(in_srgb,var(--app-border)_78%,transparent)] bg-[color-mix(in_srgb,var(--app-card)_86%,transparent)] px-2.5 text-[11px] font-semibold text-[var(--text-primary)] hover:bg-[var(--accent-soft)] hover:text-[var(--text-primary)]"
-                onClick={onSendReminder}
-              >
-                Atualizar O.S.
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 w-full min-w-0 justify-start truncate border-[color-mix(in_srgb,var(--app-border)_78%,transparent)] bg-[color-mix(in_srgb,var(--app-card)_86%,transparent)] px-2.5 text-[11px] font-semibold text-[var(--text-primary)] hover:bg-[var(--accent-soft)] hover:text-[var(--text-primary)] disabled:opacity-45"
-                disabled={!canResolveConversation}
-                onClick={onResolveConversation}
-              >
-                Resolver conversa
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 w-full min-w-0 justify-start truncate border-[color-mix(in_srgb,var(--app-border)_78%,transparent)] bg-[color-mix(in_srgb,var(--app-card)_86%,transparent)] px-2.5 text-[11px] font-semibold text-[var(--text-primary)] hover:bg-[var(--accent-soft)] hover:text-[var(--text-primary)]"
-                onClick={onMoreActions}
-              >
-                Mais ações
-              </Button>
-            </div>
           </OperationalInnerCard>
         </div>
       )}
@@ -1926,68 +1859,8 @@ export default function WhatsAppPage() {
     serviceOrders,
   ]);
 
-  const conversationCustomerIds = useMemo(
-    () =>
-      new Set(
-        conversations
-          .map(item => item.customerId ?? item.customer?.id ?? null)
-          .filter((id): id is string => Boolean(id))
-      ),
-    [conversations]
-  );
-  const customersWithoutConversation = useMemo(
-    () =>
-      customers
-        .filter(
-          (customer: any) =>
-            customer?.id && !conversationCustomerIds.has(String(customer.id))
-        )
-        .map(
-          (customer: any): Conversation => ({
-            id: `customer:${String(customer.id)}`,
-            conversationId: null,
-            customerId: String(customer.id),
-            name: String(customer?.name ?? "Sem nome"),
-            phone: customer?.phone ? String(customer.phone) : null,
-            title: "Sem conversa ativa",
-            lastMessage: "Sem conversa ativa",
-            lastMessageAt: null,
-            status: "OPEN",
-            contextType: "GENERAL",
-            priority: null,
-            unreadCount: 0,
-            contextId: String(customer.id),
-            operationalStatus: "Sem conversa ativa",
-            contextHint: "Sem conversa ativa",
-            hasPendingCharge: charges.some(
-              (charge: any) =>
-                String(charge?.customerId ?? "") === String(customer.id) &&
-                ["PENDING", "OVERDUE"].includes(String(charge?.status ?? ""))
-            ),
-            hasUpcomingAppointment: appointments.some(
-              (appointment: any) =>
-                String(appointment?.customerId ?? "") === String(customer.id) &&
-                String(appointment?.status ?? "").toUpperCase() !== "CANCELED"
-            ),
-            hasActiveServiceOrder: serviceOrders.some(
-              (serviceOrder: any) =>
-                String(serviceOrder?.customerId ?? "") ===
-                  String(customer.id) &&
-                !["DONE", "CANCELED"].includes(
-                  String(serviceOrder?.status ?? "").toUpperCase()
-                )
-            ),
-            hasFailedDelivery: false,
-            isVirtual: true,
-            customer: {
-              id: String(customer.id),
-              name: String(customer?.name ?? "Sem nome"),
-              phone: customer?.phone ? String(customer.phone) : null,
-            },
-          })
-        ),
-    [appointments, charges, conversationCustomerIds, customers, serviceOrders]
-  );
+  // Contacts without a server conversation stay outside the operational inbox.
+  // A virtual selection exists only as a factual deep-link entry point to start contact.
   const buildVirtualRowFromCustomer = useCallback(
     (customer: any): Conversation => ({
       id: `customer:${String(customer.id)}`,
@@ -1995,47 +1868,29 @@ export default function WhatsAppPage() {
       customerId: String(customer.id),
       name: String(customer?.name ?? "Sem nome"),
       phone: customer?.phone ? String(customer.phone) : null,
-      title: "Sem conversa ativa",
-      lastMessage: "Sem conversa ativa",
+      title: "Novo contato",
+      lastMessage: "Conversa ainda não iniciada",
       lastMessageAt: null,
-      status: "OPEN",
+      status: null,
       contextType: "GENERAL",
       priority: null,
-      unreadCount: 0,
+      unreadCount: null,
       contextId: String(customer.id),
-      operationalStatus: "Sem conversa ativa",
-      contextHint: "Sem conversa ativa",
-      hasPendingCharge: charges.some(
-        (charge: any) =>
-          String(charge?.customerId ?? "") === String(customer.id) &&
-          ["PENDING", "OVERDUE"].includes(String(charge?.status ?? ""))
-      ),
-      hasUpcomingAppointment: appointments.some(
-        (appointment: any) =>
-          String(appointment?.customerId ?? "") === String(customer.id) &&
-          String(appointment?.status ?? "").toUpperCase() !== "CANCELED"
-      ),
-      hasActiveServiceOrder: serviceOrders.some(
-        (serviceOrder: any) =>
-          String(serviceOrder?.customerId ?? "") === String(customer.id) &&
-          !["DONE", "CANCELED"].includes(
-            String(serviceOrder?.status ?? "").toUpperCase()
-          )
-      ),
+      operationalStatus: "Conversa ainda não iniciada",
+      contextHint: "Atalho para iniciar contato",
       hasFailedDelivery: false,
       isVirtual: true,
+      governanceSignal: null,
+      responsibleName: null,
       customer: {
         id: String(customer.id),
         name: String(customer?.name ?? "Sem nome"),
         phone: customer?.phone ? String(customer.phone) : null,
       },
     }),
-    [appointments, charges, serviceOrders]
+    []
   );
-  const allInboxRows = useMemo(
-    () => [...conversations, ...customersWithoutConversation],
-    [conversations, customersWithoutConversation]
-  );
+  const allInboxRows = useMemo(() => conversations, [conversations]);
   const responsibles = useMemo(
     () =>
       Array.from(
@@ -2100,7 +1955,6 @@ export default function WhatsAppPage() {
       normalizedCustomersLength: customers.length,
       firstNormalizedCustomer: customers[0] ?? null,
       conversationsLength: conversations.length,
-      customersWithoutConversationLength: customersWithoutConversation.length,
       allInboxRowsLength: allInboxRows.length,
       filteredRowsLength: filteredRows.length,
     });
@@ -2109,7 +1963,6 @@ export default function WhatsAppPage() {
     conversations.length,
     customers,
     customersQuery.data,
-    customersWithoutConversation.length,
     filteredRows.length,
     queryAppointmentId,
     queryChargeId,
@@ -2118,35 +1971,30 @@ export default function WhatsAppPage() {
     queryServiceOrderId,
   ]);
   const emptyStateMessage = useMemo(() => {
-    if (customersQuery.error) return "Erro ao carregar clientes";
-    if (
-      !customersQuery.isLoading &&
-      !customersQuery.isFetching &&
-      customers.length === 0
-    ) {
-      return "Nenhum cliente carregado";
-    }
     if (allInboxRows.length > 0 && filteredRows.length === 0)
-      return "Nenhum resultado para esta busca";
+      return "Nenhuma conversa corresponde aos filtros";
     if (debouncedSearch.trim()) return "Nenhum resultado para esta busca";
-    return "Nenhum cliente encontrado.";
-  }, [
-    activeFilter,
-    allInboxRows.length,
-    customers.length,
-    customersQuery.error,
-    customersQuery.isFetching,
-    customersQuery.isLoading,
-    debouncedSearch,
-    filteredRows.length,
-  ]);
+    return "Inbox vazio";
+  }, [allInboxRows.length, debouncedSearch, filteredRows.length]);
 
-  const selectedConversation = useMemo(
-    () =>
+  const selectedConversation = useMemo(() => {
+    const realConversation =
       filteredRows.find(item => item.id === selectedConversationId) ??
-      allInboxRows.find(item => item.id === selectedConversationId),
-    [allInboxRows, filteredRows, selectedConversationId]
-  );
+      allInboxRows.find(item => item.id === selectedConversationId);
+    if (realConversation) return realConversation;
+    if (!selectedConversationId?.startsWith("customer:")) return undefined;
+    const customerId = selectedConversationId.slice("customer:".length);
+    const customer = customers.find(
+      item => String(item?.id ?? "") === customerId
+    );
+    return customer ? buildVirtualRowFromCustomer(customer) : undefined;
+  }, [
+    allInboxRows,
+    buildVirtualRowFromCustomer,
+    customers,
+    filteredRows,
+    selectedConversationId,
+  ]);
   const selectedConversationRecordId =
     selectedConversation?.conversationId ?? null;
 
@@ -2208,10 +2056,6 @@ export default function WhatsAppPage() {
       didAutoSelectFromQueryRef.current = true;
       return;
     }
-
-    if (!selectedConversationId && filteredRows.length > 0) {
-      setSelectedConversationId(filteredRows[0]?.id ?? null);
-    }
   }, [
     allInboxRows,
     conversationsQuery.isFetching,
@@ -2270,28 +2114,22 @@ export default function WhatsAppPage() {
     { conversationId: selectedConversationRecordId ?? "" },
     { enabled: Boolean(selectedConversationRecordId), retry: false }
   );
-  const pendingApprovalsQuery =
-    trpc.whatsapp.listPendingApprovals.useQuery(
-      { limit: 25 },
-      { enabled: Boolean(selectedConversationRecordId), retry: false }
-    );
-  const executionHistoryQuery =
-    trpc.whatsapp.listExecutionHistory.useQuery(
-      { conversationId: selectedConversationRecordId ?? undefined, limit: 25 },
-      { enabled: Boolean(selectedConversationRecordId), retry: false }
-    );
+  const pendingApprovalsQuery = trpc.whatsapp.listPendingApprovals.useQuery(
+    { limit: 25 },
+    { enabled: Boolean(selectedConversationRecordId), retry: false }
+  );
+  const executionHistoryQuery = trpc.whatsapp.listExecutionHistory.useQuery(
+    { conversationId: selectedConversationRecordId ?? undefined, limit: 25 },
+    { enabled: Boolean(selectedConversationRecordId), retry: false }
+  );
 
   const sendMessageMutation = trpc.whatsapp.sendMessage.useMutation();
   const sendTemplateMutation = trpc.whatsapp.sendTemplate.useMutation();
   const retryMessageMutation = trpc.whatsapp.retryMessage.useMutation();
-  const requestExecutionMutation =
-    trpc.whatsapp.requestExecution.useMutation();
-  const approveExecutionMutation =
-    trpc.whatsapp.approveExecution.useMutation();
-  const executeExecutionMutation =
-    trpc.whatsapp.executeExecution.useMutation();
-  const cancelExecutionMutation =
-    trpc.whatsapp.cancelExecution.useMutation();
+  const requestExecutionMutation = trpc.whatsapp.requestExecution.useMutation();
+  const approveExecutionMutation = trpc.whatsapp.approveExecution.useMutation();
+  const executeExecutionMutation = trpc.whatsapp.executeExecution.useMutation();
+  const cancelExecutionMutation = trpc.whatsapp.cancelExecution.useMutation();
 
   const pendingApprovals = useMemo(
     () =>
@@ -2783,214 +2621,248 @@ export default function WhatsAppPage() {
     );
   };
 
-  const handleSendReminder = async () => {
-    if (
-      context?.openCharge?.id &&
-      (context?.openCharge?.daysOverdue ?? 0) > 0
-    ) {
-      await handleSendTemplate("payment_reminder", "PAYMENT_REMINDER");
-      return;
-    }
-    if (context?.nextAppointment?.id) {
-      await handleSendTemplate("appointment_reminder", "APPOINTMENT_REMINDER");
-      return;
-    }
-    if (context?.activeServiceOrder?.id) {
-      await handleSendTemplate("service_update", "SERVICE_UPDATE");
-      return;
-    }
-    await handleSendTemplate("manual_followup", getDefaultMessageType());
-  };
-
-  if (
-    conversationsQuery.isLoading &&
-    customersQuery.isLoading &&
-    allInboxRows.length === 0
-  ) {
-    return (
-      <AppPageShell>
-        <AppPageLoadingState
-          title="Carregando inbox operacional"
-          description="Preparando prioridades, contexto e fila de execução."
-        />
-      </AppPageShell>
-    );
-  }
-
   return (
-    <AppPageShell className="h-[calc(100vh-4.25rem)] min-h-0 bg-transparent px-4 pb-2 pt-2 text-app-primary xl:pb-3 xl:pt-2 2xl:pb-4 2xl:pt-2">
-      {healthQuery.error ? (
-        <div
-          role="status"
-          className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--warning)_10%,var(--app-surface))] px-3 py-2 text-xs text-app-primary"
-        >
-          <span>
-            Canal parcialmente indisponível. O histórico pode ser consultado,
-            mas novos envios podem falhar.
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void healthQuery.refetch()}
-          >
-            Verificar novamente
-          </Button>
-        </div>
-      ) : null}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 rounded-none border-0 bg-transparent xl:grid-cols-[minmax(320px,360px)_minmax(0,1fr)_minmax(300px,340px)]">
-        <div className="h-full min-h-0 min-w-0 overflow-hidden">
-          <InboxQueueColumn
-            rows={filteredRows}
-            selectedId={selectedConversationId}
-            onSelect={handleSelectConversation}
-            filter={activeFilter}
-            onFilter={setActiveFilter}
-            search={searchTerm}
-            onSearch={setSearchTerm}
-            isLoading={
-              (conversationsQuery.isLoading ||
-                conversationsQuery.isFetching ||
-                customersQuery.isLoading ||
-                customersQuery.isFetching) &&
-              filteredRows.length === 0
-            }
-            hasError={
-              Boolean(conversationsQuery.error) || Boolean(customersQuery.error)
-            }
-            errorMessage={
-              customersQuery.error
-                ? "Erro ao carregar clientes"
-                : "Não foi possível carregar conversas"
-            }
-            emptyStateMessage={emptyStateMessage}
-            priorityFilter={priorityFilter}
-            onPriorityFilter={setPriorityFilter}
-            responsibleFilter={responsibleFilter}
-            onResponsibleFilter={setResponsibleFilter}
-            responsibles={responsibles}
-            onRetry={() =>
-              void Promise.all([
-                conversationsQuery.refetch(),
-                customersQuery.refetch(),
-              ])
-            }
+    <AppPageShell className="min-w-0 gap-3 overflow-x-hidden">
+      <AppOperationalHeader
+        title="WhatsApp"
+        description="Inbox, conversa e contexto oficial em um único workspace operacional."
+        density="compact"
+        contextChips={
+          <>
+            <AppContextChip tone="neutral">
+              {conversations.length} conversa(s) no inbox
+            </AppContextChip>
+            <AppContextChip tone={healthQuery.error ? "warning" : "success"}>
+              {healthQuery.error
+                ? "Disponibilidade do canal indisponível"
+                : healthQuery.isLoading
+                  ? "Verificando disponibilidade do canal"
+                  : "Canal verificado oficialmente"}
+            </AppContextChip>
+          </>
+        }
+      >
+        {healthQuery.error ? (
+          <div className="flex flex-col gap-2 text-xs text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Não foi possível confirmar a disponibilidade do canal. O histórico
+              permanece acessível; novos envios podem falhar.
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void healthQuery.refetch()}
+            >
+              Verificar novamente
+            </Button>
+          </div>
+        ) : null}
+      </AppOperationalHeader>
+
+      <AppFiltersBar className="min-w-0 flex-col items-stretch gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2 md:flex-row md:items-center">
+        <div className="relative min-w-0 flex-1">
+          <label htmlFor="whatsapp-search" className="sr-only">
+            Buscar conversas
+          </label>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
+          <input
+            id="whatsapp-search"
+            value={searchTerm}
+            onChange={event => setSearchTerm(event.target.value)}
+            placeholder="Buscar por cliente, contato ou mensagem"
+            className="h-9 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] pl-9 pr-3 text-sm"
           />
         </div>
-
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-          <ExecutionChatColumn
-            conversation={selectedConversation}
-            canCompose={canComposeForSelected}
-            composePlaceholder={composePlaceholder}
-            messages={messages}
-            isLoading={messagesQuery.isLoading || messagesQuery.isFetching}
-            sendMessage={handleManualSend}
-            content={content}
-            setContent={value => setContent(value)}
-            onToggleFavorite={() => {
-              if (!selectedConversationId) return;
-              setLocalFavorites(prev => ({
-                ...prev,
-                [selectedConversationId]: !prev[selectedConversationId],
-              }));
-              // TODO: conectar favorite quando Conversation tiver campo isFavorite
-            }}
-            isFavorite={Boolean(localFavorites[selectedConversationId ?? ""])}
-            onInfo={() => {
-              setIsContextVisible(true);
-              document
-                .getElementById("whatsapp-context-panel")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-            onMoreActions={handleMoreActions}
-            error={composerError}
-            onOpenServiceOrder={() =>
-              setLocation(
-                context?.activeServiceOrder?.id
-                  ? `/service-orders?serviceOrderId=${context.activeServiceOrder.id}`
-                  : "/service-orders"
-              )
-            }
-            onFillTemplate={handleTemplateChip}
-            onSendCharge={() => void handleSendCharge()}
-            onSendPaymentReminder={() =>
-              void handleSendTemplate("payment_reminder", "PAYMENT_REMINDER")
-            }
-            onRequestSuggestedExecution={() =>
-              void handleRequestSuggestedExecution()
-            }
-            onResolveConversation={() =>
-              void handleResolveConversationExecution()
-            }
-            onReviewAssistedExecution={handleReviewAssistedExecution}
-            officialActions={context?.officialActions ?? []}
-            suggestedActionLabel={suggestedAction?.label ?? null}
-            governanceAlert={governanceAlert}
-            onRunSuggestedAction={() => {
-              if (suggestedAction?.key === "retry") {
-                void handleRetryLastFailed();
-                return;
-              }
-              void handleRequestSuggestedExecution();
-            }}
-          />
-        </div>
-
-        <div
-          className={cn(
-            "h-full min-h-0 min-w-0 overflow-hidden",
-            isContextVisible ? "xl:block" : "hidden"
-          )}
+        <label htmlFor="whatsapp-status-filter" className="sr-only">
+          Filtrar por status da conversa
+        </label>
+        <select
+          id="whatsapp-status-filter"
+          value={activeFilter}
+          onChange={event =>
+            setActiveFilter(event.target.value as ConversationFilter)
+          }
+          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm"
         >
-          <OperationalContextColumn
-            conversation={selectedConversation}
-            context={context}
-            selectedCustomer={selectedCustomer}
-            isLoading={contextQuery.isLoading || contextQuery.isFetching}
-            onNavigate={setLocation}
-            onSendCharge={handleSendCharge}
-            onSendReminder={handleSendReminder}
-            onResolveConversation={() =>
-              void handleResolveConversationExecution()
-            }
-            canResolveConversation={
-              Boolean(selectedConversationRecordId) &&
-              selectedConversation?.status !== "RESOLVED"
-            }
-            onMoreActions={handleMoreActions}
-            pendingApprovals={pendingApprovals}
-            executionHistory={executionHistory}
-            isExecutionLoading={
-              pendingApprovalsQuery.isLoading ||
-              pendingApprovalsQuery.isFetching ||
-              executionHistoryQuery.isLoading ||
-              executionHistoryQuery.isFetching
-            }
-            onApproveExecution={handleApproveExecution}
-            onExecuteExecution={handleExecuteExecution}
-            onCancelExecution={handleCancelExecution}
-            isExecutionMutating={
-              approveExecutionMutation.isPending ||
-              executeExecutionMutation.isPending ||
-              cancelExecutionMutation.isPending ||
-              requestExecutionMutation.isPending
-            }
-            isExecutionError={Boolean(
-              pendingApprovalsQuery.error || executionHistoryQuery.error
+          {FILTERS.map(item => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="whatsapp-priority-filter" className="sr-only">
+          Filtrar por prioridade oficial
+        </label>
+        <select
+          id="whatsapp-priority-filter"
+          value={priorityFilter}
+          onChange={event =>
+            setPriorityFilter(event.target.value as "ALL" | WhatsAppPriority)
+          }
+          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm"
+        >
+          <option value="ALL">Todas as prioridades</option>
+          <option value="CRITICAL">Crítica</option>
+          <option value="HIGH">Alta</option>
+          <option value="MEDIUM">Média</option>
+          <option value="NORMAL">Normal</option>
+          <option value="LOW">Baixa</option>
+        </select>
+        <label htmlFor="whatsapp-responsible-filter" className="sr-only">
+          Filtrar por responsável oficial
+        </label>
+        <select
+          id="whatsapp-responsible-filter"
+          value={responsibleFilter}
+          onChange={event => setResponsibleFilter(event.target.value)}
+          className="h-9 min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 text-sm"
+        >
+          <option value="ALL">Todos os responsáveis</option>
+          <option value="UNASSIGNED">Sem responsável</option>
+          {responsibles.map(name => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </AppFiltersBar>
+
+      <AppSectionBlock
+        title="Workspace de comunicação"
+        subtitle="A ordem relativa do inbox é exatamente a ordem recebida da API."
+        compact
+        className="min-h-0 overflow-hidden"
+      >
+        <div className="grid min-h-[34rem] min-w-0 grid-cols-1 overflow-hidden md:h-[calc(100dvh-19rem)] md:max-h-[52rem] md:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)] xl:grid-cols-[minmax(18rem,21rem)_minmax(0,1fr)_minmax(18rem,20rem)]">
+          <div
+            className={cn(
+              "min-h-0 min-w-0 overflow-hidden md:block",
+              selectedConversationId ? "hidden" : "block"
             )}
-            onRetryExecution={() =>
-              void Promise.all([
-                pendingApprovalsQuery.refetch(),
-                executionHistoryQuery.refetch(),
-              ])
-            }
-            highlightedChargeId={queryChargeId}
-            highlightedAppointmentId={queryAppointmentId}
-            highlightedServiceOrderId={queryServiceOrderId}
-          />
+          >
+            <InboxQueueColumn
+              rows={filteredRows}
+              selectedId={selectedConversationId}
+              onSelect={handleSelectConversation}
+              search={searchTerm}
+              isLoading={
+                (conversationsQuery.isLoading ||
+                  conversationsQuery.isFetching) &&
+                filteredRows.length === 0
+              }
+              hasError={Boolean(conversationsQuery.error)}
+              errorMessage="Não foi possível carregar conversas"
+              emptyStateMessage={emptyStateMessage}
+              onRetry={() => void conversationsQuery.refetch()}
+            />
+          </div>
+
+          <div
+            className={cn(
+              "min-h-0 min-w-0 flex-col overflow-hidden md:flex",
+              selectedConversationId ? "flex" : "hidden"
+            )}
+          >
+            <ExecutionChatColumn
+              conversation={selectedConversation}
+              onBack={() => setSelectedConversationId(null)}
+              canCompose={canComposeForSelected}
+              composePlaceholder={composePlaceholder}
+              messages={messages}
+              isLoading={messagesQuery.isLoading || messagesQuery.isFetching}
+              messagesError={Boolean(messagesQuery.error)}
+              onRetryMessages={() => void messagesQuery.refetch()}
+              sendMessage={handleManualSend}
+              content={content}
+              setContent={value => setContent(value)}
+              onToggleFavorite={() => {
+                if (!selectedConversationId) return;
+                setLocalFavorites(previous => ({
+                  ...previous,
+                  [selectedConversationId]: !previous[selectedConversationId],
+                }));
+              }}
+              isFavorite={Boolean(localFavorites[selectedConversationId ?? ""])}
+              onInfo={() => setIsContextVisible(true)}
+              onMoreActions={handleMoreActions}
+              error={composerError}
+              onOpenServiceOrder={() =>
+                setLocation(
+                  context?.activeServiceOrder?.id
+                    ? `/service-orders?serviceOrderId=${context.activeServiceOrder.id}`
+                    : "/service-orders"
+                )
+              }
+              onFillTemplate={handleTemplateChip}
+              onSendCharge={() => void handleSendCharge()}
+              onSendPaymentReminder={() =>
+                void handleSendTemplate("payment_reminder", "PAYMENT_REMINDER")
+              }
+              onRequestSuggestedExecution={() =>
+                void handleRequestSuggestedExecution()
+              }
+              onResolveConversation={() =>
+                void handleResolveConversationExecution()
+              }
+              onReviewAssistedExecution={handleReviewAssistedExecution}
+              officialActions={context?.officialActions ?? []}
+              suggestedActionLabel={suggestedAction?.label ?? null}
+              governanceAlert={governanceAlert}
+              onRunSuggestedAction={() => {
+                if (suggestedAction?.key === "retry") {
+                  void handleRetryLastFailed();
+                  return;
+                }
+                void handleRequestSuggestedExecution();
+              }}
+            />
+          </div>
+
+          <div
+            className={cn(
+              "min-h-0 min-w-0 overflow-hidden border-l border-[var(--border-subtle)]",
+              isContextVisible ? "hidden xl:block" : "hidden"
+            )}
+          >
+            <OperationalContextColumn
+              conversation={selectedConversation}
+              context={context}
+              selectedCustomer={selectedCustomer}
+              isLoading={contextQuery.isLoading || contextQuery.isFetching}
+              hasError={Boolean(contextQuery.error)}
+              onRetry={() => void contextQuery.refetch()}
+              onNavigate={setLocation}
+              pendingApprovals={pendingApprovals}
+              executionHistory={executionHistory}
+              isExecutionLoading={
+                pendingApprovalsQuery.isLoading ||
+                pendingApprovalsQuery.isFetching ||
+                executionHistoryQuery.isLoading ||
+                executionHistoryQuery.isFetching
+              }
+              onApproveExecution={handleApproveExecution}
+              onExecuteExecution={handleExecuteExecution}
+              onCancelExecution={handleCancelExecution}
+              isExecutionMutating={
+                approveExecutionMutation.isPending ||
+                executeExecutionMutation.isPending ||
+                cancelExecutionMutation.isPending ||
+                requestExecutionMutation.isPending
+              }
+              isExecutionError={Boolean(
+                pendingApprovalsQuery.error || executionHistoryQuery.error
+              )}
+              onRetryExecution={() =>
+                void Promise.all([
+                  pendingApprovalsQuery.refetch(),
+                  executionHistoryQuery.refetch(),
+                ])
+              }
+            />
+          </div>
         </div>
-      </div>
+      </AppSectionBlock>
       {/* TODO: Conectar registro direto quando finance.markAsPaid estiver exposto no BFF. */}
       {/* TODO: Abrir detalhe de clientes/financeiro pelo query id caso a rota ainda não suporte foco automático. */}
     </AppPageShell>

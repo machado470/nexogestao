@@ -5,6 +5,7 @@ import {
   getDefaultMessageType,
   getMessageDeliveryPresentation,
   maskPhone,
+  mapConversation,
   presentOfficialWhatsAppActions,
   resolveMessageType,
 } from "./WhatsAppPage";
@@ -63,6 +64,42 @@ describe("WhatsApp authoritative presentation", () => {
     expect(palette.unavailableActions).toEqual([official[1]]);
     expect(palette.groupedActions.Financeiro).toEqual([official[0]]);
     expect(palette.groupedActions.Agenda).toEqual([official[1]]);
+  });
+
+  it("maps conversation transport fields without reclassifying official semantics", () => {
+    const governanceSignal = {
+      communicationFailure: true,
+      failedMessageCount: 2,
+    };
+    const mapped = mapConversation({
+      id: "conversation-1",
+      status: "WAITING_OPERATOR",
+      priority: "NORMAL",
+      inboxPosition: 7,
+      unreadCount: 3,
+      failedMessageCount: 2,
+      governanceSignal,
+      flags: { hasNoResponse: true },
+    });
+
+    expect(mapped).toMatchObject({
+      status: "WAITING_OPERATOR",
+      priority: "NORMAL",
+      inboxPosition: 7,
+      unreadCount: 3,
+      failedMessageCount: 2,
+      hasNoResponse: true,
+      governanceSignal,
+    });
+  });
+
+  it("does not invent operational fields when transport fields are absent", () => {
+    expect(mapConversation({ id: "conversation-2" })).toMatchObject({
+      status: null,
+      priority: null,
+      inboxPosition: null,
+      unreadCount: null,
+    });
   });
 
   it("keeps message type and payload presentation contracts", () => {
