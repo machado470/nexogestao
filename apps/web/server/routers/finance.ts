@@ -8,15 +8,103 @@ const paginationInput = z.object({
   limit: z.number().int().positive().default(20),
 });
 
+const isoDateSchema = z.string().datetime({ offset: true });
+const moneyCentsSchema = z.number().int().nonnegative();
+
+const customerSchema = z
+  .object({
+    id: z.string(),
+    orgId: z.string(),
+    name: z.string(),
+    phone: z.string(),
+    email: z.string().nullable(),
+    cpfCnpj: z.string().nullable(),
+    address: z.string().nullable(),
+    notes: z.string().nullable(),
+    active: z.boolean(),
+    createdAt: isoDateSchema,
+    updatedAt: isoDateSchema,
+  })
+  .strict();
+
+const serviceOrderSchema = z
+  .object({
+    id: z.string(),
+    orgId: z.string(),
+    customerId: z.string(),
+    idempotencyKey: z.string().nullable(),
+    appointmentId: z.string().nullable(),
+    assignedToPersonId: z.string().nullable(),
+    title: z.string(),
+    description: z.string().nullable(),
+    status: z.enum(["OPEN", "ASSIGNED", "IN_PROGRESS", "DONE", "CANCELED"]),
+    priority: z.number().int(),
+    scheduledFor: isoDateSchema.nullable(),
+    startedAt: isoDateSchema.nullable(),
+    finishedAt: isoDateSchema.nullable(),
+    amountCents: moneyCentsSchema.nullable(),
+    dueDate: isoDateSchema.nullable(),
+    cancellationReason: z.string().nullable(),
+    outcomeSummary: z.string().nullable(),
+    createdAt: isoDateSchema,
+    updatedAt: isoDateSchema,
+  })
+  .strict();
+
+const chargePaymentSchema = z
+  .object({
+    amountCents: moneyCentsSchema,
+    paidAt: isoDateSchema,
+    method: z.enum(["PIX", "CASH", "CARD", "TRANSFER", "OTHER"]),
+  })
+  .strict();
+
+const chargeSchema = z
+  .object({
+    id: z.string(),
+    orgId: z.string(),
+    customerId: z.string(),
+    idempotencyKey: z.string().nullable(),
+    serviceOrderId: z.string().nullable(),
+    amountCents: moneyCentsSchema,
+    currency: z.string(),
+    status: z.enum(["PENDING", "PAID", "OVERDUE", "CANCELED"]),
+    dueDate: isoDateSchema,
+    paidAt: isoDateSchema.nullable(),
+    canceledAt: isoDateSchema.nullable(),
+    cancellationReason: z.string().nullable(),
+    canceledByUserId: z.string().nullable(),
+    notes: z.string().nullable(),
+    createdAt: isoDateSchema,
+    updatedAt: isoDateSchema,
+    customer: customerSchema,
+    serviceOrder: serviceOrderSchema.nullable(),
+    payments: z.array(chargePaymentSchema),
+    paidAmountCents: moneyCentsSchema,
+    balanceCents: moneyCentsSchema,
+    daysOverdue: z.number().int().nonnegative().nullable(),
+    evaluatedAt: isoDateSchema,
+  })
+  .strict();
+
 const listPayloadSchema = z.object({
-  items: z.array(z.unknown()),
-  meta: z.object({
-    page: z.number(),
-    limit: z.number(),
-    total: z.number(),
-    pages: z.number(),
-  }),
-});
+  items: z.array(chargeSchema),
+  meta: z
+    .object({
+      page: z.number().int().positive(),
+      limit: z.number().int().positive(),
+      total: z.number().int().nonnegative(),
+      pages: z.number().int().nonnegative(),
+    })
+    .strict(),
+}).strict();
+
+const chargesListOutputSchema = z
+  .object({
+    data: z.array(chargeSchema),
+    pagination: listPayloadSchema.shape.meta,
+  })
+  .strict();
 
 export const financeRouter = router({
   payments: router({
@@ -94,6 +182,7 @@ export const financeRouter = router({
           })
           .optional()
       )
+      .output(chargesListOutputSchema)
       .query(async ({ input, ctx }) => {
         const page = input?.page ?? 1;
         const limit = input?.limit ?? 20;
