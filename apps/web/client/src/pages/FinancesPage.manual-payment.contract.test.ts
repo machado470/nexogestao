@@ -30,14 +30,14 @@ describe("FinancesPage authoritative finance contract", () => {
   });
 
   it("mostra ausência honestamente e preserva retry independente", () => {
-    expect(source).toContain('"Não calculada"');
-    expect(source).toContain('"Não avaliado"');
+    expect(source).toContain('"Indisponível"');
+    expect(source).toContain('"Atraso não calculado"');
     expect(source).toContain('"Não classificada"');
     expect(source).toContain('"Não informado"');
     expect(source).toContain('"Sem recomendação oficial"');
     expect(source).toContain("Sua sessão continua válida");
-    expect(source).toContain("Tentar indicadores novamente");
-    expect(source).toContain("Tentar fila novamente");
+    expect(source).toContain("Indicadores indisponíveis");
+    expect(source).toContain("Fila indisponível");
   });
 
   it("envia pagamento exato e idempotente sem identidade do navegador", () => {
@@ -45,6 +45,56 @@ describe("FinancesPage authoritative finance contract", () => {
     expect(source).toContain("idempotencyKey: crypto.randomUUID()");
     expect(source).not.toMatch(/\borgId\s*:/);
     expect(source).not.toMatch(/\brole\s*:/);
+  });
+
+  it("usa composição, tabela, filtros e formulários modais canônicos", () => {
+    for (const primitive of [
+      "AppPageShell",
+      "AppOperationalHeader",
+      "AppSectionBlock",
+      "AppFiltersBar",
+      "AppDataTable",
+      "AppStatusBadge",
+      "AppForm",
+      "AppField",
+      "AppFieldGroup",
+      "AppFormActions",
+      "FormModal",
+    ])
+      expect(source).toContain(primitive);
+    expect(source).not.toMatch(/className="fixed\s+inset/);
+    expect(source).not.toContain("window.prompt");
+  });
+
+  it("mantém zero distinto de indisponibilidade e usa formatação monetária canônica", () => {
+    expect(source).toContain(
+      'typeof value === "number" ? formatCurrency(value) : "Indisponível"'
+    );
+    expect(source).toContain('typeof (metric as any)?.count === "number"');
+    expect(source).not.toMatch(
+      /(?:amountCents|balanceCents|paidAmountCents)\s*\|\|\s*0/
+    );
+  });
+
+  it("preserva a ordem oficial e não introduz Billing ou armazenamento local", () => {
+    expect(source).toContain("queue.map(");
+    expect(source).not.toContain("queue.sort(");
+    expect(source).not.toMatch(
+      /billing\.(?:status|plans|limits)|checkout|subscriptionStatus/i
+    );
+    expect(source).not.toMatch(/localStorage|sessionStorage/);
+  });
+
+  it("preserva os dados após erro e fecha somente depois da confirmação do backend", () => {
+    expect(source).toContain("await pay.mutateAsync");
+    expect(source).toMatch(
+      /await pay\.mutateAsync[\s\S]*await refresh\(\);\s*setPaying\(null\)/
+    );
+    expect(source).toContain("setPaymentError(error?.message");
+    expect(source).toContain(
+      'aria-describedby={paymentError ? "payment-error" : undefined}'
+    );
+    expect(source).toContain("initialFocusRef={paymentInputRef}");
   });
 
   it("só navega quando a fila fornece alvo oficial", () => {
