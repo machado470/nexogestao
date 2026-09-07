@@ -1,7 +1,7 @@
 ---
 status: current
 owner: nexogestao
-last_reviewed: 2026-09-06
+last_reviewed: 2026-09-07
 source_of_truth: true
 supersedes:
   - STATUS.md
@@ -18,6 +18,8 @@ supersedes:
 - O BFF foi decomposto em routers canônicos por domínio; `nexo.*` permanece apenas como composição compatível das mesmas implementações, e o transporte BFF → API usa uma fundação compartilhada.
 - Service Orders e WhatsApp preservam facades públicas, com leituras tenant-scoped extraídas para serviços focados conforme o ADR 0004. A persistência, consulta administrativa, replay e ciclo de recovery de webhooks WhatsApp agora pertencem ao `WhatsAppWebhookService`, registrado no container Nest e acessado pela facade; processamento inbound correlacionado, Timeline, stale recovery, dispatch, claims, fencing, locks, filas e retries de envio permanecem no `WhatsAppService` sem mudança de contrato.
 - Os consumidores de produção do frontend usam os routers canônicos diretamente. A migração eliminou 98 chamadas `trpc.nexo.*` e 71 acessos diretos de cache pelo namespace legado (60 `utils.nexo.*` e 11 `trpcUtils.nexo.*`), além de um acesso dinâmico a `trpcUtils.nexo` sem alterar inputs, outputs ou efeitos das operações.
+- A consolidação pós-PR #972 foi incorporada pelo PR #973. Dashboard, Clientes, Agendamentos, Calendário, O.S., Financeiro, WhatsApp, Timeline, Governança, Pessoas, Perfil, Configurações, Billing, Audit, Webhook Recovery e Operational Cockpit permanecem fechados no padrão-ouro; Onboarding permanece um fluxo `SPECIAL`, deliberadamente fora do molde de página operacional comum.
+- O frontend não é autoridade para calcular risco, prioridade, `nextAction`, atraso, capacidade ou governança. Essas decisões pertencem aos contratos oficiais API/BFF; ausência de decisão oficial deve ser representada como indisponibilidade ou degradação explícita, e não preenchida por heurística local.
 
 ## Matriz de migração dos callers `nexo.*`
 
@@ -65,8 +67,24 @@ Os contratos legados com `z.any()` permanecem localizados em Customers, Executio
 ## Prioridades atuais
 
 - **P0:** nenhum defeito determinístico aberto foi comprovado pela auditoria da Fase 1. Permanece o risco potencial de indisponibilidade no bootstrap autenticado quando a validação upstream de sessão falha.
-- **P1:** completar OpenAPI para futura geração de contratos; migrar callers de `nexo.*` para routers canônicos com telemetria antes de remover aliases; cobrir rotas administrativas ainda ausentes da matriz multi-tenant; observabilidade dos fallbacks de WhatsApp, Queue e Billing; definição operacional de produção.
+- **P1:** completar OpenAPI para futura geração de contratos; instrumentar telemetria dos aliases `nexo.*` antes de qualquer remoção; cobrir rotas administrativas ainda ausentes da matriz multi-tenant; dar observabilidade aos modos degradados de WhatsApp, Queue e Billing; definir a autoridade operacional de produção.
 
 ## Próxima fase
 
-Prosseguir com a próxima etapa de consolidação sem reabrir as fronteiras financeiras nem remover aliases sem evidência de uso. A autoridade API/BFF está no ADR 0001, Finance/Payments/Billing no ADR 0002, a composição de routers no ADR 0003 e a decomposição operacional no ADR 0004.
+Iniciar a **Fase 2 — contratos, isolamento e prontidão operacional**, sem reabrir páginas já consolidadas e sem reabrir as fronteiras financeiras. A autoridade API/BFF está no ADR 0001, Finance/Payments/Billing no ADR 0002, a composição de routers no ADR 0003 e a decomposição operacional no ADR 0004.
+
+Ordem proposta:
+
+1. **Contratos API/BFF:** inventariar a superfície REST crítica e administrativa, fechar os trechos OpenAPI ausentes e substituir gradualmente os `z.any()` conhecidos de Customers, Executions, Onboarding e WhatsApp por schemas explícitos. Cada endurecimento deve preservar o contrato público ou ser tratado como mudança versionada.
+2. **Isolamento multi-tenant:** transformar a matriz crítica BFF↔API em testes executáveis, priorizando rotas administrativas e cenários negativos de acesso cruzado. Nenhum identificador de organização deve passar a ser aceito como autoridade vindo do browser.
+3. **Telemetria de compatibilidade e degradação:** medir uso real dos aliases `nexo.*` e expor sinais operacionais para fallbacks de WhatsApp, Queue e Billing. Aliases só podem ser removidos após janela observável sem tráfego e plano explícito de rollback.
+4. **Produção e recuperação:** eleger um único alvo autoritativo, consolidar o runbook de deploy e validar backup/restauração com evidência reproduzível e critérios de rollback.
+5. **Fundação de transporte BFF:** migrar os normalizadores de envelope restantes para `nexoTransport`/`nexoEnvelope`, depois dos contratos e testes correspondentes, sem misturar essa etapa com alterações visuais.
+
+### Guardrails da Fase 2
+
+- Não redesenhar nem reabrir Dashboard, Clientes, Agendamentos, Calendário, O.S., Financeiro, WhatsApp, Timeline, Governança, Pessoas, Perfil, Configurações, Billing, Audit, Webhook Recovery ou Operational Cockpit.
+- Preservar Onboarding como fluxo `SPECIAL`; não forçá-lo ao workspace operacional comum.
+- Não implementar no frontend motores, rankings ou fallbacks locais de risco, prioridade, `nextAction`, atraso, capacidade ou governança.
+- Não remover `nexo.*` por busca estática: exigir telemetria, confirmação de consumidores e rollback.
+- Não criar tema local, hardcodes visuais por página ou dependência de Flowbite; componentes e tokens oficiais do Nexo continuam sendo a única fundação visual.
