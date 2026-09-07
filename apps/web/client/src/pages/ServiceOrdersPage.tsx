@@ -16,8 +16,6 @@ import {
   AppPageShell,
   AppPriorityBadge,
   AppRowActionsDropdown,
-  AppSectionCard,
-  AppStatCard,
   AppStatusBadge,
   type AppOperationalStatus,
   type AppPriorityLevel,
@@ -34,11 +32,7 @@ import {
 } from "@/components/internal-page-system";
 import CreateServiceOrderModal from "@/components/CreateServiceOrderModal";
 import EditServiceOrderModal from "@/components/EditServiceOrderModal";
-import {
-  EntityTimelineCard,
-  OperationalFlowCard,
-  type OperationalFlowStageState,
-} from "@/components/app/OperationalCommandLayer";
+import { EntityTimelineCard } from "@/components/app/OperationalCommandLayer";
 import { cn } from "@/lib/utils";
 
 // Contract guard: Alertas compactos: atraso, parada, responsável e cobrança.
@@ -73,7 +67,7 @@ function formatDate(value: unknown, fallback = "—") {
 }
 
 function formatCurrency(cents?: number | null) {
-  if (!Number.isFinite(Number(cents ?? 0)) || Number(cents ?? 0) <= 0)
+  if (cents === null || cents === undefined || !Number.isFinite(Number(cents)))
     return "—";
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -193,16 +187,6 @@ function getHumanEntity(
 function safeText(value: unknown, fallback = "—") {
   const text = String(value ?? "").trim();
   return text.length > 0 ? text : fallback;
-}
-
-function getServiceOrdersOperationalStatus(
-  decisions: Array<{ operationalStatus: AppOperationalStatus }>
-): AppOperationalStatus {
-  if (decisions.some(item => item.operationalStatus === "RISCO"))
-    return "RISCO";
-  if (decisions.some(item => item.operationalStatus === "ATENÇÃO"))
-    return "ATENÇÃO";
-  return "NORMAL";
 }
 
 export default function ServiceOrdersPage() {
@@ -404,7 +388,12 @@ export default function ServiceOrdersPage() {
           "Sem prazo"
         ),
         amountCents:
-          Number(order?.amountCents ?? linkedCharge?.amountCents ?? 0) || 0,
+          order?.amountCents !== null && order?.amountCents !== undefined
+            ? Number(order.amountCents)
+            : linkedCharge?.amountCents !== null &&
+                linkedCharge?.amountCents !== undefined
+              ? Number(linkedCharge.amountCents)
+              : null,
         hasCharge,
         financialStatusLabel: financialUnavailable
           ? "Cobrança indisponível"
@@ -452,6 +441,7 @@ export default function ServiceOrdersPage() {
     serviceOrders,
   ]);
 
+  // Filtering never changes the relative order returned by the API.
   const filteredOrders = useMemo(() => {
     const normalizedTerm = searchTerm.trim().toLowerCase();
     return enrichedOrders.filter(item => {
@@ -587,137 +577,24 @@ export default function ServiceOrdersPage() {
     dataCount: filteredOrders.length,
   });
 
-  const counts = useMemo(() => {
-    const open = enrichedOrders.filter(item =>
-      ["OPEN", "ASSIGNED"].includes(item.status)
-    ).length;
-    const progress = enrichedOrders.filter(
-      item => item.status === "IN_PROGRESS"
-    ).length;
-    const overdue = enrichedOrders.filter(item => item.isOverdue).length;
-    const done = enrichedOrders.filter(item => item.status === "DONE").length;
-    const doneWithoutCharge = enrichedOrders.filter(
-      item => item.nextAction?.type === "charge"
-    ).length;
-    const noCharge = enrichedOrders.filter(item => !item.hasCharge).length;
-    const unassigned = enrichedOrders.filter(
-      item =>
-        !item.assignedToPersonId &&
-        item.status !== "DONE" &&
-        item.status !== "CANCELED"
-    ).length;
-    const stalled = enrichedOrders.filter(item => item.isStalled).length;
-    const overdueCharges = enrichedOrders.filter(
-      item => item.chargeOverdue
-    ).length;
-    return {
+  const counts = useMemo(
+    () => ({
       all: enrichedOrders.length,
-      open,
-      progress,
-      overdue,
-      done,
-      doneWithoutCharge,
-      noCharge,
-      unassigned,
-      overdueCharges,
-      stalled,
-    };
-  }, [enrichedOrders]);
-
-  const immediateAttention = useMemo(() => {
-    // The list contract is already the official queue. Filtering never changes
-    // its relative order and uses only the decision returned for each O.S.
-    return enrichedOrders
-      .filter(
-        item => item.decisionAvailable && item.operationalStatus !== "NORMAL"
-      )
-      .slice(0, 4);
-  }, [enrichedOrders]);
-
-  const nextExecution = useMemo(() => {
-    return (
-      immediateAttention[0] ??
-      enrichedOrders.find(item => item.decisionAvailable) ??
-      null
-    );
-  }, [enrichedOrders, immediateAttention]);
-
-  const operationalKpis = useMemo(
-    () => [
-      {
-        label: "Abertas",
-        value: counts.open,
-        helper: "O.S. aguardando início ou dono da execução.",
-        filter: "open" as ServiceOrdersFilter,
-      },
-      {
-        label: "Em andamento",
-        value: counts.progress,
-        helper: "Serviços ativos que precisam avançar no turno.",
-        filter: "in_progress" as ServiceOrdersFilter,
-      },
-      {
-        label: "Atrasadas",
-        value: counts.overdue,
-        helper:
-          counts.overdue > 0
-            ? "Prioridade visual máxima na carteira."
-            : "Nenhum prazo vencido retornado.",
-        filter: "overdue" as ServiceOrdersFilter,
-      },
-      {
-        label: "Concluídas / sem cobrança",
-        value: `${counts.done} / ${counts.doneWithoutCharge}`,
-        helper:
-          counts.doneWithoutCharge > 0
-            ? "Alerta forte: execução virou caixa pendente."
-            : "Concluídas retornadas estão cobertas.",
-        filter: "without_charge" as ServiceOrdersFilter,
-      },
-    ],
-    [counts]
+      open: enrichedOrders.filter(item =>
+        ["OPEN", "ASSIGNED"].includes(item.status)
+      ).length,
+      progress: enrichedOrders.filter(item => item.status === "IN_PROGRESS")
+        .length,
+      overdue: enrichedOrders.filter(item => item.isOverdue).length,
+      done: enrichedOrders.filter(item => item.status === "DONE").length,
+      doneWithoutCharge: enrichedOrders.filter(
+        item => item.nextAction?.type === "charge"
+      ).length,
+    }),
+    [enrichedOrders]
   );
 
-  const commandTarget = selectedOrder ?? nextExecution;
-
-  const serviceOrderNextBestAction = useMemo(() => {
-    if (!commandTarget) {
-      return {
-        title: "Criar ou selecionar O.S.",
-        reason: "Sem execução selecionada para orientar com segurança.",
-        safetyNote:
-          "A tela apenas orienta; nenhuma O.S. é criada automaticamente.",
-        primaryActionLabel: "Criar O.S.",
-        secondaryActionLabel: counts.all > 0 ? "Ver carteira" : undefined,
-        kind: "create" as const,
-      };
-    }
-    const next = commandTarget.nextAction;
-    if (!next) {
-      return {
-        title: "Decisão operacional indisponível",
-        reason: `A API não retornou a decisão oficial para ${commandTarget.code}; nenhuma ação foi inferida.`,
-        safetyNote: "Atualize a leitura ou abra o detalhe factual da O.S.",
-        primaryActionLabel: "Atualizar leitura",
-        secondaryActionLabel: "Ver detalhes",
-        kind: "unavailable" as const,
-      };
-    }
-    return {
-      title: next.label,
-      reason: `${next.reason}: ${commandTarget.code} · ${commandTarget.customerName}.`,
-      safetyNote:
-        "Use somente ações existentes: iniciar, concluir, abrir detalhe, gerar cobrança, editar ou navegar para fluxos conectados.",
-      primaryActionLabel: next.label,
-      secondaryActionLabel:
-        next.type === "charge"
-          ? "Abrir financeiro"
-          : next.type === "edit"
-            ? "Ver detalhes"
-            : "Editar O.S.",
-      kind: next.type,
-    };
-  }, [commandTarget, counts.all]);
+  const commandTarget = selectedOrder;
 
   const serviceOrderTimelineEvents = useMemo(() => {
     if (timeline.length > 0) {
@@ -737,264 +614,8 @@ export default function ServiceOrdersPage() {
         ),
       }));
     }
-    if (!commandTarget) return [];
-    const contextualEvents: Array<{
-      id: string;
-      type: string;
-      occurredAt: string;
-      entity: string;
-      summary: string;
-      actor?: string;
-    }> = [];
-    if (commandTarget.raw?.createdAt) {
-      contextualEvents.push({
-        id: `created-${commandTarget.id}`,
-        type: "O.S. criada",
-        occurredAt: getOperationalDateLabel(commandTarget.raw.createdAt),
-        entity: "O.S.",
-        summary:
-          "Evento contextual derivado da data real de criação da O.S.; não substitui a Timeline oficial.",
-        actor:
-          commandTarget.responsibleName !== "Sem responsável"
-            ? commandTarget.responsibleName
-            : undefined,
-      });
-    }
-    if (commandTarget.startedAt) {
-      contextualEvents.push({
-        id: `started-${commandTarget.id}`,
-        type: "Execução iniciada",
-        occurredAt: getOperationalDateLabel(commandTarget.startedAt),
-        entity: commandTarget.title,
-        summary:
-          "Evento contextual derivado da data real de início da execução.",
-        actor:
-          commandTarget.responsibleName !== "Sem responsável"
-            ? commandTarget.responsibleName
-            : undefined,
-      });
-    }
-    if (commandTarget.finishedAt) {
-      contextualEvents.push({
-        id: `finished-${commandTarget.id}`,
-        type: "Execução concluída",
-        occurredAt: getOperationalDateLabel(commandTarget.finishedAt),
-        entity: commandTarget.title,
-        summary: "Evento contextual derivado da data real de conclusão da O.S.",
-        actor:
-          commandTarget.responsibleName !== "Sem responsável"
-            ? commandTarget.responsibleName
-            : undefined,
-      });
-    }
-    if (
-      commandTarget.linkedCharge?.createdAt ||
-      commandTarget.linkedCharge?.id
-    ) {
-      contextualEvents.push({
-        id: `charge-${commandTarget.id}`,
-        type: "Cobrança criada",
-        occurredAt: getOperationalDateLabel(
-          commandTarget.linkedCharge?.createdAt
-        ),
-        entity: `${commandTarget.financialStatusLabel} · ${formatCurrency(commandTarget.amountCents)}`,
-        summary:
-          "Evento contextual derivado da cobrança vinculada retornada pelo financeiro.",
-      });
-    }
-    return contextualEvents.slice(0, 4);
+    return [];
   }, [commandTarget, timeline]);
-
-  const executionPreparationItems = useMemo(() => {
-    const target = commandTarget;
-    return [
-      {
-        label: "Cliente vinculado",
-        state: target?.customerId ? "ok" : "missing",
-        detail: target?.customerId
-          ? target.customerName
-          : "Sem cliente nos dados carregados",
-      },
-      {
-        label: "Responsável definido",
-        state: target?.assignedToPersonId ? "ok" : "attention",
-        detail: target?.responsibleName ?? "Sem responsável",
-        action: target ? "Editar" : undefined,
-        onClick: target ? () => setEditingId(target.id) : undefined,
-      },
-      {
-        label: "Agendamento vinculado",
-        state: target?.linkedAppointment ? "ok" : "missing",
-        detail: target?.linkedAppointment
-          ? formatDate(target.linkedAppointment?.startsAt)
-          : "Sem agendamento vinculado",
-      },
-      {
-        label: "Execução iniciada",
-        state:
-          target?.startedAt ||
-          target?.status === "IN_PROGRESS" ||
-          target?.status === "DONE"
-            ? "ok"
-            : "attention",
-        detail: target?.startedAt
-          ? formatDate(target.startedAt)
-          : getStatusLabel(target?.status ?? ""),
-      },
-      {
-        label: "Cobrança preparada",
-        state: target?.hasCharge
-          ? "ok"
-          : target?.status === "DONE"
-            ? "attention"
-            : "missing",
-        detail: target?.financialStatusLabel ?? "Sem cobrança",
-        action: target?.nextAction?.type === "charge" ? "Cobrar" : undefined,
-        onClick:
-          target?.nextAction?.type === "charge"
-            ? () => void handleGenerateCharge(target.id)
-            : undefined,
-      },
-      {
-        label: "Timeline disponível",
-        state: serviceOrderTimelineEvents.length > 0 ? "ok" : "missing",
-        detail:
-          serviceOrderTimelineEvents.length > 0
-            ? `${serviceOrderTimelineEvents.length} evento(s)`
-            : "Sem eventos retornados",
-      },
-      {
-        label: "Canal WhatsApp disponível",
-        state: target?.customerId && target?.id ? "ok" : "missing",
-        detail: target?.customerId
-          ? "Cliente com vínculo para conversa"
-          : "Sem cliente válido",
-        action: target?.customerId && target?.id ? "WhatsApp" : undefined,
-        onClick:
-          target?.customerId && target?.id
-            ? () =>
-                goToWhatsAppServiceOrder(
-                  String(target.customerId),
-                  String(target.id)
-                )
-            : undefined,
-      },
-    ];
-  }, [commandTarget, serviceOrderTimelineEvents.length]);
-
-  const serviceOrderFlowStages = useMemo(() => {
-    const target = commandTarget;
-    const paymentDone = hasPaymentEvidence(target?.linkedCharge);
-    const stages: Array<{
-      id: string;
-      label: string;
-      summary: string;
-      state: OperationalFlowStageState;
-      countOrValue?: string;
-      hrefLabel?: string;
-      onClick?: () => void;
-    }> = [
-      {
-        id: "customer",
-        label: "Cliente",
-        summary: target?.customerId
-          ? `Cliente vinculado: ${target.customerName}.`
-          : "Sem cliente vinculado.",
-        state: target?.customerId ? "done" : "blocked",
-        countOrValue: target?.customerId ? "Vinculado" : "—",
-        hrefLabel: "Abrir cliente",
-        onClick: target?.customerId
-          ? () => navigate(`/customers?customerId=${target.customerId}`)
-          : undefined,
-      },
-      {
-        id: "appointment",
-        label: "Agendamento",
-        summary: target?.linkedAppointment
-          ? `Agendado para ${formatDate(target.linkedAppointment?.startsAt)}.`
-          : "Sem agendamento vinculado.",
-        state: target?.linkedAppointment ? "done" : "idle",
-        countOrValue: target?.linkedAppointment ? "Vinculado" : "—",
-      },
-      {
-        id: "service-order",
-        label: "O.S.",
-        summary: target
-          ? `${target.statusLabel} · ${target.title}.`
-          : "Sem O.S. selecionada.",
-        state: !target
-          ? "idle"
-          : target.isOverdue
-            ? "blocked"
-            : target.status === "DONE"
-              ? "done"
-              : target.status === "IN_PROGRESS"
-                ? "active"
-                : "warning",
-        countOrValue: target ? target.statusLabel : "—",
-        hrefLabel: target ? "Abrir O.S." : undefined,
-        onClick: target ? () => setSelectedOrderId(target.id) : undefined,
-      },
-      {
-        id: "execution",
-        label: "Execução",
-        summary: target?.finishedAt
-          ? `Concluída em ${formatDate(target.finishedAt)}.`
-          : target?.startedAt || target?.status === "IN_PROGRESS"
-            ? "Execução em andamento."
-            : "Execução ainda não iniciada.",
-        state:
-          target?.status === "DONE"
-            ? "done"
-            : target?.status === "IN_PROGRESS"
-              ? "active"
-              : target?.isOverdue
-                ? "blocked"
-                : "idle",
-        countOrValue:
-          target?.status === "DONE"
-            ? "OK"
-            : target?.status === "IN_PROGRESS"
-              ? "Ativa"
-              : "—",
-      },
-      {
-        id: "charge",
-        label: "Cobrança",
-        summary: target?.financialStatusLabel ?? "Sem cobrança.",
-        state: target?.hasCharge
-          ? target.chargeOverdue
-            ? "blocked"
-            : "warning"
-          : target?.status === "DONE"
-            ? "blocked"
-            : "idle",
-        countOrValue: target?.hasCharge
-          ? target.financialStatusLabel
-          : target?.status === "DONE"
-            ? "Cobrança pendente"
-            : "Sem cobrança",
-        hrefLabel: "Abrir financeiro",
-        onClick: target?.customerId
-          ? () => navigate(`/finances?customerId=${target.customerId}`)
-          : undefined,
-      },
-      {
-        id: "payment",
-        label: "Pagamento",
-        summary: paymentDone ? "Pagamento recebido." : "Aguardando pagamento.",
-        state: paymentDone
-          ? "done"
-          : target?.hasCharge
-            ? target?.chargeOverdue
-              ? "blocked"
-              : "warning"
-            : "idle",
-        countOrValue: paymentDone ? "OK" : "—",
-      },
-    ];
-    return stages;
-  }, [commandTarget, navigate, setSelectedOrderId]);
 
   const anyActionPending =
     startExecutionMutation.isPending ||
@@ -1150,62 +771,6 @@ export default function ServiceOrdersPage() {
     setSelectedOrderId(item.id);
   }
 
-  function runCommandPrimaryAction() {
-    const order = commandTarget;
-    if (!order) {
-      setOpenCreate(true);
-      return;
-    }
-    setSelectedOrderId(order.id);
-    if (serviceOrderNextBestAction.kind === "start") {
-      void handleStart(order.id);
-      return;
-    }
-    if (serviceOrderNextBestAction.kind === "complete") {
-      void handleComplete(order.id);
-      return;
-    }
-    if (serviceOrderNextBestAction.kind === "charge") {
-      void handleGenerateCharge(order.id);
-      return;
-    }
-    if (serviceOrderNextBestAction.kind === "edit") {
-      setEditingId(order.id);
-      return;
-    }
-    setSelectedOrderId(order.id);
-  }
-
-  function runCommandSecondaryAction() {
-    const order = commandTarget;
-    if (!order) {
-      setActiveFilter("all");
-      return;
-    }
-    setSelectedOrderId(order.id);
-    if (
-      serviceOrderNextBestAction.secondaryActionLabel === "Editar O.S." ||
-      serviceOrderNextBestAction.secondaryActionLabel === "Ver detalhes"
-    ) {
-      if (serviceOrderNextBestAction.secondaryActionLabel === "Editar O.S.")
-        setEditingId(order.id);
-      return;
-    }
-    if (
-      serviceOrderNextBestAction.secondaryActionLabel === "Abrir financeiro"
-    ) {
-      navigate("/finances");
-      return;
-    }
-    if (serviceOrderNextBestAction.secondaryActionLabel === "Abrir cliente") {
-      navigate(`/customers?customerId=${order.customerId}`);
-      return;
-    }
-    if (serviceOrderNextBestAction.secondaryActionLabel === "Abrir Timeline") {
-      navigate(`/timeline?serviceOrderId=${order.id}`);
-    }
-  }
-
   async function handleGenerateCharge(orderId: string) {
     if (!capabilities.generateCharge) {
       setActionFeedback(
@@ -1288,324 +853,27 @@ export default function ServiceOrdersPage() {
     return "Gerar cobrança";
   }
 
-  const serviceOrdersOperationalStatus =
-    getServiceOrdersOperationalStatus(enrichedOrders);
-
   return (
     <AppPageShell className="gap-3">
       <AppOperationalHeader
         title="Ordens de Serviço"
-        description="Centro real de execução operacional: status, dono, prazo, atraso e cobrança em uma única leitura."
+        description="Execute, acompanhe e conecte cada O.S. ao cliente, responsável e cobrança oficiais."
         density="compact"
         primaryAction={
-          <Button type="button" onClick={() => setOpenCreate(true)}>
+          <Button
+            type="button"
+            onClick={() => setOpenCreate(true)}
+            disabled={customersQuery.isError}
+            title={
+              customersQuery.isError
+                ? "Nova O.S. indisponível enquanto clientes não puderem ser carregados"
+                : "Criar nova ordem de serviço"
+            }
+          >
             Nova O.S.
           </Button>
         }
-        contextChips={
-          <>
-            <AppOperationalStatusBadge
-              status={serviceOrdersOperationalStatus}
-            />
-            <AppStatusBadge
-              label={`${counts.all} O.S. retornadas`}
-              tone="neutral"
-            />
-            <AppStatusBadge
-              label={`${counts.overdue} atrasada(s)`}
-              tone="warning"
-            />
-            <AppStatusBadge
-              label={`${counts.doneWithoutCharge} concluída(s) sem cobrança`}
-              tone="danger"
-            />
-            <AppStatusBadge
-              label={`${counts.stalled} parada(s) sem prazo`}
-              tone="warning"
-            />
-          </>
-        }
-      >
-        <div className="grid gap-2 text-xs text-[var(--text-secondary)] md:grid-cols-3">
-          <span>Execução real antes de cadastro.</span>
-          <span>Atraso, responsável e cobrança ficam visíveis.</span>
-          <span>Cliente, agenda, financeiro e WhatsApp seguem conectados.</span>
-        </div>
-      </AppOperationalHeader>
-
-      {selectedOrder ? (
-        <AppSectionCard className="overflow-hidden border border-[var(--border-subtle)] bg-[var(--surface-base)] p-0">
-          <div className="grid gap-0 lg:grid-cols-[1.45fr_0.55fr]">
-            <div className="p-6 md:p-8">
-              <p className="nexo-overline">Hero executivo da O.S.</p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {selectedOrder.decisionAvailable ? (
-                  <>
-                    <AppOperationalStatusBadge
-                      status={selectedOrder.operationalStatus!}
-                      label={getStatusTone(
-                        selectedOrder.status,
-                        selectedOrder.isOverdue
-                      )}
-                    />
-                    <AppPriorityBadge
-                      priority={selectedOrder.priority!}
-                      label={selectedOrder.riskLabel}
-                    />
-                  </>
-                ) : (
-                  <AppStatusBadge label="Decisão indisponível" tone="neutral" />
-                )}
-                <AppStatusBadge
-                  label={selectedOrder.financialStatusLabel}
-                  tone={selectedOrder.hasCharge ? "accent" : "warning"}
-                />
-              </div>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[var(--text-primary)] md:text-5xl">
-                {selectedOrder.customerName}
-              </h2>
-              <p className="mt-2 text-lg font-medium text-[var(--text-secondary)]">
-                {selectedOrder.title}
-              </p>
-              <div className="mt-5 grid gap-2 sm:grid-cols-3">
-                {[
-                  ["Status principal", selectedOrder.statusLabel],
-                  ["Responsável", selectedOrder.responsibleName],
-                  ["Prazo", selectedOrder.dueDateLabel],
-                  ["Atraso", selectedOrder.overdueLabel],
-                  ["Valor", formatCurrency(selectedOrder.amountCents)],
-                  ["Sinal principal", selectedOrder.riskLabel],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)]/70 p-2.5"
-                  >
-                    <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                      {label}
-                    </p>
-                    <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">
-                      {value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-col justify-center gap-2 border-t border-[var(--border-subtle)] bg-[var(--surface-base)]/75 p-5 lg:border-l lg:border-t-0">
-              <Button onClick={() => setSelectedOrderId(selectedOrder.id)}>
-                Abrir O.S.
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setEditingId(selectedOrder.id)}
-              >
-                Editar O.S.
-              </Button>
-              <Button
-                variant="outline"
-                title={getStartUnavailableReason(selectedOrder)}
-                aria-label={getStartUnavailableReason(selectedOrder)}
-                onClick={() => void handleStart(selectedOrder.id)}
-                disabled={
-                  !capabilities.start ||
-                  !["OPEN", "ASSIGNED"].includes(selectedOrder.status) ||
-                  anyActionPending
-                }
-              >
-                Iniciar execução
-              </Button>
-              <Button
-                variant="outline"
-                title={getCompleteUnavailableReason(selectedOrder)}
-                aria-label={getCompleteUnavailableReason(selectedOrder)}
-                onClick={() => void handleComplete(selectedOrder.id)}
-                disabled={
-                  !capabilities.complete ||
-                  selectedOrder.status !== "IN_PROGRESS" ||
-                  anyActionPending
-                }
-              >
-                Concluir execução
-              </Button>
-              <Button
-                variant="outline"
-                title={getChargeUnavailableReason(selectedOrder)}
-                aria-label={getChargeUnavailableReason(selectedOrder)}
-                onClick={() => void handleGenerateCharge(selectedOrder.id)}
-                disabled={
-                  !capabilities.generateCharge ||
-                  selectedOrder.status !== "DONE" ||
-                  selectedOrder.hasCharge ||
-                  anyActionPending
-                }
-              >
-                Cobrar cliente
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  navigate(`/customers?customerId=${selectedOrder.customerId}`)
-                }
-                disabled={!selectedOrder.customerId}
-              >
-                Abrir cliente
-              </Button>
-            </div>
-          </div>
-        </AppSectionCard>
-      ) : null}
-
-      <AppSectionCard className="space-y-4 border-2 border-[var(--accent-primary)]/45 bg-[var(--surface-base)] p-0">
-        <div className="border-b border-[var(--accent-primary)]/20 px-5 py-4 md:px-6">
-          <p className="nexo-overline">
-            Decisão e próxima ação · Próxima melhor ação
-          </p>
-          <h3 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text-primary)] md:text-3xl">
-            FAÇA AGORA: {serviceOrderNextBestAction.title}
-          </h3>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {serviceOrderNextBestAction.reason}
-          </p>
-        </div>
-        <div className="grid gap-3 px-5 md:px-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-2xl border border-[var(--accent-primary)]/25 bg-[var(--surface-base)]/80 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Estado operacional
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-              {commandTarget
-                ? `${commandTarget.statusLabel} · ${commandTarget.responsibleName} · ${commandTarget.dueDateLabel}.`
-                : "Sem O.S. selecionada."}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-base)]/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Maior risco
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-              {commandTarget?.riskLabel ?? "Carteira sem foco operacional."}
-            </p>
-            <p className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
-              Impacto:{" "}
-              {commandTarget?.nextAction?.reason ??
-                "Selecione ou crie uma O.S. para destravar a execução."}
-            </p>
-            <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
-              Nota: {serviceOrderNextBestAction.safetyNote}
-            </p>
-          </div>
-        </div>
-        <AppActionBar className="gap-2 border-t border-[var(--accent-primary)]/20 px-5 pb-5 pt-1 md:px-6">
-          <div className="mr-auto max-w-xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Próxima ação
-            </p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              Use apenas ações existentes da O.S., cliente, cobrança, timeline e
-              WhatsApp.
-            </p>
-          </div>
-          <Button
-            size="lg"
-            className="min-w-[220px] bg-[var(--accent-primary)] text-[var(--primary-foreground)] hover:bg-[var(--accent-primary-hover)]"
-            onClick={runCommandPrimaryAction}
-          >
-            {serviceOrderNextBestAction.primaryActionLabel}
-          </Button>
-          {serviceOrderNextBestAction.secondaryActionLabel ? (
-            <Button variant="outline" onClick={runCommandSecondaryAction}>
-              {serviceOrderNextBestAction.secondaryActionLabel}
-            </Button>
-          ) : null}
-        </AppActionBar>
-      </AppSectionCard>
-
-      <AppSectionBlock
-        title="Preparação da execução"
-        subtitle="Checklist somente com dados carregados: cliente, responsável, agenda, execução, cobrança, timeline e WhatsApp."
-        compact
-      >
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          {executionPreparationItems.map(item => (
-            <div
-              key={item.label}
-              className="flex min-h-[76px] items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-3 py-2"
-            >
-              <div className="min-w-0">
-                <span
-                  className={cn(
-                    "inline-flex h-2.5 w-2.5 rounded-full",
-                    item.state === "ok"
-                      ? "bg-[var(--success)]"
-                      : item.state === "attention"
-                        ? "bg-[var(--warning)]"
-                        : "bg-[var(--text-muted)]"
-                  )}
-                  aria-hidden="true"
-                />
-                <p className="mt-1 truncate text-sm font-medium text-[var(--text-primary)]">
-                  {item.label}
-                </p>
-                <p className="truncate text-xs text-[var(--text-muted)]">
-                  {item.detail}
-                </p>
-              </div>
-              {item.action && item.onClick ? (
-                <Button size="sm" variant="ghost" onClick={item.onClick}>
-                  {item.action}
-                </Button>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </AppSectionBlock>
-
-      {commandTarget ? (
-        <EntityTimelineCard
-          title="Timeline humanizada da O.S."
-          subtitle={
-            timeline.length > 0
-              ? "Últimos eventos oficiais retornados pela Timeline."
-              : "Sem Timeline oficial carregada; eventos contextuais usam apenas datas reais da O.S. e cobrança."
-          }
-          events={serviceOrderTimelineEvents}
-          fullTimelineLabel="Abrir Timeline completa"
-          onFullTimeline={() =>
-            navigate(`/timeline?serviceOrderId=${commandTarget.id}`)
-          }
-        />
-      ) : null}
-
-      <OperationalFlowCard
-        title="Pipeline operacional da O.S."
-        subtitle="Cliente → Agendamento → O.S. → Execução → Cobrança → Pagamento"
-        stages={serviceOrderFlowStages}
       />
-
-      <AppSectionBlock
-        title="Saúde operacional"
-        subtitle="Resumo compacto; não compete com o hero nem com o bloco de decisão."
-        compact
-      >
-        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-          {operationalKpis.map(kpi => (
-            <AppStatCard
-              key={kpi.label}
-              label={kpi.label}
-              value={kpi.value}
-              helper={kpi.helper}
-              delta={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setActiveFilter(kpi.filter)}
-                >
-                  Ver carteira
-                </Button>
-              }
-            />
-          ))}
-        </div>
-      </AppSectionBlock>
 
       {[customersQuery, appointmentsQuery, chargesQuery, peopleQuery].some(
         query => Boolean(query.error)
@@ -1640,9 +908,13 @@ export default function ServiceOrdersPage() {
         </div>
       ) : null}
 
-      <AppFiltersBar className="shrink-0 gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2">
-        <div className="min-w-[220px] flex-1">
+      <AppFiltersBar className="min-w-0 shrink-0 flex-col items-stretch gap-2 border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2 md:flex-row md:items-center">
+        <div className="min-w-0 flex-1">
+          <label className="sr-only" htmlFor="service-order-search">
+            Buscar ordens de serviço
+          </label>
           <input
+            id="service-order-search"
             value={searchTerm}
             onChange={event => setSearchTerm(event.target.value)}
             placeholder="Buscar por código, cliente ou descrição"
@@ -1762,55 +1034,6 @@ export default function ServiceOrdersPage() {
       </AppFiltersBar>
 
       <div className="space-y-3">
-        <AppSectionBlock
-          title="Radar operacional"
-          subtitle="Cliente, problema, próxima ação e CTA resolver."
-          compact
-        >
-          {isLoading ? (
-            <AppPageLoadingState description="Carregando alertas de O.S..." />
-          ) : immediateAttention.length === 0 ? (
-            <AppPageEmptyState
-              title="Sem alerta imediato"
-              description="Os dados retornados não indicam O.S. atrasada, sem responsável, concluída sem cobrança ou parada sem prazo."
-            />
-          ) : (
-            <div className="grid max-h-[220px] gap-2 overflow-auto md:grid-cols-2 2xl:grid-cols-4">
-              {immediateAttention.slice(0, 4).map(item => (
-                <article
-                  key={`attention-${item.id}`}
-                  className={cn(
-                    "rounded-lg border p-3",
-                    item.nextAction?.type === "charge"
-                      ? "border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_8%,var(--surface-subtle))]"
-                      : item.isOverdue
-                        ? "border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_8%,var(--surface-subtle))]"
-                        : "border-[var(--border-subtle)] bg-[var(--surface-subtle)]"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                        {item.customerName}
-                      </p>
-                      <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {item.riskLabel}
-                      </p>
-                      <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                        {item.title} · {item.responsibleName} ·{" "}
-                        {item.dueDateLabel}
-                      </p>
-                    </div>
-                    <Button size="sm" onClick={() => runPrimaryAction(item)}>
-                      Resolver
-                    </Button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </AppSectionBlock>
-
         <div className="flex flex-col gap-3">
           <AppSectionBlock
             title="Carteira operacional de O.S."
@@ -2189,23 +1412,38 @@ export default function ServiceOrdersPage() {
                   </article>
                 </div>
 
-                <EntityTimelineCard
-                  title="Prova operacional da execução"
-                  subtitle={
-                    timelineQuery.isLoading
-                      ? "Carregando últimos eventos oficiais da O.S."
-                      : timeline.length > 0
-                        ? "Últimos eventos oficiais da O.S. retornados pela Timeline."
-                        : serviceOrderTimelineEvents.length > 0
-                          ? "Fallback contextual com datas reais da O.S.; não substitui a Timeline oficial."
-                          : "Sem Timeline oficial retornada e sem datas suficientes para fallback contextual."
-                  }
-                  events={serviceOrderTimelineEvents}
-                  fullTimelineLabel="Abrir Timeline completa"
-                  onFullTimeline={() =>
-                    navigate(`/timeline?serviceOrderId=${selectedOrder.id}`)
-                  }
-                />
+                <section aria-labelledby="service-order-timeline-title">
+                  <h3
+                    id="service-order-timeline-title"
+                    className="mb-2 font-semibold text-[var(--text-primary)]"
+                  >
+                    Timeline
+                  </h3>
+                  {timelineQuery.isLoading ? (
+                    <AppPageLoadingState description="Carregando histórico oficial..." />
+                  ) : timelineQuery.error ? (
+                    <AppPageErrorState
+                      description="Timeline indisponível. Os fatos e ações da O.S. permanecem disponíveis."
+                      actionLabel="Tentar novamente"
+                      onAction={() => void timelineQuery.refetch()}
+                    />
+                  ) : serviceOrderTimelineEvents.length === 0 ? (
+                    <AppPageEmptyState
+                      title="Sem eventos na Timeline"
+                      description="Nenhum evento oficial foi retornado para esta O.S."
+                    />
+                  ) : (
+                    <EntityTimelineCard
+                      title="Histórico oficial da O.S."
+                      subtitle="Evidências cronológicas retornadas pela Timeline."
+                      events={serviceOrderTimelineEvents}
+                      fullTimelineLabel="Abrir Timeline completa"
+                      onFullTimeline={() =>
+                        navigate(`/timeline?serviceOrderId=${selectedOrder.id}`)
+                      }
+                    />
+                  )}
+                </section>
 
                 <AppActionBar className="gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 py-2">
                   <Button

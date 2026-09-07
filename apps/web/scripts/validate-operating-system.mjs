@@ -467,13 +467,13 @@ const serviceOrdersSource = readFileSync(
   "utf8"
 );
 const serviceOrdersExecutionContract = [
-  "Centro real de execução operacional",
-  "Alertas compactos: atraso, parada, responsável e cobrança.",
-  "Número, cliente, serviço, status, responsável, prazo, atraso, valor",
-  "Sem prazo",
-  "Cobrar / Gerar cobrança",
-  "Enviar WhatsApp",
-  "Fallback contextual com datas reais da O.S.; não substitui a Timeline oficial.",
+  "<AppPageShell",
+  "<AppOperationalHeader",
+  "Nova O.S.",
+  "Carteira operacional de O.S.",
+  "item.nextAction?.label",
+  "Dados auxiliares parcialmente indisponíveis",
+  "Os fatos e ações da O.S. permanecem disponíveis",
 ];
 for (const expected of serviceOrdersExecutionContract) {
   if (!serviceOrdersSource.includes(expected)) {
