@@ -2,7 +2,14 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { authedGet, authedPatch, authedPost, type NexoContext } from "../_core/nexoTransport";
 
-const anyInput = z.any().optional();
+const customersListInput = z
+  .object({
+    page: z.number().int().min(1).max(10_000).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    search: z.string().max(200).optional(),
+  })
+  .strict()
+  .optional();
 
 const customerCreateInput = z.object({
   name: z.string().min(1),
@@ -97,7 +104,7 @@ const customersOperationalSummarySchema = z
   .passthrough();
 
 export const customersRouter = router({
-    list: protectedProcedure.input(anyInput).query(async ({ ctx, input }) => {
+    list: protectedProcedure.input(customersListInput).query(async ({ ctx, input }) => {
       return authedGet(ctx as NexoContext, "/customers", input);
     }),
 

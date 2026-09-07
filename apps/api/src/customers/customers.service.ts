@@ -15,6 +15,7 @@ import { AnalyticsService, UsageMetricEvent } from '../analytics/analytics.servi
 import { Prisma } from '@prisma/client'
 import { IdempotencyService } from '../common/idempotency/idempotency.service'
 import { notificationRoutes } from '@nexogestao/common'
+import { ListCustomersQueryDto } from './dto/list-customers-query.dto'
 
 function normalizeEmail(v?: string): string | null {
   const s = (v ?? '').trim().toLowerCase()
@@ -87,7 +88,7 @@ export class CustomersService {
     ].join(':')
   }
 
-  async list(orgId: string, query?: any) {
+  async list(orgId: string, query?: ListCustomersQueryDto) {
     if (!orgId) throw new BadRequestException('orgId é obrigatório')
 
     const page = Number(query?.page) || 1
