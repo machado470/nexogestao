@@ -6,17 +6,32 @@ const source = readFileSync(
   "utf8"
 );
 
-describe("GovernancePage truth and resilience contract", () => {
-  it("consumes the authoritative governance contracts", () => {
+describe("GovernancePage passive operational authority contract", () => {
+  it("uses the canonical page primitives", () => {
+    for (const primitive of [
+      "AppPageShell",
+      "AppOperationalHeader",
+      "AppSectionBlock",
+      "AppStatusBadge",
+      "AppAlert",
+      "AppPageLoadingState",
+      "AppPageErrorState",
+      "AppPageEmptyState",
+    ])
+      expect(source).toContain(primitive);
+    expect(source).not.toContain("AppPageHeader");
+    expect(source).not.toContain("AppSectionCard");
+  });
+
+  it("consumes only official decisions, evidence and execution sources", () => {
     expect(source).toContain("trpc.governance.operationalState.useQuery");
     expect(source).toContain("trpc.governance.autoScore.useQuery");
-    expect(source).toContain("trpc.governance.summary.useQuery");
     expect(source).toContain("trpc.governance.runs.useQuery");
     expect(source).toContain("trpc.dashboard.operationalSignals.useQuery");
     expect(source).toContain("trpc.dashboard.nextBestAction.useQuery");
   });
 
-  it("renders all canonical states and never computes a transition", () => {
+  it("preserves every official state without a NORMAL fallback", () => {
     for (const state of [
       "NORMAL",
       "WARNING",
@@ -25,41 +40,43 @@ describe("GovernancePage truth and resilience contract", () => {
       "UNKNOWN",
     ])
       expect(source).toContain(state);
-    expect(source).toContain("O estado não pode ser alterado nesta tela");
-    expect(source).not.toContain("persistOperationalStateTransition");
-    expect(source).not.toContain("force-normal");
+    expect(source).not.toMatch(/operationalState\s*\?\?\s*["']NORMAL["']/);
+    expect(source).toContain("Nenhum estado foi presumido");
+  });
+
+  it("does not implement operational decision logic or reorder signals", () => {
+    expect(source).not.toContain("Date.now");
+    expect(source).not.toContain("signalArea");
+    expect(source).not.toContain("routeForSignal");
+    expect(source).not.toMatch(/\.sort\s*\(/);
     expect(source).not.toMatch(/riskScore\s*[<>]=?/);
+    expect(source).not.toMatch(/threshold/i);
     expect(source).not.toContain("changeRiskLevel");
   });
 
-  it("distinguishes loading, empty, error and partial unavailability", () => {
-    expect(source).toContain("AppPageLoadingState");
-    expect(source).toContain("AppPageEmptyState");
-    expect(source).toContain("AppPageErrorState");
+  it("preserves evidence and the one official action destination", () => {
+    expect(source).toContain("signal.reason");
+    expect(source).toContain("signal.summary");
+    expect(source).toContain("signal.impact");
+    expect(source).toContain("signal.source");
+    expect(source).toContain("signal.detectedAt");
+    expect(source).toContain("navigate(nextAction.routeHint)");
+    expect(source).not.toContain("navigate(routeForSignal");
+  });
+
+  it("distinguishes loading, errors, unavailable contracts and legitimate emptiness", () => {
     expect(source).toContain("Indisponibilidade parcial");
-    expect(source).toContain("Isso não equivale a fonte indisponível");
-    expect(source).toContain("Tentar novamente");
+    expect(source).toContain("Contrato de estado indisponível");
+    expect(source).toContain("Nenhum sinal retornado");
+    expect(source).toContain("Histórico indisponível");
+    expect(source).toContain("Sem recomendação ativa");
   });
 
-  it("shows automatic score factors, proven risk areas, evidence and existing action", () => {
-    expect(source).toContain("Score automático");
-    expect(source).toContain("Sinais que justificam a nota");
-    expect(source).toContain("Riscos comprováveis");
-    expect(source).toContain("Operacionais");
-    expect(source).toContain("Financeiros");
-    expect(source).toContain("Organizacionais");
-    expect(source).toContain("Próxima melhor ação");
-    expect(source).toContain("Ação administrativa existente no produto");
-    expect(source).toContain("Histórico e evidências");
-    expect(source).toContain("Abrir Timeline");
-  });
-
-  it("provides contextual, accessible and responsive navigation", () => {
-    expect(source).toContain('aria-label="Filtrar riscos por área"');
-    expect(source).toContain("aria-pressed");
-    expect(source).toContain("routeForSignal");
-    expect(source).toContain("sm:grid-cols");
-    expect(source).toContain("lg:grid-cols");
-    expect(source).toContain("var(--app-surface-2)");
+  it("keeps narrow viewports and controls accessible", () => {
+    expect(source).toContain("minmax(0,1fr)");
+    expect(source).toContain("break-words");
+    expect(source).toContain("break-all");
+    expect(source).toContain('aria-label="Sinais operacionais oficiais"');
+    expect(source).toContain("aria-label={`Abrir destino oficial:");
   });
 });
