@@ -81,6 +81,6 @@ describe("Timeline authoritative contract", () => {
     expect(source).not.toContain("orgId");
     expect(source).not.toContain("role:");
     expect(source).toContain("query.refetch()");
-    expect(source).toContain("Não classificado");
+    expect(source).toContain("Evento não classificado");
   });
 });
