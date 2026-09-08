@@ -525,23 +525,10 @@ export function buildWhatsAppSendPayload<
   };
 }
 
-function resolveMessageTypeFromTemplate(
-  templateKey: string,
-  context?: WhatsAppContext | null
-): OperationalMessageType {
-  const normalizedTemplateKey = templateKey.toLowerCase();
-  if (normalizedTemplateKey.includes("payment_link")) return "PAYMENT_LINK";
-  if (normalizedTemplateKey.includes("payment_reminder"))
-    return "PAYMENT_REMINDER";
-  if (normalizedTemplateKey.includes("appointment_confirmation"))
-    return "APPOINTMENT_CONFIRMATION";
-  if (normalizedTemplateKey.includes("appointment_reminder"))
-    return "APPOINTMENT_REMINDER";
-  if (normalizedTemplateKey.includes("service_update")) return "SERVICE_UPDATE";
-  return resolveMessageType({ context });
-}
-
-function resolveEntityFromContext(context?: WhatsAppContext | null) {
+function resolveEntityFromContext(context?: WhatsAppContext | null): {
+  entityType: "CUSTOMER" | "APPOINTMENT" | "SERVICE_ORDER" | "CHARGE" | "PAYMENT" | "GENERAL";
+  entityId?: string;
+} {
   if (context?.openCharge?.id)
     return { entityType: "CHARGE", entityId: context.openCharge.id };
   if (context?.nextAppointment?.id)
@@ -2522,7 +2509,7 @@ export default function WhatsAppPage() {
     if (resolved) {
       setContent(buildTemplateText(resolved, context));
       setComposerMessageTypeOverride(
-        resolveMessageTypeFromTemplate(String(queryTemplate), context)
+        normalizeMessageType(String(queryTemplate)) ?? getDefaultMessageType()
       );
     }
   }, [queryTemplate, selectedConversationId, content, context, setContent]);
@@ -2536,10 +2523,7 @@ export default function WhatsAppPage() {
     setComposerMessageTypeOverride(messageType ?? null);
   };
 
-  const handleSendTemplate = async (
-    templateKey: string,
-    messageType = resolveMessageTypeFromTemplate(templateKey, context)
-  ) => {
+  const handleSendTemplate = async (templateKey: "payment_link" | "payment_reminder") => {
     if (!selectedConversationId) return;
     const customerId =
       context?.customer?.id ?? selectedConversation?.customerId ?? undefined;
@@ -2554,23 +2538,18 @@ export default function WhatsAppPage() {
       return;
     }
     try {
-      const entity = resolveEntityFromContext(context);
       await sendTemplateMutation.mutateAsync({
         templateKey,
         conversationId: selectedConversationRecordId ?? undefined,
         customerId,
-        toPhone: destinationPhone,
-        entityType: entity.entityType,
-        entityId: entity.entityId ?? customerId ?? undefined,
-        messageType,
         context: {
           customerName: context?.customer?.name,
           appointmentDate: context?.nextAppointment?.scheduledAt,
           appointmentTime: context?.nextAppointment?.scheduledAt,
-          chargeAmount: context?.openCharge?.amount,
+          chargeAmount: context?.openCharge?.amount == null ? undefined : String(context.openCharge.amount),
           chargeDueDate: context?.openCharge?.dueDate,
-          paymentLink: context?.openCharge?.paymentLink,
-          serviceOrderNumber: context?.activeServiceOrder?.number,
+          paymentLink: context?.openCharge?.paymentLink ?? undefined,
+          serviceOrderNumber: context?.activeServiceOrder?.number == null ? undefined : String(context.activeServiceOrder.number),
         },
       });
       shouldPromoteVirtualSelectionRef.current = !selectedConversationRecordId;
@@ -2625,10 +2604,7 @@ export default function WhatsAppPage() {
       toast.message("Nenhuma cobrança aberta para este cliente.");
       return;
     }
-    await handleSendTemplate(
-      context.openCharge.paymentLink ? "payment_link" : "payment_reminder",
-      context.openCharge.paymentLink ? "PAYMENT_LINK" : "PAYMENT_REMINDER"
-    );
+    await handleSendTemplate(context.openCharge.paymentLink ? "payment_link" : "payment_reminder");
   };
 
   return (
@@ -2810,10 +2786,7 @@ export default function WhatsAppPage() {
                 onFillTemplate={handleTemplateChip}
                 onSendCharge={() => void handleSendCharge()}
                 onSendPaymentReminder={() =>
-                  void handleSendTemplate(
-                    "payment_reminder",
-                    "PAYMENT_REMINDER"
-                  )
+                  void handleSendTemplate("payment_reminder")
                 }
                 onRequestSuggestedExecution={() =>
                   void handleRequestSuggestedExecution()

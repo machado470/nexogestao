@@ -143,7 +143,7 @@ export class WhatsAppService {
 
   isQueueAvailable() { return this.queueService.isEnabled() }
 
-  async sendManualMessage(orgId: string, userId: string | null, input: any) {
+  async sendManualMessage(orgId: string, userId: string | null, input: { customerId?: string; conversationId?: string; toPhone?: string; entityType?: WhatsAppEntityType; entityId?: string; messageType?: WhatsAppMessageType; content: string }) {
     const content = String(input.content ?? '').trim()
     if (!content) throw new BadRequestException('content é obrigatório')
 
@@ -160,11 +160,12 @@ export class WhatsAppService {
     return queued
   }
 
-  async sendTemplateMessage(orgId: string, userId: string | null, input: any) {
+  async sendTemplateMessage(orgId: string, userId: string | null, input: { customerId?: string; conversationId?: string; templateKey: string; context?: Record<string, unknown>; entityType?: WhatsAppEntityType | string; entityId?: string; messageType?: WhatsAppMessageType }) {
     if (!this.templateService) throw new BadRequestException('Template service indisponível')
     const rendered = await this.templateService.renderTemplate(orgId, input.templateKey, input.context ?? {})
     return this.sendManualMessage(orgId, userId, {
       ...input,
+      entityType: input.entityType as WhatsAppEntityType | undefined,
       messageType: input.messageType ?? rendered.template.messageType,
       content: rendered.content,
     })
