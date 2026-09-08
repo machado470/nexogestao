@@ -1,31 +1,34 @@
-import { Controller, Post, Get, Req, UseGuards, Body } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { OnboardingService } from './onboarding.service';
-import { Throttle } from '@nestjs/throttler';
+import { Controller, Post, Get, Req, UseGuards, Body } from "@nestjs/common";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { OnboardingService } from "./onboarding.service";
+import { Throttle } from "@nestjs/throttler";
+import { CompleteOnboardingStepDto } from "./dto/complete-onboarding-step.dto";
 
-@Controller('onboarding')
+@Controller("onboarding")
 @UseGuards(JwtAuthGuard)
 export class OnboardingController {
   constructor(private readonly onboardingService: OnboardingService) {}
 
-  @Get('status')
+  @Get("status")
   async getOnboardingStatus(@Req() req: any) {
     const orgId = req.user.orgId;
     return this.onboardingService.getOnboardingStatus(orgId);
   }
 
-
-  @Post('complete')
+  @Post("complete")
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   async completeOnboarding(@Req() req: any) {
     const orgId = req.user.orgId;
-    return this.onboardingService.completeOnboardingStep(orgId, 'createCharge');
+    return this.onboardingService.completeOnboardingStep(orgId, "createCharge");
   }
 
-  @Post('complete-step')
+  @Post("complete-step")
   @Throttle({ short: { limit: 10, ttl: 60000 } })
-  async completeOnboardingStep(@Req() req: any, @Body('step') step: 'createCustomer' | 'createService' | 'createCharge') {
+  async completeOnboardingStep(
+    @Req() req: any,
+    @Body() body: CompleteOnboardingStepDto,
+  ) {
     const orgId = req.user.orgId;
-    return this.onboardingService.completeOnboardingStep(orgId, step);
+    return this.onboardingService.completeOnboardingStep(orgId, body.step);
   }
 }
