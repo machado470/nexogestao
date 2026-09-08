@@ -10,6 +10,70 @@ const paginationInput = z.object({
 
 const isoDateSchema = z.string().datetime({ offset: true });
 const moneyCentsSchema = z.number().int().nonnegative();
+const chargeStatusSchema = z.enum(["PENDING", "PAID", "OVERDUE", "CANCELED"]);
+const operationStatusSchema = z.enum([
+  "executed",
+  "queued",
+  "skipped",
+  "blocked",
+  "duplicate",
+  "retry_scheduled",
+  "failed",
+  "degraded",
+]);
+const operationSchema = z.object({
+  status: operationStatusSchema,
+  reason: z.string().nullable(),
+  idempotencyKey: z.string().nullable(),
+  executionKey: z.string().nullable(),
+  correlationId: z.string().nullable(),
+  requestId: z.string().nullable(),
+}).strict();
+const degradedSchema = z.object({
+  channel: z.literal("whatsapp"),
+  reason: z.literal("whatsapp_send_failed"),
+  fallback: z.literal("message_queued"),
+  status: z.literal("retry_scheduled"),
+}).strict();
+
+const createChargeOutputSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  serviceOrderId: z.string().nullable(),
+  amountCents: moneyCentsSchema,
+  status: chargeStatusSchema,
+  dueDate: isoDateSchema,
+  idempotent: z.boolean(),
+  operation: operationSchema,
+  degraded: degradedSchema.nullable().optional(),
+}).strict();
+
+const updateChargeOutputSchema = z.object({
+  id: z.string(),
+  amountCents: moneyCentsSchema,
+  status: chargeStatusSchema,
+  dueDate: isoDateSchema,
+  paidAt: isoDateSchema.nullable(),
+  notes: z.string().nullable(),
+  updatedAt: isoDateSchema,
+}).strict();
+
+const cancelChargeOutputSchema = z.object({
+  id: z.string(),
+  status: z.literal("CANCELED"),
+  canceledAt: isoDateSchema.nullable(),
+  canceledByUserId: z.string().nullable(),
+  cancellationReason: z.string().nullable(),
+  idempotent: z.boolean().optional(),
+}).strict();
+
+const payChargeOutputSchema = z.object({
+  ok: z.literal(true),
+  paymentId: z.string(),
+  idempotent: z.boolean(),
+  operation: operationSchema,
+  degraded: degradedSchema.nullable().optional(),
+}).strict();
 
 const customerSchema = z
   .object({
@@ -68,7 +132,7 @@ const chargeSchema = z
     serviceOrderId: z.string().nullable(),
     amountCents: moneyCentsSchema,
     currency: z.string(),
-    status: z.enum(["PENDING", "PAID", "OVERDUE", "CANCELED"]),
+    status: chargeStatusSchema,
     dueDate: isoDateSchema,
     paidAt: isoDateSchema.nullable(),
     canceledAt: isoDateSchema.nullable(),
@@ -145,6 +209,7 @@ export const financeRouter = router({
           idempotencyKey: z.string().min(8).optional(),
         })
       )
+      .output(createChargeOutputSchema)
       .mutation(async ({ input, ctx }) => {
         const amountCents =
           input.amountCents ??
@@ -169,7 +234,7 @@ export const financeRouter = router({
             : undefined,
         });
 
-        return unwrapNexoApiResponse(raw);
+        return createChargeOutputSchema.strip().parse(unwrapNexoApiResponse(raw));
       }),
 
     list: protectedProcedure
@@ -234,6 +299,7 @@ export const financeRouter = router({
           expectedUpdatedAt: z.string().datetime().optional(),
         })
       )
+      .output(updateChargeOutputSchema)
       .mutation(async ({ input, ctx }) => {
         const { id, amount, amountCents: amountCentsInput, expectedUpdatedAt, ...rest } = input;
 
@@ -251,7 +317,7 @@ export const financeRouter = router({
           }),
         });
 
-        return unwrapNexoApiResponse(raw);
+        return updateChargeOutputSchema.strip().parse(unwrapNexoApiResponse(raw));
       }),
 
     cancel: protectedProcedure
@@ -262,6 +328,7 @@ export const financeRouter = router({
           expectedUpdatedAt: z.string().datetime().optional(),
         })
       )
+      .output(cancelChargeOutputSchema)
       .mutation(async ({ input, ctx }) => {
         const raw = await nexoFetch<unknown>(ctx, `/finance/charges/${input.chargeId}/cancel`, {
           method: "POST",
@@ -271,7 +338,7 @@ export const financeRouter = router({
           }),
         });
 
-        return unwrapNexoApiResponse(raw);
+        return cancelChargeOutputSchema.strip().parse(unwrapNexoApiResponse(raw));
       }),
 
     stats: protectedProcedure
@@ -298,6 +365,7 @@ export const financeRouter = router({
           idempotencyKey: z.string().min(8).optional(),
         })
       )
+      .output(payChargeOutputSchema)
       .mutation(async ({ input, ctx }) => {
         const raw = await nexoFetch<unknown>(
           ctx,
@@ -317,7 +385,7 @@ export const financeRouter = router({
           }
         );
 
-        return unwrapNexoApiResponse(raw);
+        return payChargeOutputSchema.strip().parse(unwrapNexoApiResponse(raw));
       }),
   }),
 });

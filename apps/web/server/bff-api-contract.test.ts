@@ -708,8 +708,16 @@ describe("BFF↔API contract - pagamento manual", () => {
   });
 
   it("finance.charges.pay repassa paidAt e notes sem aceitar orgId do client", async () => {
+    const operation = {
+      status: "executed",
+      reason: "payment_recorded",
+      idempotencyKey: "idempotency-1",
+      executionKey: null,
+      correlationId: null,
+      requestId: null,
+    };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ data: { paymentId: "pay-1" } }), {
+      new Response(JSON.stringify({ data: { ok: true, paymentId: "pay-1", idempotent: false, operation, degraded: null } }), {
         status: 200,
       })
     );
@@ -741,7 +749,13 @@ describe("BFF↔API contract - pagamento manual", () => {
   it("finance.charges.cancel usa endpoint de cancelamento sem orgId do client", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
-        JSON.stringify({ data: { id: "ch-1", status: "CANCELED" } }),
+        JSON.stringify({ data: {
+          id: "ch-1",
+          status: "CANCELED",
+          canceledAt: "2026-06-23T10:01:00.000Z",
+          canceledByUserId: null,
+          cancellationReason: "Cobrança duplicada",
+        } }),
         {
           status: 200,
         }
