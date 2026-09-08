@@ -170,18 +170,19 @@ export default function EditCustomerModal({ open, customerId, onClose, onSaved }
         expectedUpdatedAt:
           typeof customer?.updatedAt === "string" ? customer.updatedAt : undefined,
       };
+      const optimisticUpdate = {
+        name: parsed.data.name,
+        phone: parsed.data.phone,
+        email: parsed.data.email || null,
+        notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
+        active,
+      };
 
-      utils.customers.list.setData(undefined, (old: any) => {
-        const raw = old as { data?: any[] } | any[] | undefined;
-        const applyUpdate = (items: any[]) =>
-          items.map((item) =>
-            String(item?.id) === idStr ? { ...item, ...updatedPayload } : item
-          );
-
-        if (Array.isArray(raw)) return applyUpdate(raw);
-        if (raw && Array.isArray(raw.data)) return { ...raw, data: applyUpdate(raw.data) };
-        return old;
-      });
+      utils.customers.list.setData(undefined, old =>
+        old?.map(item =>
+          item.id === idStr ? { ...item, ...optimisticUpdate } : item
+        )
+      );
 
       await updateMutation.mutateAsync(updatedPayload);
       await invalidateOperationalGraph(utils, idStr);

@@ -204,6 +204,19 @@ describe("customers output contracts", () => {
     ],
     ["timestamp inválido", { ...operationalSummary, evaluatedAt: "agora" }],
     ["payload inesperado", { ...operationalSummary, debug: true }],
+    [
+      "coleção obrigatória ausente",
+      { ...operationalSummary, customers: undefined },
+    ],
+    [
+      "fatos operacionais ausentes",
+      {
+        ...operationalSummary,
+        customers: [
+          { ...operationalSummary.customers[0], contributors: undefined },
+        ],
+      },
+    ],
   ])("rejeita operationalSummary com %s", async (_name, invalid) => {
     respond({ success: true, data: invalid });
     await expect(

@@ -187,10 +187,10 @@ const customerOperationalSummaryItemSchema = z
     recommendedActionTarget: z
       .enum(["FINANCES", "SERVICE_ORDERS", "APPOINTMENTS", "WHATSAPP"])
       .nullable(),
-    contributors: z.array(z.string()).default([]),
-    breakdown: z.array(customerOperationalBreakdownSchema).default([]),
+    contributors: z.array(z.string()),
+    breakdown: z.array(customerOperationalBreakdownSchema),
     factors: z.record(z.string(), z.unknown()),
-    explanation: z.array(z.string()).default([]),
+    explanation: z.array(z.string()),
     evaluatedAt: z.string().datetime(),
   })
   .strict();
@@ -208,7 +208,7 @@ const customersOperationalSummarySchema = z
         criticalCustomers: z.number(),
       })
       .strict(),
-    customers: z.array(customerOperationalSummaryItemSchema).default([]),
+    customers: z.array(customerOperationalSummaryItemSchema),
   })
   .strict();
 
