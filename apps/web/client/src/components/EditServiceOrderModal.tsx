@@ -246,6 +246,7 @@ export default function EditServiceOrderModal({
     if (!getServiceOrder.data) return;
 
     const serviceOrder = normalizeServiceOrderPayload(getServiceOrder.data);
+    if (!serviceOrder?.status) return;
 
     const nextData = {
       title: serviceOrder?.title || "",
@@ -258,20 +259,13 @@ export default function EditServiceOrderModal({
       amount:
         typeof serviceOrder?.amountCents === "number" &&
         Number.isFinite(serviceOrder.amountCents) &&
-        serviceOrder.amountCents > 0
+        serviceOrder.amountCents >= 0
           ? (serviceOrder.amountCents / 100).toFixed(2)
           : "",
       dueDate: serviceOrder?.dueDate
         ? new Date(serviceOrder.dueDate).toISOString().slice(0, 16)
         : "",
-      status:
-        serviceOrder?.status === "OPEN" ||
-        serviceOrder?.status === "ASSIGNED" ||
-        serviceOrder?.status === "IN_PROGRESS" ||
-        serviceOrder?.status === "DONE" ||
-        serviceOrder?.status === "CANCELED"
-          ? serviceOrder.status
-          : "OPEN",
+      status: serviceOrder.status,
       cancellationReason: serviceOrder?.cancellationReason || "",
       outcomeSummary: serviceOrder?.outcomeSummary || "",
     };

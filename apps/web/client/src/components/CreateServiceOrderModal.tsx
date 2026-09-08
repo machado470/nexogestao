@@ -205,28 +205,10 @@ export default function CreateServiceOrderModal({
       dueDate: parsed.data.dueDate || undefined,
     };
 
-    const previousServiceOrders = utils.serviceOrders.list.getData({ page: 1, limit: 100 });
-    const tempId = `temp-os-${Date.now()}`;
-    utils.serviceOrders.list.setData({ page: 1, limit: 100 }, (old: any) => {
-      const raw = old as any[] | { data?: any[] } | undefined;
-      const optimistic = { id: tempId, ...payload, createdAt: new Date().toISOString() };
-      if (Array.isArray(raw)) return [optimistic, ...raw];
-      if (raw && Array.isArray(raw.data)) return { ...raw, data: [optimistic, ...raw.data] };
-      return [optimistic];
-    });
-
     assigneeWarningTelemetry.trackConfirmed(payload.assignedToPersonId);
 
     createMutation.mutate(payload, {
       onSuccess: async (created) => {
-        utils.serviceOrders.list.setData({ page: 1, limit: 100 }, (old: any) => {
-          const raw = old as any[] | { data?: any[] } | undefined;
-          const applyReplace = (items: any[]) =>
-            items.map((item) => (String(item?.id) === tempId ? created : item));
-          if (Array.isArray(raw)) return applyReplace(raw);
-          if (raw && Array.isArray(raw.data)) return { ...raw, data: applyReplace(raw.data) };
-          return [created];
-        });
         await invalidateOperationalGraph(
           utils,
           payload.customerId,
@@ -236,7 +218,7 @@ export default function CreateServiceOrderModal({
 
         setCreatedServiceOrder({
           id: String((created as any)?.id ?? ""),
-          title: String((created as any)?.title ?? payload.title),
+          title: created.title,
           customerId: payload.customerId,
         });
         onCreated?.({
@@ -250,7 +232,7 @@ export default function CreateServiceOrderModal({
           customerId: payload.customerId,
           hasAmount: Boolean(payload.amountCents),
         });
-        toast.success(`O.S. criada: ${String((created as any)?.title ?? payload.title)}`, {
+        toast.success(`O.S. criada: ${created.title}`, {
           action: {
             label: "Ver O.S.",
             onClick: () =>
@@ -267,10 +249,6 @@ export default function CreateServiceOrderModal({
         );
       },
       onError: (error) => {
-        utils.serviceOrders.list.setData(
-          { page: 1, limit: 100 },
-          previousServiceOrders as any
-        );
         toast.error(error.message || "Erro ao criar ordem de serviço");
         notify.error(
           "Falha ao criar O.S.",

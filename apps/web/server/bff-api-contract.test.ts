@@ -127,10 +127,26 @@ describe("BFF↔API contract - lote 1", () => {
   });
 
   it("serviceOrders.list preserva a decisão operacional oficial sem aceitar tenant do client", async () => {
+    const id = "10000000-0000-4000-8000-000000000001";
+    const customerId = "20000000-0000-4000-8000-000000000001";
+    const date = "2026-08-29T10:00:00.000Z";
     const operationalDecision = { isOverdue: true, overdueDays: 3, isStalled: false, chargeOverdue: false, operationalStatus: "RISCO", priority: "P0", riskLabel: "Atrasada", nextAction: { type: "start", label: "Iniciar agora", reason: "Atrasada sem execução" } };
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "so-1", operationalDecision }] }), { status: 200 }));
+    const serviceOrder = {
+      id, customerId, appointmentId: null, assignedToPersonId: null,
+      title: "Instalação", description: null, status: "OPEN", priority: 2,
+      scheduledFor: null, startedAt: null, finishedAt: null, amountCents: 0,
+      dueDate: null, cancellationReason: null, outcomeSummary: null,
+      createdAt: date, updatedAt: date,
+      customer: { id: customerId, name: "Cliente", phone: null }, assignedTo: null,
+      appointment: null,
+      financialSummary: { hasCharge: false, chargeId: null, chargeStatus: null, chargeAmountCents: null, chargeDueDate: null, paidAt: null },
+      operationalDecision,
+    };
+    const output = { data: [serviceOrder], pagination: { page: 1, limit: 20, total: 1, pages: 1 } };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ success: true, data: output }), { status: 200 }));
     const caller = appRouter.createCaller({ req: makeReq(), res: makeRes(), user: { token: "trusted-user-token", validated: true, organizationId: "org-trusted" } } as any);
-    await expect(caller.nexo.serviceOrders.list({ page: 1, limit: 20, orgId: "org-forged" } as any)).resolves.toEqual([{ id: "so-1", operationalDecision }]);
+    await expect(caller.nexo.serviceOrders.list({ page: 1, limit: 20, orgId: "org-forged" } as any)).rejects.toBeTruthy();
+    await expect(caller.nexo.serviceOrders.list({ page: 1, limit: 20 })).resolves.toEqual(output);
     const [url, options] = fetchMock.mock.calls[0];
     expect(String(url)).toContain("/service-orders?page=1&limit=20");
     expect(String(url)).not.toContain("orgId");
@@ -139,9 +155,12 @@ describe("BFF↔API contract - lote 1", () => {
 
   it("timeline.listByOrg preserva cursor/filtro e normaliza o envelope oficial", async () => {
     const event = {
-      id: "event-1",
-      action: "CHARGE_CREATED",
-      createdAt: "2026-08-29T10:00:00.000Z",
+      id: "10000000-0000-4000-8000-000000000001",
+      eventType: "CHARGE_CREATED",
+      occurredAt: "2026-08-29T10:00:00.000Z",
+      actor: null, entity: null, module: null, severity: null, title: null,
+      description: null, consequence: null, recommendedAction: null, origin: null,
+      metadata: {},
     };
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
