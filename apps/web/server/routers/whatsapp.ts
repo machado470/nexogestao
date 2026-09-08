@@ -30,31 +30,36 @@ function normalizeWebhookEventResponse(payload: any) {
   return { ...payload, payloadMetadata: payload.payloadMetadata ?? payload.rawPayloadMetadata ?? null };
 }
 
+const whatsappEntityType = z.enum(["CUSTOMER", "APPOINTMENT", "SERVICE_ORDER", "CHARGE", "PAYMENT", "GENERAL"]);
+const whatsappMessageType = z.enum([
+  "APPOINTMENT_CONFIRMATION", "APPOINTMENT_REMINDER", "SERVICE_UPDATE", "PAYMENT_LINK",
+  "PAYMENT_REMINDER", "PAYMENT_CONFIRMATION", "CUSTOMER_NOTIFICATION", "MANUAL",
+  "REMIND_24H", "RECEIPT", "EXECUTION_CONFIRMATION",
+]);
+const whatsappTemplateKey = z.enum([
+  "appointment_confirmation", "appointment_reminder", "payment_reminder", "payment_link",
+  "payment_confirmation", "service_update", "manual_followup",
+]);
+const whatsappTemplateContext = z.object({
+  customerName: z.string().min(1).optional(),
+  appointmentDate: z.string().min(1).optional(),
+  appointmentTime: z.string().min(1).optional(),
+  chargeAmount: z.string().min(1).optional(),
+  chargeDueDate: z.string().min(1).optional(),
+  paymentLink: z.string().min(1).optional(),
+  serviceOrderNumber: z.string().min(1).optional(),
+  companyName: z.string().min(1).optional(),
+}).strict();
+
 const whatsappSendInput = z.object({
   customerId: z.string().min(1),
   content: z.string().min(1),
   toPhone: z.string().optional(),
-  receiverNumber: z.string().optional(),
-  entityType: z.enum(["CUSTOMER", "APPOINTMENT", "SERVICE_ORDER", "CHARGE", "PAYMENT", "GENERAL"]).optional(),
+  entityType: whatsappEntityType.optional(),
   entityId: z.string().optional(),
-  messageType: z
-    .enum([
-      "APPOINTMENT_CONFIRMATION",
-      "SERVICE_UPDATE",
-      "PAYMENT_REMINDER",
-      "PAYMENT_CONFIRMATION",
-      "CUSTOMER_NOTIFICATION",
-      "MANUAL",
-      "PAYMENT_LINK",
-      "APPOINTMENT_REMINDER",
-      "PAYMENT_CONFIRMATION",
-      "EXECUTION_CONFIRMATION",
-    ])
-    .optional(),
+  messageType: whatsappMessageType.optional(),
   idempotencyKey: z.string().min(8).optional(),
-  chargeId: z.string().optional(),
-  serviceOrderId: z.string().optional(),
-});
+}).strict();
 
 export const whatsappRouter = router({
     listConversations: protectedProcedure
@@ -83,21 +88,24 @@ export const whatsappRouter = router({
         customerId: z.string().min(1).optional(),
         content: z.string().min(1),
         toPhone: z.string().optional(),
-        entityType: z.string().optional(),
+        entityType: whatsappEntityType.optional(),
         entityId: z.string().optional(),
-        messageType: z.string().optional(),
-      }).refine((value) => Boolean(value.conversationId || value.customerId), {
+        messageType: whatsappMessageType.optional(),
+      }).strict().refine((value) => Boolean(value.conversationId || value.customerId), {
         message: 'conversationId ou customerId é obrigatório',
       }))
       .mutation(async ({ ctx, input }) => {
         if (input.conversationId) {
-          return authedPost(ctx as NexoContext, `/whatsapp/conversations/${input.conversationId}/messages`, input)
+          return authedPost(ctx as NexoContext, `/whatsapp/conversations/${input.conversationId}/messages`, {
+            content: input.content,
+            messageType: input.messageType,
+          })
         }
         return authedPost(ctx as NexoContext, '/whatsapp/messages', input)
       }),
 
     sendTemplate: protectedProcedure
-      .input(z.object({ templateKey: z.string().min(1), customerId: z.string().optional(), conversationId: z.string().optional(), context: z.record(z.string(), z.any()).optional(), toPhone: z.string().optional(), entityType: z.string().optional(), entityId: z.string().optional(), messageType: z.string().optional() }).refine((value) => Boolean(value.conversationId || value.customerId), {
+      .input(z.object({ templateKey: whatsappTemplateKey, customerId: z.string().min(1).optional(), conversationId: z.string().min(1).optional(), context: whatsappTemplateContext.optional() }).strict().refine((value) => Boolean(value.conversationId || value.customerId), {
         message: 'conversationId ou customerId é obrigatório',
       }))
       .mutation(async ({ ctx, input }) => authedPost(ctx as NexoContext, '/whatsapp/messages/template', input)),

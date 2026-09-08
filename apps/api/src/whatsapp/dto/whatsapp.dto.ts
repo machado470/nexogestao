@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsEnum, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsEnum, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator'
 import { WhatsAppConversationStatus, WhatsAppEntityType, WhatsAppMessageStatus, WhatsAppMessageType, WhatsAppWebhookStatus } from '@prisma/client'
 
 export class ListConversationsQueryDto {
@@ -30,6 +30,29 @@ export class SendConversationMessageDto {
   messageType?: WhatsAppMessageType
 }
 
+export enum WhatsAppTemplateKey {
+  APPOINTMENT_CONFIRMATION = 'appointment_confirmation',
+  APPOINTMENT_REMINDER = 'appointment_reminder',
+  PAYMENT_REMINDER = 'payment_reminder',
+  PAYMENT_LINK = 'payment_link',
+  PAYMENT_CONFIRMATION = 'payment_confirmation',
+  SERVICE_UPDATE = 'service_update',
+  MANUAL_FOLLOWUP = 'manual_followup',
+}
+
+export class WhatsAppTemplateContextDto {
+  [key: string]: unknown
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() customerName?: string
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() appointmentDate?: string
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() appointmentTime?: string
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() chargeAmount?: string
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() chargeDueDate?: string
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() paymentLink?: string
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() serviceOrderNumber?: string
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsNotEmpty() companyName?: string
+}
+
 export class SendTemplateMessageDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -41,14 +64,15 @@ export class SendTemplateMessageDto {
   @IsString()
   customerId?: string
 
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  templateName!: string
+  @ApiProperty({ enum: WhatsAppTemplateKey })
+  @IsEnum(WhatsAppTemplateKey)
+  templateKey!: WhatsAppTemplateKey
 
-  @ApiPropertyOptional({ type: Object })
+  @ApiPropertyOptional({ type: WhatsAppTemplateContextDto })
   @IsOptional()
-  variables?: Record<string, any>
+  @ValidateNested()
+  @Type(() => WhatsAppTemplateContextDto)
+  context?: WhatsAppTemplateContextDto
 }
 
 export class UpdateConversationStatusDto {
