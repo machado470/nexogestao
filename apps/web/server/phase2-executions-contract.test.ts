@@ -25,6 +25,9 @@ const execution = {
   createdAt: "2026-09-07T09:00:00.000Z",
   updatedAt: "2026-09-07T10:00:00.000Z",
 };
+const publicExecution = Object.fromEntries(
+  Object.entries(execution).filter(([key]) => key !== "orgId")
+);
 
 describe("Phase 2 execution start/complete contracts", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -40,7 +43,7 @@ describe("Phase 2 execution start/complete contracts", () => {
       notes: "nota histórica",
       checklist: [{ key: "safety", done: true }, "item legado"],
       attachments: [{ name: "foto.jpg", url: "https://example.test/foto.jpg" }],
-    })).resolves.toEqual(execution);
+    })).resolves.toEqual(publicExecution);
 
     const [, options] = fetchMock.mock.calls[0];
     expect(JSON.parse(String((options as RequestInit).body))).toEqual({
@@ -73,7 +76,7 @@ describe("Phase 2 execution start/complete contracts", () => {
       executionId: "10000000-0000-4000-8000-000000000001",
       notes: "concluída",
       checklist: [{ key: "final-review", done: true }],
-    })).resolves.toEqual(completed);
+    })).resolves.toEqual(Object.fromEntries(Object.entries(completed).filter(([key]) => key !== "orgId")));
     const [url, options] = fetchMock.mock.calls[0];
     expect(String(url)).toContain("/executions/10000000-0000-4000-8000-000000000001/complete");
     expect(JSON.parse(String((options as RequestInit).body))).toEqual({
@@ -92,5 +95,45 @@ describe("Phase 2 execution start/complete contracts", () => {
       : { executionId: "10000000-0000-4000-8000-000000000001" };
 
     await expect(caller.executions[operation](input as any)).rejects.toBeTruthy();
+  });
+
+  it.each([
+    ["campo obrigatório ausente", ({ customerId: _value, ...rest }) => rest],
+    ["UUID inválido", (value) => ({ ...value, serviceOrderId: "not-a-uuid" })],
+    ["timestamp inválido", (value) => ({ ...value, startedAt: "ontem" })],
+    ["status inválido", (value) => ({ ...value, status: "STARTED" })],
+    ["boolean idempotente inválido", (value) => ({ ...value, idempotent: "false" })],
+  ] as const)("HTTP 200 inválido falha o contrato: %s", async (_label, mutate) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(mutate(execution as any)), { status: 200 })
+    );
+    await expect(appRouter.createCaller(context).executions.start({
+      serviceOrderId: execution.serviceOrderId,
+    })).rejects.toBeTruthy();
+  });
+
+  it("preserva o fato oficial de replay idempotente sem expor orgId", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: { ...execution, idempotent: true } }), { status: 200 })
+    );
+    await expect(appRouter.createCaller(context).executions.start({
+      serviceOrderId: execution.serviceOrderId,
+    })).resolves.toEqual({ ...publicExecution, idempotent: true });
+  });
+
+  it("aplica o mesmo contrato pelo alias nexo.executions", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: execution }), { status: 200 })
+    );
+    await expect(appRouter.createCaller(context).nexo.executions.start({
+      serviceOrderId: execution.serviceOrderId,
+    })).resolves.toEqual(publicExecution);
+  });
+
+  it.each([null, {}, { data: null }, { ok: true, data: null }])("rejeita payload/envelope malformado %#", async (payload) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    await expect(appRouter.createCaller(context).executions.start({
+      serviceOrderId: execution.serviceOrderId,
+    })).rejects.toBeTruthy();
   });
 });
