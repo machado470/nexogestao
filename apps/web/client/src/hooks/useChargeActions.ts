@@ -65,26 +65,8 @@ export function useChargeActions(options?: UseChargeActionsOptions) {
 
   const payCharge = trpc.finance.charges.pay.useMutation({
     onSuccess: async (result, variables) => {
-      utils.finance.charges.list.setData(undefined, (old: any) => {
-        const raw = old as { data: any[]; pagination: any } | undefined;
-        const applyPaid = (items: any[]) =>
-          items.map((item) =>
-            String(item?.id) === String(variables.chargeId)
-              ? {
-                  ...item,
-                  status: "PAID",
-                  paidAt: new Date().toISOString(),
-                  paidAmountCents: variables.amountCents,
-                  paidMethod: variables.method,
-                }
-              : item
-          );
-        if (!raw || !Array.isArray(raw.data)) return undefined;
-        return { ...raw, data: applyPaid(raw.data) };
-      });
-
-      const operationStatus = String((result as any)?.operation?.status ?? "").toLowerCase();
-      const degraded = (result as any)?.degraded;
+      const operationStatus = result.operation.status;
+      const degraded = result.degraded;
       const message = resolveOperationFeedback({
         operationStatus,
         degradedStatus: degraded?.status,
@@ -110,6 +92,7 @@ export function useChargeActions(options?: UseChargeActionsOptions) {
         amountCents: variables.amountCents,
       });
       await Promise.all([
+        utils.finance.charges.list.invalidate(),
         utils.finance.charges.stats.invalidate(),
         utils.dashboard.alerts.invalidate(),
         utils.dashboard.kpis.invalidate(),
