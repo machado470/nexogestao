@@ -472,13 +472,13 @@ export function mapConversation(item: any): Conversation {
 
 function mapMessage(item: any): ChatMessage {
   return {
-    id: String(item?.id ?? ""),
-    direction: (item?.direction ?? "OUTBOUND") as MessageDirection,
-    content: String(item?.renderedText ?? item?.content ?? ""),
-    createdAt: item?.createdAt ?? null,
-    status: (item?.status ?? "QUEUED") as MessageStatus,
-    messageType: item?.messageType ?? null,
-    errorMessage: item?.errorMessage ?? item?.lastError ?? null,
+    id: item.id,
+    direction: item.direction,
+    content: item.renderedText,
+    createdAt: item.createdAt,
+    status: item.status,
+    messageType: item.messageType,
+    errorMessage: item.errorMessage,
   };
 }
 
@@ -1779,13 +1779,7 @@ export default function WhatsAppPage() {
   );
 
   const conversations = useMemo<Conversation[]>(() => {
-    const payload = conversationsQuery.data as any;
-    const items = Array.isArray(payload)
-      ? payload
-      : Array.isArray(payload?.items)
-        ? payload.items
-        : [];
-    return items.map((item: unknown) => mapConversation(item));
+    return conversationsQuery.data?.items.map(item => mapConversation(item)) ?? [];
   }, [conversationsQuery.data]);
   const customersQuery = trpc.customers.list.useQuery(
     { page: 1, limit: 300 },
@@ -2145,7 +2139,7 @@ export default function WhatsAppPage() {
 
   const messages = useMemo(
     () =>
-      selectedConversationRecordId && Array.isArray(messagesQuery.data)
+      selectedConversationRecordId && messagesQuery.data
         ? messagesQuery.data.map(mapMessage).reverse()
         : [],
     [messagesQuery.data, selectedConversationRecordId]
