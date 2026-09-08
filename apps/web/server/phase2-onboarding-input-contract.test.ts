@@ -21,7 +21,14 @@ describe("Phase 2 onboarding mutation input contracts", () => {
   it.each(["createCustomer", "createService", "createCharge"] as const)(
     "encaminha apenas a etapa oficial %s",
     async step => {
-      const response = { requiresOnboarding: true, steps: {} };
+      const response = {
+        requiresOnboarding: true,
+        steps: {
+          createCustomer: true,
+          createService: false,
+          createCharge: false,
+        },
+      };
       const fetchMock = vi
         .spyOn(globalThis, "fetch")
         .mockResolvedValue(
@@ -58,9 +65,17 @@ describe("Phase 2 onboarding mutation input contracts", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(
-        new Response(JSON.stringify({ requiresOnboarding: false, steps: {} }), {
-          status: 200,
-        })
+        new Response(
+          JSON.stringify({
+            requiresOnboarding: false,
+            steps: {
+              createCustomer: true,
+              createService: true,
+              createCharge: true,
+            },
+          }),
+          { status: 200 }
+        )
       );
     const caller = appRouter.createCaller(context);
 
