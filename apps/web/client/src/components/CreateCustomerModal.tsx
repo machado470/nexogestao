@@ -122,6 +122,7 @@ export default function CreateCustomerModal({
 
     try {
       const tempId = `temp-customer-${Date.now()}`;
+      const optimisticTimestamp = new Date().toISOString();
       const optimisticCustomer = {
         id: tempId,
         name: parsed.data.name,
@@ -131,16 +132,14 @@ export default function CreateCustomerModal({
         cpfCnpj: normalizedCpfCnpj || null,
         address: parsed.data.address?.trim() ? parsed.data.address.trim() : null,
         active: true,
-        createdAt: new Date().toISOString(),
+        createdAt: optimisticTimestamp,
+        updatedAt: optimisticTimestamp,
       };
 
-      utils.customers.list.setData(undefined, (old: any) => {
-        const raw = old as { data?: any[] } | any[] | undefined;
-        if (Array.isArray(raw)) return [optimisticCustomer, ...raw];
-        if (raw && Array.isArray(raw.data))
-          return { ...raw, data: [optimisticCustomer, ...raw.data] };
-        return [optimisticCustomer];
-      });
+      utils.customers.list.setData(undefined, old => [
+        optimisticCustomer,
+        ...(old ?? []),
+      ]);
 
       const created = await createCustomer.mutateAsync({
         name: parsed.data.name,
@@ -151,19 +150,12 @@ export default function CreateCustomerModal({
         address: parsed.data.address?.trim() ? parsed.data.address.trim() : undefined,
       });
 
-      utils.customers.list.setData(undefined, (old: any) => {
-        const raw = old as { data?: any[] } | any[] | undefined;
-        const applyReplace = (items: any[]) =>
-          items.map(item => (String(item?.id) === tempId ? created : item));
+      utils.customers.list.setData(undefined, old =>
+        (old ?? []).map(item => (item.id === tempId ? created : item))
+      );
 
-        if (Array.isArray(raw)) return applyReplace(raw);
-        if (raw && Array.isArray(raw.data))
-          return { ...raw, data: applyReplace(raw.data) };
-        return [created];
-      });
-
-      const createdId = String((created as any)?.id ?? "").trim();
-      const createdName = String((created as any)?.name ?? parsed.data.name);
+      const createdId = created.id;
+      const createdName = created.name;
 
       toast.success(`Cliente criado: ${createdName}`, {
         action: {
